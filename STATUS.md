@@ -49,6 +49,27 @@
 - [x] Registry authentication model
 - [x] Type-safe enums
 
+### 3.1 System Environment Variables ✅ (`internal/executor/sysenv.go`)
+- [x] Reserved SWITCHYARD_* prefix for system variables
+- [x] API validation prevents user override
+- [x] Automatic injection of 13 system env vars:
+  - `SWITCHYARD_JOB_ID` - Job UUID
+  - `SWITCHYARD_JOB_CREATED_AT` - Creation timestamp (RFC3339)
+  - `SWITCHYARD_JOB_TIMEOUT` - Timeout in seconds
+  - `SWITCHYARD_EXECUTOR_TYPE` - Executor type (swarm/docker)
+  - `SWITCHYARD_IMAGE` - Container image
+  - `SWITCHYARD_IMAGE_DIGEST` - Image digest (if available)
+  - `SWITCHYARD_OUTPUTS_DIR` - Output directory path (`/outputs`)
+  - `SWITCHYARD_BUCKET` - S3 bucket name
+  - `SWITCHYARD_ARTEFACT_PREFIX` - S3 prefix for job outputs
+  - `SWITCHYARD_VERSION` - Switchyard version
+  - `SWITCHYARD_API_URL` - API base URL (for callbacks)
+  - `SWITCHYARD_CPU_LIMIT` - CPU limit (if set)
+  - `SWITCHYARD_MEMORY_LIMIT` - Memory limit (if set)
+- [x] User env vars stored separately in database
+- [x] Runtime merging in executors (system vars first, then user vars)
+- [x] Clean separation: database stores user intent, runtime generates system metadata
+
 ### 4. Database Layer ✅ (`migrations/`, `internal/storage/postgres/`)
 - [x] Initial schema migration (jobs, artefacts, registry_secrets)
 - [x] Proper indices for performance
@@ -71,11 +92,20 @@
 
 ### 6. Executor Layer ✅ (`internal/executor/`)
 - [x] Executor interface defined
+- [x] Shared executor utilities (`internal/executor/common.go`)
+  - [x] BaseExecutor with shared Docker client
+  - [x] Shared network creation (bridge/overlay)
+  - [x] Shared output directory preparation
+  - [x] Shared resource parsing (CPU, memory)
+  - [x] Shared registry authentication
+  - [x] Shared output collection (NFS → S3)
+  - [x] Unit tests for all utilities (23 test cases)
 - [x] Docker executor (`internal/executor/docker/docker.go`)
   - [x] Container creation with mounts
   - [x] Wait for completion
   - [x] Log collection
-  - [x] Artefact collection from NFS
+  - [x] Artefact collection from NFS (implemented using shared utilities)
+  - [x] Resource limits (CPU, memory)
   - [x] Cleanup logic
   - [x] Cancel support
 - [x] Swarm executor (`internal/executor/swarm/swarm.go`)
@@ -83,9 +113,15 @@
   - [x] Network isolation
   - [x] Wait for completion
   - [x] Log collection
-  - [x] Artefact collection from NFS
+  - [x] Artefact collection from NFS (using shared utilities)
+  - [x] Resource limits (CPU, memory)
   - [x] Cleanup logic
   - [x] Cancel support
+
+**Code Quality Improvements:**
+- Eliminated ~160 lines of code duplication between executors
+- Single source of truth for resource parsing and output collection
+- Both executors now use consistent, tested implementations
 
 ### 7. Worker Service ✅
 - [x] `cmd/worker/main.go` - Entry point (189 lines)

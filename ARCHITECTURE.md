@@ -110,9 +110,23 @@ Switchyard is a job execution platform that runs containerized workloads on Dock
 
 ### Executor Layer
 - **Interface**: `internal/executor/executor.go`
+- **Shared Utilities**: `internal/executor/common.go`
+  - BaseExecutor with common Docker client initialization
+  - Network creation (bridge for Docker, overlay for Swarm)
+  - NFS output directory preparation
+  - Resource parsing (CPU/memory string → bytes/nanocpus)
+  - Registry authentication encoding
+  - Output collection (walk NFS → upload to S3)
 - **Implementations**:
-  - **SwarmExecutor**: Docker Swarm (complete)
-  - **KubeExecutor**: Kubernetes (stub for future)
+  - **DockerExecutor**: Raw Docker containers (complete)
+  - **SwarmExecutor**: Docker Swarm services (complete)
+  - **KubeExecutor**: Kubernetes pods (stub for future)
+
+**Architecture Benefits**:
+- ~160 lines of code duplication eliminated
+- Single source of truth for resource parsing
+- Consistent output collection between executors
+- Easy to add new executors (extend BaseExecutor)
 
 **Swarm Executor Details**:
 - Creates one-shot service per job
@@ -124,6 +138,17 @@ Switchyard is a job execution platform that runs containerized workloads on Dock
 - Timeout: Worker enforces via context.WithTimeout
 - Logs: Collected via Docker ServiceLogs API
 - Cleanup: Removes service and network
+
+**Docker Executor Details**:
+- Creates standalone container per job
+- Container naming: `job-{jobID}`
+- Labels: `jobrunner.job_id`, `jobrunner.managed=true`
+- Network: Creates isolated bridge network per job
+- Mounts: Binds `/mnt/jobrunner/jobs/{jobID}/outputs` → `/outputs`
+- Resources: Enforces CPU/memory limits from config or job spec
+- Timeout: Worker enforces via context.WithTimeout
+- Logs: Collected via Docker ContainerLogs API
+- Cleanup: Removes container and network
 
 ### Storage Layer
 
@@ -176,6 +201,81 @@ Switchyard is a job execution platform that runs containerized workloads on Dock
         outputs/  ← Job containers write here
   ```
 - **Critical**: Must be mounted on ALL Swarm nodes at the SAME path
+
+## Environment Variable Handling
+
+**System-Managed Variables:**
+
+Switchyard automatically injects environment variables with the `SWITCHYARD_` prefix into every job container. These variables provide job context and system information:
+
+| Variable | Description | Example Value |
+|----------|-------------|---------------|
+| `SWITCHYARD_JOB_ID` | Job UUID | `550e8400-e29b-41d4-a716-446655440000` |
+| `SWITCHYARD_JOB_CREATED_AT` | Creation timestamp (RFC3339) | `2026-02-20T14:30:00Z` |
+| `SWITCHYARD_JOB_TIMEOUT` | Timeout in seconds | `3600` |
+| `SWITCHYARD_EXECUTOR_TYPE` | Executor type | `swarm` or `docker` |
+| `SWITCHYARD_IMAGE` | Container image | `myapp:v1.0` |
+| `SWITCHYARD_IMAGE_DIGEST` | Image digest (if available) | `sha256:abc123...` |
+| `SWITCHYARD_OUTPUTS_DIR` | Output directory path | `/outputs` |
+| `SWITCHYARD_BUCKET` | S3 bucket name | `jobrunner` |
+| `SWITCHYARD_ARTEFACT_PREFIX` | S3 prefix for this job | `jobs/550e8400/` |
+| `SWITCHYARD_VERSION` | Switchyard version | `v1.0.0` or `dev` |
+| `SWITCHYARD_API_URL` | API base URL | `http://localhost:8080` |
+| `SWITCHYARD_CPU_LIMIT` | CPU limit (if set) | `1.0` |
+| `SWITCHYARD_MEMORY_LIMIT` | Memory limit (if set) | `2g` |
+
+**User Variables:**
+- Stored in database exactly as submitted by user
+- Cannot use `SWITCHYARD_` prefix (API returns 400 validation error)
+- Merged with system variables at runtime by executors
+- Returned by API in job response as originally submitted (without system vars)
+
+**Implementation:**
+- System variables generated in `internal/executor/sysenv.go:BuildSystemEnv()`
+- API validation in `internal/api/handlers.go:validateEnvVars()`
+- Executors inject system vars first, then append user vars
+- User vars cannot override system vars (they come after in the env list)
+
+**Rationale:**
+- **Clean separation**: Database stores user intent, runtime generates metadata
+- **Always accurate**: System variables reflect current state (timestamp, version, etc.)
+- **No duplication**: Computed values not stored in database
+- **Forward compatible**: Can add new system vars without database migration
+- **API clarity**: API returns what user submitted, not runtime artifacts
+
+**Example:**
+
+User submits:
+```json
+{
+  "env": {
+    "MY_VAR": "value"
+  }
+}
+```
+
+Database stores:
+```json
+{
+  "env": {
+    "MY_VAR": "value"
+  }
+}
+```
+
+Container receives:
+```bash
+SWITCHYARD_JOB_ID=550e8400-e29b-41d4-a716-446655440000
+SWITCHYARD_JOB_CREATED_AT=2026-02-20T14:30:00Z
+SWITCHYARD_JOB_TIMEOUT=3600
+SWITCHYARD_EXECUTOR_TYPE=swarm
+SWITCHYARD_IMAGE=myapp:v1.0
+SWITCHYARD_OUTPUTS_DIR=/outputs
+SWITCHYARD_BUCKET=jobrunner
+SWITCHYARD_VERSION=v1.0.0
+SWITCHYARD_API_URL=http://localhost:8080
+MY_VAR=value
+```
 
 ## Data Flow
 

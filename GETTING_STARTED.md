@@ -88,8 +88,8 @@ make build
 You should see:
 ```
 Building binaries...
-go build -ldflags="-X main.Version=dev" -o bin/api ./cmd/api
-go build -ldflags="-X main.Version=dev" -o bin/worker ./cmd/worker
+go build -ldflags="-X github.com/heldtogether/switchyard/internal/version.Version=6170e18-dirty" -o bin/api ./cmd/api
+go build -ldflags="-X github.com/heldtogether/switchyard/internal/version.Version=6170e18-dirty" -o bin/worker ./cmd/worker
 ```
 
 Run the API:
@@ -172,6 +172,37 @@ curl -H "X-API-Key: test-api-key" \
 
 cat result.txt
 ```
+
+### 10. Understanding Job Environment Variables
+
+Jobs automatically receive system environment variables that provide context and metadata:
+
+```bash
+# Inside your job container, you'll have access to:
+echo $SWITCHYARD_JOB_ID          # Your job's UUID
+echo $SWITCHYARD_JOB_CREATED_AT  # When job was created (RFC3339)
+echo $SWITCHYARD_API_URL         # API endpoint
+echo $SWITCHYARD_VERSION         # Switchyard version
+echo $SWITCHYARD_BUCKET          # S3 bucket for outputs
+echo $SWITCHYARD_OUTPUTS_DIR     # Where to write outputs (/outputs)
+# ... plus all your custom variables
+```
+
+**Important:** The `SWITCHYARD_*` prefix is reserved for system variables. You can submit custom env vars, but cannot use this prefix:
+
+```json
+{
+  "env": {
+    "MY_VAR": "my-value",        // ✅ OK
+    "CUSTOM_CONFIG": "foo",      // ✅ OK
+    "SWITCHYARD_CUSTOM": "bar"   // ❌ Error - reserved prefix
+  }
+}
+```
+
+**Note:** System variables are NOT stored in the database or returned by the API. They're only injected at runtime when your job executes. The API returns only the custom environment variables you submitted.
+
+See `ARCHITECTURE.md` for the full list of system variables and their purposes.
 
 ## Testing Without Docker Swarm
 
