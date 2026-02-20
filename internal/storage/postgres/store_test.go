@@ -31,14 +31,55 @@ func setupTestDB(t *testing.T) (*Store, func()) {
 	return store, cleanup
 }
 
+// setupTestHierarchy creates a test workspace, project, and run for testing jobs
+func setupTestHierarchy(t *testing.T, store *Store, ctx context.Context) (workspace *domain.Workspace, project *domain.Project, run *domain.Run) {
+	t.Helper()
+
+	// Create workspace
+	workspace = &domain.Workspace{
+		ID:   uuid.New(),
+		Slug: "test-workspace",
+		Name: "Test Workspace",
+	}
+	err := store.CreateWorkspace(ctx, workspace)
+	require.NoError(t, err)
+
+	// Create project
+	project = &domain.Project{
+		ID:          uuid.New(),
+		WorkspaceID: workspace.ID,
+		Slug:        "test-project",
+		Name:        "Test Project",
+		CreatedBy:   "test-user",
+	}
+	err = store.CreateProject(ctx, project)
+	require.NoError(t, err)
+
+	// Create run
+	run = &domain.Run{
+		ID:        uuid.New(),
+		ProjectID: project.ID,
+		Slug:      "test-run",
+		Name:      "Test Run",
+		Status:    domain.RunStatusPending,
+		CreatedBy: "test-user",
+	}
+	err = store.CreateRun(ctx, run)
+	require.NoError(t, err)
+
+	return workspace, project, run
+}
+
 func TestStore_CreateJob(t *testing.T) {
 	store, cleanup := setupTestDB(t)
 	defer cleanup()
 
 	ctx := context.Background()
+	_, _, run := setupTestHierarchy(t, store, ctx)
 
 	job := &domain.Job{
 		ID:          uuid.New(),
+		RunID:       run.ID,
 		CreatedBy:   "test-user",
 		Status:      domain.JobStatusPending,
 		Image:       "alpine:latest",
@@ -83,10 +124,12 @@ func TestStore_UpdateJob(t *testing.T) {
 	defer cleanup()
 
 	ctx := context.Background()
+	_, _, run := setupTestHierarchy(t, store, ctx)
 
 	// Create initial job
 	job := &domain.Job{
 		ID:          uuid.New(),
+		RunID:       run.ID,
 		CreatedBy:   "test-user",
 		Status:      domain.JobStatusPending,
 		Image:       "alpine:latest",
@@ -128,11 +171,13 @@ func TestStore_ListJobs(t *testing.T) {
 	defer cleanup()
 
 	ctx := context.Background()
+	_, _, run := setupTestHierarchy(t, store, ctx)
 
 	// Create multiple jobs with different statuses
 	jobs := []*domain.Job{
 		{
 			ID:          uuid.New(),
+			RunID:       run.ID,
 			CreatedBy:   "user1",
 			Status:      domain.JobStatusPending,
 			Image:       "alpine:latest",
@@ -144,6 +189,7 @@ func TestStore_ListJobs(t *testing.T) {
 		},
 		{
 			ID:          uuid.New(),
+			RunID:       run.ID,
 			CreatedBy:   "user1",
 			Status:      domain.JobStatusRunning,
 			Image:       "alpine:latest",
@@ -155,6 +201,7 @@ func TestStore_ListJobs(t *testing.T) {
 		},
 		{
 			ID:          uuid.New(),
+			RunID:       run.ID,
 			CreatedBy:   "user2",
 			Status:      domain.JobStatusSucceeded,
 			Image:       "alpine:latest",
@@ -198,10 +245,12 @@ func TestStore_SaveArtefacts(t *testing.T) {
 	defer cleanup()
 
 	ctx := context.Background()
+	_, _, run := setupTestHierarchy(t, store, ctx)
 
 	// Create a job first
 	job := &domain.Job{
 		ID:          uuid.New(),
+		RunID:       run.ID,
 		CreatedBy:   "test-user",
 		Status:      domain.JobStatusSucceeded,
 		Image:       "alpine:latest",
@@ -250,6 +299,7 @@ func TestStore_GetRunningJobs(t *testing.T) {
 	defer cleanup()
 
 	ctx := context.Background()
+	_, _, run := setupTestHierarchy(t, store, ctx)
 
 	// Create jobs in various states
 	statuses := []domain.JobStatus{
@@ -263,6 +313,7 @@ func TestStore_GetRunningJobs(t *testing.T) {
 	for _, status := range statuses {
 		job := &domain.Job{
 			ID:          uuid.New(),
+			RunID:       run.ID,
 			CreatedBy:   "test-user",
 			Status:      status,
 			Image:       "alpine:latest",

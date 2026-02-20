@@ -14,6 +14,7 @@ Switchyard is an internal platform that:
 - Provides job status tracking and artefact download
 
 **Key Features:**
+- ✅ **Hierarchical organization**: Workspace → Project → Run → Jobs structure for better organization
 - ✅ Clean executor abstraction (Docker and Swarm implemented, Kubernetes ready)
 - ✅ Automatic system environment variable injection (job context, metadata)
 - ✅ Resource limits (CPU, memory) and timeout enforcement
@@ -24,6 +25,32 @@ Switchyard is an internal platform that:
 - ✅ S3-compatible storage for logs and artefacts
 - ✅ API key authentication (extensible to SSO/OIDC)
 - ✅ Private registry support
+- ✅ Multi-tenancy ready (workspace support)
+
+## 🏗️ Organizational Hierarchy
+
+Switchyard organizes jobs using a four-level hierarchy for better structure and multi-tenancy support:
+
+```
+Workspace (tenant/org)
+    └── Project (product line, study, pipeline)
+        └── Run (execution intent, experiment)
+            └── Jobs (individual container executions)
+                └── Artefacts (output files)
+```
+
+**Example:**
+- **Workspace**: `default` (or `acme-corp` for multi-tenant)
+- **Project**: `lung-cancer-validation` (a validation pipeline)
+- **Run**: `nightly-2026-02-20` (a specific execution)
+- **Jobs**: `preprocessing`, `model-training`, `validation` (steps in the pipeline)
+
+This structure allows you to:
+- Organize related jobs into logical groups
+- Track execution history by project and run
+- Enable multi-tenancy with workspace isolation (future)
+- Aggregate status across jobs in a run
+- Generate hierarchical S3 paths for better organization
 
 ## 📋 Prerequisites
 
@@ -136,14 +163,43 @@ docker run --rm \
 docker service ls | grep switchyard
 ```
 
-### 4. Submit a Job
+### 4. Create Project and Run Structure
+
+Switchyard organizes jobs using a hierarchical structure: **Workspace → Project → Run → Jobs**
 
 ```bash
-# Submit example job
-curl -X POST http://localhost:8080/v1/jobs \
+# Note: Using "default" workspace for single-tenant usage
+
+# 1. Create a project (e.g., for a specific pipeline or study)
+curl -X POST http://localhost:8080/v1/workspaces/default/projects \
   -H "X-API-Key: your-secret-api-key" \
   -H "Content-Type: application/json" \
   -d '{
+    "slug": "lung-cancer-validation",
+    "name": "Lung Cancer Model Validation",
+    "description": "Validation pipeline for lung cancer prediction models"
+  }'
+
+# 2. Create a run (e.g., for a specific execution or experiment)
+curl -X POST http://localhost:8080/v1/workspaces/default/projects/lung-cancer-validation/runs \
+  -H "X-API-Key: your-secret-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "slug": "nightly-2026-02-20",
+    "name": "Nightly Build 2026-02-20",
+    "description": "Nightly validation run against dataset v7"
+  }'
+```
+
+### 5. Submit a Job
+
+```bash
+# Submit a job within the run
+curl -X POST http://localhost:8080/v1/workspaces/default/projects/lung-cancer-validation/runs/nightly-2026-02-20/jobs \
+  -H "X-API-Key: your-secret-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "validation-step-1",
     "image": "ghcr.io/heldtogether/switchyard-example-job:latest",
     "command": ["/app/entrypoint.sh"],
     "env": {
@@ -161,30 +217,33 @@ curl -X POST http://localhost:8080/v1/jobs \
 # {
 #   "id": "550e8400-e29b-41d4-a716-446655440000",
 #   "status": "PENDING",
-#   "created_at": "2026-02-18T12:00:00Z"
+#   "created_at": "2026-02-20T12:00:00Z"
 # }
 ```
 
-### 5. Check Job Status
+### 6. Check Job Status
 
 ```bash
+WORKSPACE="default"
+PROJECT="lung-cancer-validation"
+RUN="nightly-2026-02-20"
 JOB_ID="550e8400-e29b-41d4-a716-446655440000"
 
 # Get job details
 curl -H "X-API-Key: your-secret-api-key" \
-  http://localhost:8080/v1/jobs/$JOB_ID
+  "http://localhost:8080/v1/workspaces/$WORKSPACE/projects/$PROJECT/runs/$RUN/jobs/$JOB_ID"
 
 # Get logs
 curl -H "X-API-Key: your-secret-api-key" \
-  http://localhost:8080/v1/jobs/$JOB_ID/logs
+  "http://localhost:8080/v1/workspaces/$WORKSPACE/projects/$PROJECT/runs/$RUN/jobs/$JOB_ID/logs"
 
 # List artefacts
 curl -H "X-API-Key: your-secret-api-key" \
-  http://localhost:8080/v1/jobs/$JOB_ID/artefacts
+  "http://localhost:8080/v1/workspaces/$WORKSPACE/projects/$PROJECT/runs/$RUN/jobs/$JOB_ID/artefacts"
 
 # Download artefact
 curl -H "X-API-Key: your-secret-api-key" \
-  http://localhost:8080/v1/jobs/$JOB_ID/artefacts/result.txt
+  "http://localhost:8080/v1/workspaces/$WORKSPACE/projects/$PROJECT/runs/$RUN/jobs/$JOB_ID/artefacts/result.txt"
 ```
 
 ## 🔐 Environment Variables
@@ -236,7 +295,7 @@ switchyard/
 │   └── migrate/    # Database migration tool
 ├── internal/
 │   ├── api/        # HTTP handlers & routes
-│   ├── domain/     # Domain models (Job, Artefact, etc.)
+│   ├── domain/     # Domain models (Workspace, Project, Run, Job, Artefact)
 │   ├── config/     # Configuration loading
 │   ├── executor/   # Execution backends (Docker, Swarm, shared utilities)
 │   │   ├── common.go      # Shared BaseExecutor and utilities
@@ -342,12 +401,81 @@ make test
 
 ## 📊 API Reference
 
-### POST /v1/jobs
-Submit a new job.
+### Hierarchical Structure
+
+Switchyard uses a hierarchical organization: **Workspace → Project → Run → Jobs**
+
+- **Workspace**: Tenant/organization level (use `default` for single-tenant)
+- **Project**: Product line, study, or pipeline area (e.g., `lung-cancer-validation`)
+- **Run**: Single execution intent or experiment (e.g., `nightly-2026-02-20`)
+- **Jobs**: Individual container executions within a run
+
+### Workspaces
+
+#### POST /v1/workspaces
+Create a new workspace (for multi-tenancy).
+
+#### GET /v1/workspaces
+List all workspaces.
+
+#### GET /v1/workspaces/{workspace_slug}
+Get workspace details.
+
+### Projects
+
+#### POST /v1/workspaces/{workspace_slug}/projects
+Create a new project.
 
 **Request:**
 ```json
 {
+  "slug": "lung-cancer-validation",
+  "name": "Lung Cancer Model Validation",
+  "description": "Validation pipeline for models"
+}
+```
+
+#### GET /v1/workspaces/{workspace_slug}/projects
+List projects in a workspace.
+
+#### GET /v1/workspaces/{workspace_slug}/projects/{project_slug}
+Get project details.
+
+#### PUT /v1/workspaces/{workspace_slug}/projects/{project_slug}
+Update a project.
+
+#### POST /v1/workspaces/{workspace_slug}/projects/{project_slug}/archive
+Archive a project.
+
+### Runs
+
+#### POST /v1/workspaces/{workspace_slug}/projects/{project_slug}/runs
+Create a new run.
+
+**Request:**
+```json
+{
+  "slug": "experiment-042",
+  "name": "Experiment 042",
+  "description": "Testing new hyperparameters"
+}
+```
+
+#### GET /v1/workspaces/{workspace_slug}/projects/{project_slug}/runs
+List runs in a project.
+
+#### GET /v1/workspaces/{workspace_slug}/projects/{project_slug}/runs/{run_slug}
+Get run details (includes aggregated status from all jobs).
+
+### Jobs
+
+#### POST /v1/workspaces/{workspace_slug}/projects/{project_slug}/runs/{run_slug}/jobs
+Submit a new job within a run.
+
+**Request:**
+```json
+{
+  "name": "preprocessing-step",
   "image": "alpine:latest",
   "command": ["sh", "-c", "echo 'Hello' > /outputs/result.txt"],
   "env": {
@@ -374,27 +502,27 @@ Submit a new job.
 {
   "id": "uuid",
   "status": "PENDING",
-  "created_at": "2026-02-18T12:00:00Z"
+  "created_at": "2026-02-20T12:00:00Z"
 }
 ```
 
-### GET /v1/jobs/{id}
+#### GET /v1/workspaces/{workspace_slug}/projects/{project_slug}/runs/{run_slug}/jobs
+List jobs in a run.
+
+#### GET /v1/workspaces/{workspace_slug}/projects/{project_slug}/runs/{run_slug}/jobs/{job_id}
 Get job details.
 
-### GET /v1/jobs/{id}/logs
+#### GET /v1/workspaces/{workspace_slug}/projects/{project_slug}/runs/{run_slug}/jobs/{job_id}/logs
 Stream or download job logs.
 
-### GET /v1/jobs/{id}/artefacts
-List output artefacts.
+#### GET /v1/workspaces/{workspace_slug}/projects/{project_slug}/runs/{run_slug}/jobs/{job_id}/artefacts
+List output artefacts for a job.
 
-### GET /v1/jobs/{id}/artefacts/{path}
+#### GET /v1/workspaces/{workspace_slug}/projects/{project_slug}/runs/{run_slug}/jobs/{job_id}/artefacts/{path}
 Download a specific artefact.
 
-### POST /v1/jobs/{id}/cancel
+#### POST /v1/workspaces/{workspace_slug}/projects/{project_slug}/runs/{run_slug}/jobs/{job_id}/cancel
 Cancel a running job.
-
-### GET /v1/jobs
-List jobs (supports filtering: `?status=RUNNING&created_by=user&limit=50`)
 
 ## 🔒 Security
 

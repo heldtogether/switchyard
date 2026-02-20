@@ -46,12 +46,33 @@ func (p *Processor) Process(ctx context.Context, jobID uuid.UUID) error {
 		return fmt.Errorf("failed to fetch job: %w", err)
 	}
 
+	// 2. Load run context
+	run, err := p.store.GetRun(ctx, job.RunID)
+	if err != nil {
+		return fmt.Errorf("failed to fetch run: %w", err)
+	}
+
+	// 3. Load project context
+	project, err := p.store.GetProject(ctx, run.ProjectID)
+	if err != nil {
+		return fmt.Errorf("failed to fetch project: %w", err)
+	}
+
+	// 4. Load workspace context
+	workspace, err := p.store.GetWorkspace(ctx, project.WorkspaceID)
+	if err != nil {
+		return fmt.Errorf("failed to fetch workspace: %w", err)
+	}
+
 	logger = logger.With(
 		"image", job.Image,
 		"created_by", job.CreatedBy,
+		"workspace", workspace.Slug,
+		"project", project.Slug,
+		"run", run.Slug,
 	)
 
-	// 2. Update status to RUNNING
+	// 5. Update status to RUNNING
 	job.Status = domain.JobStatusRunning
 	startedAt := time.Now()
 	job.StartedAt = &startedAt
@@ -62,7 +83,7 @@ func (p *Processor) Process(ctx context.Context, jobID uuid.UUID) error {
 
 	logger.Info("job status updated to RUNNING")
 
-	// 3. Build executor run spec
+	// 6. Build executor run spec
 	spec := executor.RunSpec{
 		JobID:             job.ID.String(),
 		Image:             job.Image,
@@ -81,7 +102,7 @@ func (p *Processor) Process(ctx context.Context, jobID uuid.UUID) error {
 		ExecutorType:      string(job.Executor),
 	}
 
-	// 4. Create executor run
+	// 7. Create executor run
 	ref, err := p.executor.CreateRun(ctx, spec)
 	if err != nil {
 		return p.failJob(ctx, job, fmt.Errorf("failed to create executor run: %w", err))
@@ -89,23 +110,24 @@ func (p *Processor) Process(ctx context.Context, jobID uuid.UUID) error {
 
 	logger.Info("executor run created", "executor_ref", ref.Reference)
 
-	// 5. Update job with executor reference
+	// 8. Update job with executor reference
 	job.ExecutorRef = &ref.Reference
 	if err := p.store.UpdateJob(ctx, job); err != nil {
 		logger.Error("failed to update executor reference", "error", err)
 		// Non-fatal, continue
 	}
 
-	// 6. Wait for job completion with timeout
+	// 9. Wait for job completion with timeout
 	timeoutCtx, cancel := context.WithTimeout(ctx, spec.Timeout)
 	defer cancel()
 
 	logger.Info("waiting for job completion", "timeout", spec.Timeout)
 	result, err := p.executor.Wait(timeoutCtx, ref)
 
-	// 7. Collect logs (even on failure)
+	// 10. Collect logs (even on failure)
 	logger.Info("collecting logs")
-	logKey := fmt.Sprintf("jobs/%s/logs.txt", job.ID)
+	logKey := fmt.Sprintf("workspaces/%s/projects/%s/runs/%s/jobs/%s/logs.txt",
+		workspace.Slug, project.Slug, run.Slug, job.ID)
 	logBuf := &bytes.Buffer{}
 
 	if logErr := p.executor.GetLogs(ctx, ref, logBuf); logErr != nil {
@@ -119,7 +141,7 @@ func (p *Processor) Process(ctx context.Context, jobID uuid.UUID) error {
 		}
 	}
 
-	// 8. Handle execution result
+	// 11. Handle execution result
 	finishedAt := time.Now()
 	job.FinishedAt = &finishedAt
 
@@ -153,7 +175,8 @@ func (p *Processor) Process(ctx context.Context, jobID uuid.UUID) error {
 			job.ExitCode = &result.ExitCode
 
 			// Collect output artefacts
-			outputPrefix := fmt.Sprintf("jobs/%s/outputs", job.ID)
+			outputPrefix := fmt.Sprintf("workspaces/%s/projects/%s/runs/%s/jobs/%s/outputs",
+				workspace.Slug, project.Slug, run.Slug, job.ID)
 			outputSpec := executor.OutputSpec{
 				Paths:       job.Outputs,
 				ObjectStore: NewS3Adapter(p.storage),
@@ -178,7 +201,7 @@ func (p *Processor) Process(ctx context.Context, jobID uuid.UUID) error {
 		}
 	}
 
-	// 9. Update final job status
+	// 12. Update final job status
 	if err := p.store.UpdateJob(ctx, job); err != nil {
 		logger.Error("failed to update final job status", "error", err)
 		return err
@@ -186,7 +209,7 @@ func (p *Processor) Process(ctx context.Context, jobID uuid.UUID) error {
 
 	logger.Info("job processing complete", "status", job.Status, "duration", job.FinishedAt.Sub(*job.StartedAt))
 
-	// 10. Cleanup executor resources
+	// 13. Cleanup executor resources
 	if cleanupErr := p.executor.Cleanup(ctx, ref); cleanupErr != nil {
 		logger.Error("failed to cleanup executor resources", "error", cleanupErr)
 	}
