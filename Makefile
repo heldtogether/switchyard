@@ -15,7 +15,7 @@ build: ## Build all binaries
 	@mkdir -p bin
 	go build -ldflags="-X github.com/heldtogether/switchyard/internal/version.Version=$(VERSION)" -o $(BINARY_API) ./cmd/api
 	go build -ldflags="-X github.com/heldtogether/switchyard/internal/version.Version=$(VERSION)" -o $(BINARY_WORKER) ./cmd/worker
-	#go build -o $(BINARY_MIGRATE) ./cmd/migrate
+	go build -o $(BINARY_MIGRATE) ./cmd/migrate
 
 test: ## Run tests
 	go test -v -race -coverprofile=coverage.out ./...

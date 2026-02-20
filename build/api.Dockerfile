@@ -22,6 +22,12 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
     -o api \
     ./cmd/api
 
+# Build the migrate binary
+RUN CGO_ENABLED=0 GOOS=linux go build \
+    -ldflags="-w -s" \
+    -o migrate \
+    ./cmd/migrate
+
 # Runtime stage
 FROM alpine:3.19
 
@@ -34,8 +40,9 @@ RUN addgroup -g 1000 switchyard && \
 
 WORKDIR /app
 
-# Copy binary from builder
+# Copy binaries from builder
 COPY --from=builder /build/api /app/api
+COPY --from=builder /build/migrate /app/migrate
 
 # Copy migrations (needed if we want to run migrations from the container)
 COPY --from=builder /build/migrations /app/migrations

@@ -3,7 +3,7 @@
 > **Last Updated:** Feb 20, 2026  
 > **Status:** 🎉 **PRODUCTION READY** - Full platform with Docker Swarm deployment
 
-## 📊 Overall Progress: **~95% Complete**
+## 📊 Overall Progress: **~96% Complete**
 
 **🚀 Ready to Deploy!**
 - ✅ Full API server (8/9 endpoints) with job submission, status, logs, artefacts
@@ -12,12 +12,13 @@
 - ✅ All storage layers (Postgres, Redis, S3)
 - ✅ Production Docker images (~43MB each)
 - ✅ Complete Docker Swarm stack with HA, secrets, rolling updates
+- ✅ Database migration tool (`cmd/migrate`) bundled in API image
 - ✅ Comprehensive deployment docs (1,365+ lines)
 - ✅ Local development environment
 - ✅ Example scripts and demo job
 
 **📦 Deployment Artifacts:**
-- Docker images: API, Worker, Example Job
+- Docker images: API (with migrate tool), Worker, Example Job
 - Stack file: `deployments/stack.yml` (Redis, API, Worker)
 - Documentation: Quick Start, Deployment Guide, Operations Guide
 - Configuration: Templates, examples, environment files
@@ -207,12 +208,20 @@
 - [ ] POST /v1/jobs/{id}/cancel - Cancel running job
   - Note: executor.Cancel() already implemented in both Docker & Swarm executors
 
-### 15. Optional Enhancements
-- [ ] `cmd/migrate/main.go` - Standalone migration binary (currently using `go run`)
+### 15. Migration Tool ✅
+- [x] `cmd/migrate/main.go` - Standalone migration binary (~140 lines)
+  - Uses golang-migrate/migrate library
+  - Supports `-action up` and `-action down`
+  - Reads `DATABASE_URL` from environment
+  - Tracks migration state in `schema_migrations` table
+  - Bundled in API Docker image at `/app/migrate`
+  - Works with `make migrate-up` and `make migrate-down`
+
+### 16. Optional Enhancements
 - [ ] `examples/scripts/integration-test.sh` - End-to-end test script
 - [ ] `examples/jobs/simple-writer.json` - Job spec example file
 
-### 16. Future Work
+### 17. Future Work
 - [ ] Kubernetes executor (`internal/executor/kube/kube.go`)
 - [ ] Web UI for job management
 - [ ] Enhanced metrics and monitoring
