@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/heldtogether/switchyard/internal/config"
 	"github.com/heldtogether/switchyard/internal/domain"
+	"github.com/heldtogether/switchyard/internal/executor"
 	"github.com/heldtogether/switchyard/internal/storage/objectstore"
 	"github.com/heldtogether/switchyard/internal/storage/postgres"
 	"github.com/heldtogether/switchyard/internal/storage/queue"
@@ -20,23 +21,25 @@ import (
 
 // API holds the API dependencies
 type API struct {
-	cfg     *config.Config
-	store   *postgres.Store
-	queue   *queue.RedisQueue
-	storage *objectstore.S3Store
-	logger  *slog.Logger
-	baseURL string
+	cfg      *config.Config
+	store    *postgres.Store
+	queue    *queue.RedisQueue
+	storage  *objectstore.S3Store
+	executor executor.Executor
+	logger   *slog.Logger
+	baseURL  string
 }
 
 // New creates a new API instance
-func New(cfg *config.Config, store *postgres.Store, q *queue.RedisQueue, storage *objectstore.S3Store, logger *slog.Logger, baseURL string) *API {
+func New(cfg *config.Config, store *postgres.Store, q *queue.RedisQueue, storage *objectstore.S3Store, exec executor.Executor, logger *slog.Logger, baseURL string) *API {
 	return &API{
-		cfg:     cfg,
-		store:   store,
-		queue:   q,
-		storage: storage,
-		logger:  logger,
-		baseURL: baseURL,
+		cfg:      cfg,
+		store:    store,
+		queue:    q,
+		storage:  storage,
+		executor: exec,
+		logger:   logger,
+		baseURL:  baseURL,
 	}
 }
 
@@ -166,6 +169,120 @@ func (a *API) HandleGetJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	writeJSON(w, http.StatusOK, toJobResponse(job, a.baseURL))
+}
+
+// HandleCancelJob handles POST /v1/jobs/{id}/cancel
+func (a *API) HandleCancelJob(w http.ResponseWriter, r *http.Request) {
+	// Extract job ID from path (remove /v1/jobs/ prefix and /cancel suffix)
+	path := strings.TrimPrefix(r.URL.Path, "/v1/jobs/")
+	path = strings.TrimSuffix(path, "/cancel")
+
+	jobID, err := uuid.Parse(path)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{
+			Error:   "invalid_id",
+			Message: "Invalid job ID",
+			Code:    http.StatusBadRequest,
+		})
+		return
+	}
+
+	// Get the job from database
+	job, err := a.store.GetJob(r.Context(), jobID)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, ErrorResponse{
+			Error:   "not_found",
+			Message: "Job not found",
+			Code:    http.StatusNotFound,
+		})
+		return
+	}
+
+	// Check if job is in a cancellable state
+	if job.Status.IsTerminal() {
+		writeJSON(w, http.StatusConflict, ErrorResponse{
+			Error:   "cannot_cancel",
+			Message: fmt.Sprintf("Job is already in terminal state: %s", job.Status),
+			Code:    http.StatusConflict,
+		})
+		return
+	}
+
+	logger := a.logger.With("job_id", jobID, "current_status", job.Status)
+	logger.Info("cancelling job")
+
+	// Handle cancellation based on job status
+	switch job.Status {
+	case domain.JobStatusPending:
+		// Job hasn't started yet, just mark as cancelled
+		logger.Info("marking pending job as cancelled")
+		job.Status = domain.JobStatusCancelled
+		msg := "Job cancelled before execution"
+		job.StatusMessage = &msg
+		now := time.Now()
+		job.FinishedAt = &now
+
+	case domain.JobStatusRunning:
+		// Job is running, need to cancel the executor
+		logger.Info("cancelling running job via executor")
+
+		// Check if we have executor reference
+		if job.ExecutorRef == nil || *job.ExecutorRef == "" {
+			writeJSON(w, http.StatusInternalServerError, ErrorResponse{
+				Error:   "cancel_failed",
+				Message: "Job is running but has no executor reference",
+				Code:    http.StatusInternalServerError,
+			})
+			return
+		}
+
+		// Create executor reference
+		ref := executor.RunRef{
+			ExecutorType: string(job.Executor),
+			Reference:    *job.ExecutorRef,
+		}
+
+		// Call executor cancel
+		if err := a.executor.Cancel(r.Context(), ref); err != nil {
+			logger.Error("failed to cancel job via executor", "error", err)
+			writeJSON(w, http.StatusInternalServerError, ErrorResponse{
+				Error:   "cancel_failed",
+				Message: fmt.Sprintf("Failed to cancel job: %v", err),
+				Code:    http.StatusInternalServerError,
+			})
+			return
+		}
+
+		// Update job status
+		job.Status = domain.JobStatusCancelled
+		msg := "Job cancelled by user"
+		job.StatusMessage = &msg
+		now := time.Now()
+		job.FinishedAt = &now
+
+	default:
+		// This shouldn't happen due to IsTerminal() check above
+		writeJSON(w, http.StatusConflict, ErrorResponse{
+			Error:   "cannot_cancel",
+			Message: fmt.Sprintf("Cannot cancel job in status: %s", job.Status),
+			Code:    http.StatusConflict,
+		})
+		return
+	}
+
+	// Update job in database
+	if err := a.store.UpdateJob(r.Context(), job); err != nil {
+		logger.Error("failed to update job after cancellation", "error", err)
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{
+			Error:   "internal_error",
+			Message: "Failed to update job status",
+			Code:    http.StatusInternalServerError,
+		})
+		return
+	}
+
+	logger.Info("job cancelled successfully")
 	writeJSON(w, http.StatusOK, toJobResponse(job, a.baseURL))
 }
 

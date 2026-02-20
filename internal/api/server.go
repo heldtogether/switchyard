@@ -97,6 +97,20 @@ func (s *Server) handleJobs(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleJobsWithID(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Path
 
+	// Check if it's cancel
+	if strings.HasSuffix(path, "/cancel") {
+		if r.Method == http.MethodPost {
+			s.api.HandleCancelJob(w, r)
+		} else {
+			writeJSON(w, http.StatusMethodNotAllowed, ErrorResponse{
+				Error:   "method_not_allowed",
+				Message: "Method not allowed",
+				Code:    http.StatusMethodNotAllowed,
+			})
+		}
+		return
+	}
+
 	// Check if it's artefacts
 	if strings.Contains(path, "/artefacts") {
 		if strings.HasSuffix(path, "/artefacts") {

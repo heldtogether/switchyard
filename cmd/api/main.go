@@ -13,6 +13,9 @@ import (
 
 	"github.com/heldtogether/switchyard/internal/api"
 	"github.com/heldtogether/switchyard/internal/config"
+	"github.com/heldtogether/switchyard/internal/executor"
+	dockerexec "github.com/heldtogether/switchyard/internal/executor/docker"
+	swarmexec "github.com/heldtogether/switchyard/internal/executor/swarm"
 	"github.com/heldtogether/switchyard/internal/storage/objectstore"
 	"github.com/heldtogether/switchyard/internal/storage/postgres"
 	"github.com/heldtogether/switchyard/internal/storage/queue"
@@ -95,11 +98,41 @@ func main() {
 	}
 	logger.Info("s3 storage connected")
 
+	// Initialize executor based on config
+	logger.Info("initializing executor", "type", cfg.Executor.Type)
+	var exec executor.Executor
+	switch cfg.Executor.Type {
+	case "docker":
+		exec, err = dockerexec.New(
+			cfg.Executor.Swarm.DockerHost,
+			cfg.Executor.Swarm.NFSBasePath,
+			cfg.Executor.Swarm.NetworkIsolated,
+		)
+		if err != nil {
+			logger.Error("failed to create docker executor", "error", err)
+			os.Exit(1)
+		}
+	case "swarm":
+		exec, err = swarmexec.New(
+			cfg.Executor.Swarm.DockerHost,
+			cfg.Executor.Swarm.NFSBasePath,
+			cfg.Executor.Swarm.NetworkIsolated,
+		)
+		if err != nil {
+			logger.Error("failed to create swarm executor", "error", err)
+			os.Exit(1)
+		}
+	default:
+		logger.Error("unsupported executor type", "type", cfg.Executor.Type)
+		os.Exit(1)
+	}
+	logger.Info("executor initialized")
+
 	// Build base URL
 	baseURL := fmt.Sprintf("http://%s:%d", cfg.API.Host, cfg.API.Port)
 
 	// Create API
-	apiInstance := api.New(cfg, store, redisQueue, s3Store, logger, baseURL)
+	apiInstance := api.New(cfg, store, redisQueue, s3Store, exec, logger, baseURL)
 
 	// Create and start server
 	server := api.NewServer(cfg, apiInstance, logger)

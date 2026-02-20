@@ -3,10 +3,10 @@
 > **Last Updated:** Feb 20, 2026  
 > **Status:** 🎉 **PRODUCTION READY** - Full platform with Docker Swarm deployment
 
-## 📊 Overall Progress: **~96% Complete**
+## 📊 Overall Progress: **~98% Complete**
 
 **🚀 Ready to Deploy!**
-- ✅ Full API server (8/9 endpoints) with job submission, status, logs, artefacts
+- ✅ Full API server (9/9 endpoints) with job submission, status, logs, artefacts, cancel
 - ✅ Full Worker with job processing, recovery, timeout handling  
 - ✅ Complete executor implementations (Docker + Swarm)
 - ✅ All storage layers (Postgres, Redis, S3)
@@ -22,9 +22,6 @@
 - Stack file: `deployments/stack.yml` (Redis, API, Worker)
 - Documentation: Quick Start, Deployment Guide, Operations Guide
 - Configuration: Templates, examples, environment files
-
-**Optional Enhancements:**
-- ❌ Cancel job endpoint (executor.Cancel() implemented, just needs HTTP handler)
 
 ---
 
@@ -137,15 +134,16 @@
 - [x] `internal/worker/adapters.go` - Helper adapters
 - [x] Orphaned job recovery on startup (built into worker.go)
 
-### 8. API Service ✅ (8/9 endpoints)
-- [x] `cmd/api/main.go` - Entry point (161 lines)
-- [x] `internal/api/server.go` - HTTP server setup (129 lines)
+### 8. API Service ✅ (9/9 endpoints)
+- [x] `cmd/api/main.go` - Entry point with executor initialization (~190 lines)
+- [x] `internal/api/server.go` - HTTP server setup with cancel routing (~145 lines)
 - [x] `internal/api/middleware.go` - Auth, logging, recovery, request ID
 - [x] `internal/api/dto.go` - Request/response types
-- [x] `internal/api/handlers.go` - HTTP endpoints (442 lines)
+- [x] `internal/api/handlers.go` - HTTP endpoints (~550 lines)
   - [x] POST /v1/jobs - Submit job
   - [x] GET /v1/jobs - List jobs (with filtering)
   - [x] GET /v1/jobs/{id} - Get job details
+  - [x] POST /v1/jobs/{id}/cancel - Cancel running or pending job
   - [x] GET /v1/jobs/{id}/logs - Stream/download logs
   - [x] GET /v1/jobs/{id}/artefacts - List artefacts
   - [x] GET /v1/jobs/{id}/artefacts/{path} - Download artefact (with presigned URL support)
@@ -204,9 +202,15 @@
   - Monitoring
   - Backup/recovery
 
-### 14. Missing API Endpoint
-- [ ] POST /v1/jobs/{id}/cancel - Cancel running job
-  - Note: executor.Cancel() already implemented in both Docker & Swarm executors
+### 14. Cancel Job Endpoint ✅
+- [x] POST /v1/jobs/{id}/cancel - Cancel running or pending job
+  - Validates job state (only PENDING or RUNNING can be cancelled)
+  - For PENDING jobs: marks as CANCELLED immediately (worker will skip)
+  - For RUNNING jobs: calls executor.Cancel() then marks as CANCELLED
+  - Returns 409 Conflict for jobs in terminal states
+  - Returns full job object on success
+  - Properly integrated with executor abstraction
+  - Tested with PENDING jobs, terminal state handling, and error cases
 
 ### 15. Migration Tool ✅
 - [x] `cmd/migrate/main.go` - Standalone migration binary (~140 lines)
