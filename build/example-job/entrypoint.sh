@@ -5,7 +5,7 @@ echo "================================"
 echo "Switchyard Example Job"
 echo "================================"
 echo "Started at: $(date -Iseconds)"
-echo "Job ID: ${JOB_ID:-unknown}"
+echo "Job ID: ${SWITCHYARD_JOB_ID:-unknown}"
 echo "Hostname: $(hostname)"
 echo ""
 
@@ -24,7 +24,7 @@ cat > /outputs/result.txt <<EOF
 Job completed successfully!
 Timestamp: $(date -Iseconds)
 Hostname: $(hostname)
-Job ID: ${JOB_ID:-unknown}
+Job ID: ${SWITCHYARD_JOB_ID:-unknown}
 EOF
 
 # Create nested structure

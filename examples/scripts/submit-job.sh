@@ -9,8 +9,9 @@ API_KEY="${API_KEY:-your-api-key}"
 echo "Submitting example job to $API_URL..."
 
 # Note: System environment variables (SWITCHYARD_*) are automatically injected
-# and include: JOB_ID, JOB_CREATED_AT, JOB_TIMEOUT, EXECUTOR_TYPE, IMAGE,
-# OUTPUTS_DIR, BUCKET, VERSION, API_URL, and resource limits
+# and include: SWITCHYARD_JOB_ID, SWITCHYARD_JOB_CREATED_AT, SWITCHYARD_JOB_TIMEOUT,
+# SWITCHYARD_EXECUTOR_TYPE, SWITCHYARD_IMAGE, SWITCHYARD_OUTPUTS_DIR, SWITCHYARD_BUCKET,
+# SWITCHYARD_VERSION, SWITCHYARD_API_URL, and resource limits
 RESPONSE=$(curl -s -X POST "$API_URL/v1/jobs" \
   -H "X-API-Key: $API_KEY" \
   -H "Content-Type: application/json" \
