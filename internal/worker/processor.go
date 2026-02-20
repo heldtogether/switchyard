@@ -12,23 +12,28 @@ import (
 	"github.com/heldtogether/switchyard/internal/executor"
 	"github.com/heldtogether/switchyard/internal/storage/objectstore"
 	"github.com/heldtogether/switchyard/internal/storage/postgres"
+	"github.com/heldtogether/switchyard/internal/version"
 )
 
 // Processor handles individual job execution
 type Processor struct {
-	store    *postgres.Store
-	executor executor.Executor
-	storage  *objectstore.S3Store
-	logger   *slog.Logger
+	store      *postgres.Store
+	executor   executor.Executor
+	storage    *objectstore.S3Store
+	logger     *slog.Logger
+	apiBaseURL string
+	bucket     string
 }
 
 // NewProcessor creates a new job processor
-func NewProcessor(store *postgres.Store, exec executor.Executor, storage *objectstore.S3Store, logger *slog.Logger) *Processor {
+func NewProcessor(store *postgres.Store, exec executor.Executor, storage *objectstore.S3Store, logger *slog.Logger, apiBaseURL string, bucket string) *Processor {
 	return &Processor{
-		store:    store,
-		executor: exec,
-		storage:  storage,
-		logger:   logger,
+		store:      store,
+		executor:   exec,
+		storage:    storage,
+		logger:     logger,
+		apiBaseURL: apiBaseURL,
+		bucket:     bucket,
 	}
 }
 
@@ -61,15 +66,21 @@ func (p *Processor) Process(ctx context.Context, jobID uuid.UUID) error {
 
 	// 3. Build executor run spec
 	spec := executor.RunSpec{
-		JobID:       job.ID.String(),
-		Image:       job.Image,
-		ImageDigest: stringPtrValue(job.ImageDigest),
-		Command:     job.Command,
-		Env:         job.Env,
-		Outputs:     job.Outputs,
-		CPU:         stringPtrValue(job.CPULimit),
-		Memory:      stringPtrValue(job.MemoryLimit),
-		Timeout:     time.Duration(job.TimeoutSecs) * time.Second,
+		JobID:             job.ID.String(),
+		Image:             job.Image,
+		ImageDigest:       stringPtrValue(job.ImageDigest),
+		Command:           job.Command,
+		Env:               job.Env,
+		Outputs:           job.Outputs,
+		CPU:               stringPtrValue(job.CPULimit),
+		Memory:            stringPtrValue(job.MemoryLimit),
+		Timeout:           time.Duration(job.TimeoutSecs) * time.Second,
+		CreatedAt:         job.CreatedAt,
+		ArtefactPrefix:    stringPtrValue(job.ArtefactPrefix),
+		Bucket:            p.bucket,
+		APIBaseURL:        p.apiBaseURL,
+		SwitchyardVersion: version.Version,
+		ExecutorType:      string(job.Executor),
 	}
 
 	// 4. Create executor run

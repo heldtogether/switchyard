@@ -44,6 +44,14 @@ type RunSpec struct {
 	Memory       string
 	Timeout      time.Duration
 	RegistryAuth *domain.RegistryAuth
+
+	// Additional context for system environment variables
+	CreatedAt         time.Time
+	ArtefactPrefix    string
+	Bucket            string
+	APIBaseURL        string
+	SwitchyardVersion string
+	ExecutorType      string
 }
 
 // Output Spec defines output collection

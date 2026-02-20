@@ -24,6 +24,7 @@ type Config struct {
 type APIConfig struct {
 	Port         int           `yaml:"port"`
 	Host         string        `yaml:"host"`
+	BaseURL      string        `yaml:"base_url"`
 	ReadTimeout  time.Duration `yaml:"read_timeout"`
 	WriteTimeout time.Duration `yaml:"write_timeout"`
 	Auth         AuthConfig    `yaml:"auth"`

@@ -8,6 +8,7 @@
 api:
   port: 8080
   host: "0.0.0.0"
+  base_url: "http://localhost:8080"  # Base URL for API (injected as SWITCHYARD_API_URL in jobs)
   read_timeout: 30s
   write_timeout: 30s
   

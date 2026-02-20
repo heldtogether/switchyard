@@ -8,6 +8,9 @@ API_KEY="${API_KEY:-your-api-key}"
 
 echo "Submitting example job to $API_URL..."
 
+# Note: System environment variables (SWITCHYARD_*) are automatically injected
+# and include: JOB_ID, JOB_CREATED_AT, JOB_TIMEOUT, EXECUTOR_TYPE, IMAGE,
+# OUTPUTS_DIR, BUCKET, VERSION, API_URL, and resource limits
 RESPONSE=$(curl -s -X POST "$API_URL/v1/jobs" \
   -H "X-API-Key: $API_KEY" \
   -H "Content-Type: application/json" \
@@ -15,7 +18,7 @@ RESPONSE=$(curl -s -X POST "$API_URL/v1/jobs" \
     "image": "switchyard-example-job:latest",
     "command": ["/app/entrypoint.sh"],
     "env": {
-      "JOB_ID": "example-001"
+      "CUSTOM_VAR": "example-value"
     },
     "outputs": ["/outputs"],
     "resources": {

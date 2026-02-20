@@ -99,13 +99,8 @@ func (e *SwarmExecutor) buildServiceSpec(spec executor.RunSpec, serviceName, out
 		}
 	}
 
-	// Build environment variables
-	env := []string{
-		fmt.Sprintf("JOB_ID=%s", spec.JobID),
-	}
-	for k, v := range spec.Env {
-		env = append(env, fmt.Sprintf("%s=%s", k, v))
-	}
+	// Build environment variables with system-managed SWITCHYARD_* vars
+	env := executor.BuildSystemEnv(spec)
 
 	// Container spec
 	containerSpec := &swarm.ContainerSpec{

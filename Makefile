@@ -13,8 +13,8 @@ help: ## Show this help
 build: ## Build all binaries
 	@echo "Building binaries..."
 	@mkdir -p bin
-	go build -ldflags="-X main.Version=$(VERSION)" -o $(BINARY_API) ./cmd/api
-	go build -ldflags="-X main.Version=$(VERSION)" -o $(BINARY_WORKER) ./cmd/worker
+	go build -ldflags="-X github.com/heldtogether/switchyard/internal/version.Version=$(VERSION)" -o $(BINARY_API) ./cmd/api
+	go build -ldflags="-X github.com/heldtogether/switchyard/internal/version.Version=$(VERSION)" -o $(BINARY_WORKER) ./cmd/worker
 	#go build -o $(BINARY_MIGRATE) ./cmd/migrate
 
 test: ## Run tests

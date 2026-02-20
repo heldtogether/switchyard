@@ -71,6 +71,16 @@ func (a *API) HandleCreateJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Validate environment variables
+	if err := validateEnvVars(req.Env); err != nil {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{
+			Error:   "validation_error",
+			Message: err.Error(),
+			Code:    http.StatusBadRequest,
+		})
+		return
+	}
+
 	// Create job
 	job := &domain.Job{
 		ID:          uuid.New(),
@@ -438,4 +448,19 @@ func getJobIDFromPath(path string) string {
 		return parts[0]
 	}
 	return ""
+}
+
+// validateEnvVars checks that user-provided env vars don't use reserved names.
+// Environment variables starting with "SWITCHYARD_" are reserved for system use
+// and cannot be set by users.
+func validateEnvVars(env map[string]string) error {
+	const reservedPrefix = "SWITCHYARD_"
+
+	for key := range env {
+		if strings.HasPrefix(key, reservedPrefix) {
+			return fmt.Errorf("environment variable '%s' is reserved (variables starting with '%s' are system-managed)", key, reservedPrefix)
+		}
+	}
+
+	return nil
 }

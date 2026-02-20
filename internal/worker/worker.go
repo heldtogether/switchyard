@@ -127,7 +127,7 @@ func (w *Worker) processJob(ctx context.Context, jobIDStr string) error {
 		return fmt.Errorf("invalid job ID: %w", err)
 	}
 
-	processor := NewProcessor(w.store, w.executor, w.storage, w.logger)
+	processor := NewProcessor(w.store, w.executor, w.storage, w.logger, w.cfg.API.BaseURL, w.cfg.Storage.Bucket)
 	return processor.Process(ctx, jobID)
 }
 

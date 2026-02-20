@@ -57,10 +57,8 @@ func (e *DockerExecutor) CreateRun(ctx context.Context, spec executor.RunSpec) (
 		return executor.RunRef{}, fmt.Errorf("create network: %w", err)
 	}
 
-	env := []string{fmt.Sprintf("JOB_ID=%s", spec.JobID)}
-	for k, v := range spec.Env {
-		env = append(env, fmt.Sprintf("%s=%s", k, v))
-	}
+	// Build environment variables with system-managed SWITCHYARD_* vars
+	env := executor.BuildSystemEnv(spec)
 
 	cfg := &container.Config{
 		Image: spec.Image,
