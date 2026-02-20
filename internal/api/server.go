@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"strings"
 
 	"github.com/heldtogether/switchyard/internal/config"
 )
@@ -31,11 +30,37 @@ func NewServer(cfg *config.Config, api *API, logger *slog.Logger) *Server {
 func (s *Server) Start() error {
 	mux := http.NewServeMux()
 
-	// Register routes
-	mux.HandleFunc("/v1/jobs", s.handleJobs)
-	mux.HandleFunc("/v1/jobs/", s.handleJobsWithID)
-	mux.HandleFunc("/healthz", s.api.HandleHealthz)
-	mux.HandleFunc("/readyz", s.api.HandleReadyz)
+	// Health check routes
+	mux.HandleFunc("/healthz", s.handleHealthCheck)
+	mux.HandleFunc("/readyz", s.handleHealthCheck)
+
+	// Workspace routes
+	mux.HandleFunc("POST /v1/workspaces", s.api.HandleCreateWorkspace)
+	mux.HandleFunc("GET /v1/workspaces", s.api.HandleListWorkspaces)
+	mux.HandleFunc("GET /v1/workspaces/{slug}", s.api.HandleGetWorkspace)
+
+	// Project routes
+	mux.HandleFunc("POST /v1/workspaces/{workspace_slug}/projects", s.api.HandleCreateProject)
+	mux.HandleFunc("GET /v1/workspaces/{workspace_slug}/projects", s.api.HandleListProjects)
+	mux.HandleFunc("GET /v1/workspaces/{workspace_slug}/projects/{project_slug}", s.api.HandleGetProject)
+	mux.HandleFunc("PUT /v1/workspaces/{workspace_slug}/projects/{project_slug}", s.api.HandleUpdateProject)
+	mux.HandleFunc("POST /v1/workspaces/{workspace_slug}/projects/{project_slug}/archive", s.api.HandleArchiveProject)
+
+	// Run routes
+	mux.HandleFunc("POST /v1/workspaces/{workspace_slug}/projects/{project_slug}/runs", s.api.HandleCreateRun)
+	mux.HandleFunc("GET /v1/workspaces/{workspace_slug}/projects/{project_slug}/runs", s.api.HandleListRuns)
+	mux.HandleFunc("GET /v1/workspaces/{workspace_slug}/projects/{project_slug}/runs/{run_slug}", s.api.HandleGetRun)
+
+	// Job routes
+	mux.HandleFunc("POST /v1/workspaces/{workspace_slug}/projects/{project_slug}/runs/{run_slug}/jobs", s.api.HandleCreateJob)
+	mux.HandleFunc("GET /v1/workspaces/{workspace_slug}/projects/{project_slug}/runs/{run_slug}/jobs", s.api.HandleListJobs)
+	mux.HandleFunc("GET /v1/workspaces/{workspace_slug}/projects/{project_slug}/runs/{run_slug}/jobs/{job_id}", s.api.HandleGetJob)
+	mux.HandleFunc("GET /v1/workspaces/{workspace_slug}/projects/{project_slug}/runs/{run_slug}/jobs/{job_id}/logs", s.api.HandleGetJobLogs)
+	mux.HandleFunc("POST /v1/workspaces/{workspace_slug}/projects/{project_slug}/runs/{run_slug}/jobs/{job_id}/cancel", s.api.HandleCancelJob)
+
+	// Artefact routes
+	mux.HandleFunc("GET /v1/workspaces/{workspace_slug}/projects/{project_slug}/runs/{run_slug}/jobs/{job_id}/artefacts", s.api.HandleListArtefacts)
+	mux.HandleFunc("GET /v1/workspaces/{workspace_slug}/projects/{project_slug}/runs/{run_slug}/jobs/{job_id}/artefacts/{path...}", s.api.HandleDownloadArtefact)
 
 	// Wrap with middlewares
 	var handler http.Handler = mux
@@ -77,66 +102,9 @@ func (s *Server) Stop(ctx context.Context) error {
 	return s.httpServer.Shutdown(ctx)
 }
 
-// handleJobs routes /v1/jobs based on method
-func (s *Server) handleJobs(w http.ResponseWriter, r *http.Request) {
-	switch r.Method {
-	case http.MethodPost:
-		s.api.HandleCreateJob(w, r)
-	case http.MethodGet:
-		s.api.HandleListJobs(w, r)
-	default:
-		writeJSON(w, http.StatusMethodNotAllowed, ErrorResponse{
-			Error:   "method_not_allowed",
-			Message: "Method not allowed",
-			Code:    http.StatusMethodNotAllowed,
-		})
-	}
-}
-
-// handleJobsWithID routes /v1/jobs/{id}/* based on path and method
-func (s *Server) handleJobsWithID(w http.ResponseWriter, r *http.Request) {
-	path := r.URL.Path
-
-	// Check if it's cancel
-	if strings.HasSuffix(path, "/cancel") {
-		if r.Method == http.MethodPost {
-			s.api.HandleCancelJob(w, r)
-		} else {
-			writeJSON(w, http.StatusMethodNotAllowed, ErrorResponse{
-				Error:   "method_not_allowed",
-				Message: "Method not allowed",
-				Code:    http.StatusMethodNotAllowed,
-			})
-		}
-		return
-	}
-
-	// Check if it's artefacts
-	if strings.Contains(path, "/artefacts") {
-		if strings.HasSuffix(path, "/artefacts") {
-			// List artefacts
-			s.api.HandleListArtefacts(w, r)
-		} else {
-			// Download specific artefact
-			s.api.HandleDownloadArtefact(w, r)
-		}
-		return
-	}
-
-	// Check if it's logs
-	if strings.HasSuffix(path, "/logs") {
-		s.api.HandleGetLogs(w, r)
-		return
-	}
-
-	// Just job ID - get job details
-	if r.Method == http.MethodGet {
-		s.api.HandleGetJob(w, r)
-	} else {
-		writeJSON(w, http.StatusMethodNotAllowed, ErrorResponse{
-			Error:   "method_not_allowed",
-			Message: "Method not allowed",
-			Code:    http.StatusMethodNotAllowed,
-		})
-	}
+// handleHealthCheck returns a simple health check
+func (s *Server) handleHealthCheck(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]string{
+		"status": "ok",
+	})
 }

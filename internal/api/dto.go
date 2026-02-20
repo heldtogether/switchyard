@@ -1,14 +1,96 @@
 package api
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/heldtogether/switchyard/internal/domain"
 )
 
+// ========== Workspace DTOs ==========
+
+// CreateWorkspaceRequest is the request to create a new workspace
+type CreateWorkspaceRequest struct {
+	Slug        string         `json:"slug"`
+	Name        string         `json:"name"`
+	Description *string        `json:"description,omitempty"`
+	Metadata    map[string]any `json:"metadata,omitempty"`
+}
+
+// WorkspaceResponse is the response for a workspace
+type WorkspaceResponse struct {
+	ID          uuid.UUID      `json:"id"`
+	Slug        string         `json:"slug"`
+	Name        string         `json:"name"`
+	Description *string        `json:"description,omitempty"`
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
+	Metadata    map[string]any `json:"metadata,omitempty"`
+}
+
+// ========== Project DTOs ==========
+
+// CreateProjectRequest is the request to create a new project
+type CreateProjectRequest struct {
+	Slug        string         `json:"slug"`
+	Name        string         `json:"name"`
+	Description *string        `json:"description,omitempty"`
+	Metadata    map[string]any `json:"metadata,omitempty"`
+}
+
+// UpdateProjectRequest is the request to update a project
+type UpdateProjectRequest struct {
+	Name        *string        `json:"name,omitempty"`
+	Description *string        `json:"description,omitempty"`
+	Metadata    map[string]any `json:"metadata,omitempty"`
+}
+
+// ProjectResponse is the response for a project
+type ProjectResponse struct {
+	ID          uuid.UUID      `json:"id"`
+	WorkspaceID uuid.UUID      `json:"workspace_id"`
+	Slug        string         `json:"slug"`
+	Name        string         `json:"name"`
+	Description *string        `json:"description,omitempty"`
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
+	CreatedBy   string         `json:"created_by"`
+	Archived    bool           `json:"archived"`
+	Metadata    map[string]any `json:"metadata,omitempty"`
+}
+
+// ========== Run DTOs ==========
+
+// CreateRunRequest is the request to create a new run
+type CreateRunRequest struct {
+	Slug        string         `json:"slug"`
+	Name        string         `json:"name"`
+	Description *string        `json:"description,omitempty"`
+	Metadata    map[string]any `json:"metadata,omitempty"`
+}
+
+// RunResponse is the response for a run
+type RunResponse struct {
+	ID          uuid.UUID      `json:"id"`
+	ProjectID   uuid.UUID      `json:"project_id"`
+	Slug        string         `json:"slug"`
+	Name        string         `json:"name"`
+	Description *string        `json:"description,omitempty"`
+	Status      string         `json:"status"`
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
+	StartedAt   *time.Time     `json:"started_at,omitempty"`
+	FinishedAt  *time.Time     `json:"finished_at,omitempty"`
+	CreatedBy   string         `json:"created_by"`
+	Metadata    map[string]any `json:"metadata,omitempty"`
+}
+
+// ========== Job DTOs ==========
+
 // CreateJobRequest is the request to create a new job
 type CreateJobRequest struct {
+	Name         *string              `json:"name,omitempty"`
 	Image        string               `json:"image"`
 	Command      []string             `json:"command,omitempty"`
 	Env          map[string]string    `json:"env,omitempty"`
@@ -85,8 +167,55 @@ type ErrorResponse struct {
 	Code    int    `json:"code"`
 }
 
+// toWorkspaceResponse converts a domain.Workspace to WorkspaceResponse
+func toWorkspaceResponse(workspace *domain.Workspace) WorkspaceResponse {
+	return WorkspaceResponse{
+		ID:          workspace.ID,
+		Slug:        workspace.Slug,
+		Name:        workspace.Name,
+		Description: workspace.Description,
+		CreatedAt:   workspace.CreatedAt,
+		UpdatedAt:   workspace.UpdatedAt,
+		Metadata:    workspace.Metadata,
+	}
+}
+
+// toProjectResponse converts a domain.Project to ProjectResponse
+func toProjectResponse(project *domain.Project) ProjectResponse {
+	return ProjectResponse{
+		ID:          project.ID,
+		WorkspaceID: project.WorkspaceID,
+		Slug:        project.Slug,
+		Name:        project.Name,
+		Description: project.Description,
+		CreatedAt:   project.CreatedAt,
+		UpdatedAt:   project.UpdatedAt,
+		CreatedBy:   project.CreatedBy,
+		Archived:    project.Archived,
+		Metadata:    project.Metadata,
+	}
+}
+
+// toRunResponse converts a domain.Run to RunResponse
+func toRunResponse(run *domain.Run) RunResponse {
+	return RunResponse{
+		ID:          run.ID,
+		ProjectID:   run.ProjectID,
+		Slug:        run.Slug,
+		Name:        run.Name,
+		Description: run.Description,
+		Status:      string(run.Status),
+		CreatedAt:   run.CreatedAt,
+		UpdatedAt:   run.UpdatedAt,
+		StartedAt:   run.StartedAt,
+		FinishedAt:  run.FinishedAt,
+		CreatedBy:   run.CreatedBy,
+		Metadata:    run.Metadata,
+	}
+}
+
 // toJobResponse converts a domain.Job to JobResponse
-func toJobResponse(job *domain.Job, baseURL string) JobResponse {
+func toJobResponse(job *domain.Job, baseURL string, workspaceSlug string, projectSlug string, runSlug string) JobResponse {
 	resp := JobResponse{
 		ID:            job.ID,
 		CreatedAt:     job.CreatedAt,
@@ -112,9 +241,13 @@ func toJobResponse(job *domain.Job, baseURL string) JobResponse {
 
 	// Add log URL if available
 	if job.LogObjectKey != nil {
-		logURL := baseURL + "/v1/jobs/" + job.ID.String() + "/logs"
+		logURL := fmt.Sprintf("%s/v1/workspaces/%s/projects/%s/runs/%s/jobs/%s/logs", baseURL, workspaceSlug, projectSlug, runSlug, job.ID.String())
 		resp.LogURL = &logURL
 	}
 
 	return resp
+}
+
+func ptr[T any](v T) *T {
+	return &v
 }

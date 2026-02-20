@@ -40,10 +40,10 @@ func (s *Store) Close() error {
 func (s *Store) CreateJob(ctx context.Context, job *domain.Job) error {
 	query := `
 		INSERT INTO jobs (
-			id, created_by, status, image, image_digest, command, env,
+			id, run_id, name, created_by, status, image, image_digest, command, env,
 			cpu_limit, memory_limit, timeout_seconds, outputs,
 			executor, metadata, registry_secret_id
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
 		RETURNING created_at, updated_at
 	`
 
@@ -53,7 +53,7 @@ func (s *Store) CreateJob(ctx context.Context, job *domain.Job) error {
 	metadataJSON, _ := json.Marshal(job.Metadata)
 
 	err := s.db.QueryRowContext(ctx, query,
-		job.ID, job.CreatedBy, job.Status, job.Image, job.ImageDigest,
+		job.ID, job.RunID, job.Name, job.CreatedBy, job.Status, job.Image, job.ImageDigest,
 		commandJSON, envJSON, job.CPULimit, job.MemoryLimit, job.TimeoutSecs,
 		outputsJSON, job.Executor, metadataJSON, job.RegistrySecretID,
 	).Scan(&job.CreatedAt, &job.UpdatedAt)
@@ -64,7 +64,7 @@ func (s *Store) CreateJob(ctx context.Context, job *domain.Job) error {
 // GetJob retrieves a job by ID
 func (s *Store) GetJob(ctx context.Context, id uuid.UUID) (*domain.Job, error) {
 	query := `
-		SELECT id, created_at, updated_at, created_by, status, status_message,
+		SELECT id, run_id, name, created_at, updated_at, created_by, status, status_message,
 		       image, image_digest, command, env, cpu_limit, memory_limit, timeout_seconds,
 		       outputs, started_at, finished_at, exit_code, artefact_prefix, log_object_key,
 		       executor, executor_ref, executor_metadata, registry_secret_id, metadata
@@ -75,7 +75,7 @@ func (s *Store) GetJob(ctx context.Context, id uuid.UUID) (*domain.Job, error) {
 	var commandJSON, envJSON, outputsJSON, execMetadataJSON, metadataJSON []byte
 
 	err := s.db.QueryRowContext(ctx, query, id).Scan(
-		&job.ID, &job.CreatedAt, &job.UpdatedAt, &job.CreatedBy,
+		&job.ID, &job.RunID, &job.Name, &job.CreatedAt, &job.UpdatedAt, &job.CreatedBy,
 		&job.Status, &job.StatusMessage, &job.Image, &job.ImageDigest,
 		&commandJSON, &envJSON, &job.CPULimit, &job.MemoryLimit, &job.TimeoutSecs,
 		&outputsJSON, &job.StartedAt, &job.FinishedAt, &job.ExitCode,
@@ -129,20 +129,21 @@ func (s *Store) UpdateJob(ctx context.Context, job *domain.Job) error {
 }
 
 // ListJobs lists jobs with filters
-func (s *Store) ListJobs(ctx context.Context, status *domain.JobStatus, createdBy *string, limit, offset int) ([]*domain.Job, error) {
+func (s *Store) ListJobs(ctx context.Context, runID *uuid.UUID, status *domain.JobStatus, createdBy *string, limit, offset int) ([]*domain.Job, error) {
 	query := `
-		SELECT id, created_at, updated_at, created_by, status, status_message,
+		SELECT id, run_id, name, created_at, updated_at, created_by, status, status_message,
 		       image, image_digest, command, env, cpu_limit, memory_limit, timeout_seconds,
 		       outputs, started_at, finished_at, exit_code, artefact_prefix, log_object_key,
 		       executor, executor_ref, executor_metadata, registry_secret_id, metadata
 		FROM jobs
-		WHERE ($1::job_status IS NULL OR status = $1)
-		  AND ($2::VARCHAR IS NULL OR created_by = $2)
+		WHERE ($1::UUID IS NULL OR run_id = $1)
+		  AND ($2::job_status IS NULL OR status = $2)
+		  AND ($3::VARCHAR IS NULL OR created_by = $3)
 		ORDER BY created_at DESC
-		LIMIT $3 OFFSET $4
+		LIMIT $4 OFFSET $5
 	`
 
-	rows, err := s.db.QueryContext(ctx, query, status, createdBy, limit, offset)
+	rows, err := s.db.QueryContext(ctx, query, runID, status, createdBy, limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -154,7 +155,7 @@ func (s *Store) ListJobs(ctx context.Context, status *domain.JobStatus, createdB
 		var commandJSON, envJSON, outputsJSON, execMetadataJSON, metadataJSON []byte
 
 		err := rows.Scan(
-			&job.ID, &job.CreatedAt, &job.UpdatedAt, &job.CreatedBy,
+			&job.ID, &job.RunID, &job.Name, &job.CreatedAt, &job.UpdatedAt, &job.CreatedBy,
 			&job.Status, &job.StatusMessage, &job.Image, &job.ImageDigest,
 			&commandJSON, &envJSON, &job.CPULimit, &job.MemoryLimit, &job.TimeoutSecs,
 			&outputsJSON, &job.StartedAt, &job.FinishedAt, &job.ExitCode,
@@ -243,7 +244,7 @@ func (s *Store) GetArtefacts(ctx context.Context, jobID uuid.UUID) ([]domain.Art
 // GetRunningJobs retrieves all jobs in RUNNING status (for recovery)
 func (s *Store) GetRunningJobs(ctx context.Context) ([]*domain.Job, error) {
 	status := domain.JobStatusRunning
-	return s.ListJobs(ctx, &status, nil, 1000, 0)
+	return s.ListJobs(ctx, nil, &status, nil, 1000, 0)
 }
 
 // SetConnPoolLimits configures connection pool

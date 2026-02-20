@@ -34,6 +34,8 @@ const (
 // Job represents a container execution job
 type Job struct {
 	ID        uuid.UUID `json:"id"`
+	RunID     uuid.UUID `json:"run_id"`
+	Name      *string   `json:"name,omitempty"` // Optional human-readable name
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 	CreatedBy string    `json:"created_by"`
