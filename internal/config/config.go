@@ -1,0 +1,331 @@
+package config
+
+import (
+	"fmt"
+	"os"
+	"time"
+
+	"gopkg.in/yaml.v3"
+)
+
+// Config represents the complete application configuration
+type Config struct {
+	API      APIConfig      `yaml:"api"`
+	Worker   WorkerConfig   `yaml:"worker"`
+	Database DatabaseConfig `yaml:"database"`
+	Queue    QueueConfig    `yaml:"queue"`
+	Storage  StorageConfig  `yaml:"storage"`
+	Executor ExecutorConfig `yaml:"executor"`
+	Logging  LoggingConfig  `yaml:"logging"`
+	Metrics  MetricsConfig  `yaml:"metrics"`
+}
+
+// APIConfig holds API server configuration
+type APIConfig struct {
+	Port         int           `yaml:"port"`
+	Host         string        `yaml:"host"`
+	ReadTimeout  time.Duration `yaml:"read_timeout"`
+	WriteTimeout time.Duration `yaml:"write_timeout"`
+	Auth         AuthConfig    `yaml:"auth"`
+}
+
+// AuthConfig holds authentication configuration
+type AuthConfig struct {
+	Enabled bool   `yaml:"enabled"`
+	APIKey  string `yaml:"api_key"`
+}
+
+// WorkerConfig holds worker configuration
+type WorkerConfig struct {
+	Concurrency      int           `yaml:"concurrency"`
+	PollInterval     time.Duration `yaml:"poll_interval"`
+	GracefulShutdown time.Duration `yaml:"graceful_shutdown"`
+}
+
+// DatabaseConfig holds database configuration
+type DatabaseConfig struct {
+	URL             string        `yaml:"url"`
+	MaxOpenConns    int           `yaml:"max_open_conns"`
+	MaxIdleConns    int           `yaml:"max_idle_conns"`
+	ConnMaxLifetime time.Duration `yaml:"conn_max_lifetime"`
+}
+
+// QueueConfig holds queue configuration
+type QueueConfig struct {
+	Type      string `yaml:"type"` // redis
+	URL       string `yaml:"url"`
+	QueueName string `yaml:"queue_name"`
+}
+
+// StorageConfig holds object storage configuration
+type StorageConfig struct {
+	Type         string `yaml:"type"` // s3
+	Endpoint     string `yaml:"endpoint"`
+	AccessKey    string `yaml:"access_key"`
+	SecretKey    string `yaml:"secret_key"`
+	Bucket       string `yaml:"bucket"`
+	Region       string `yaml:"region"`
+	UseSSL       bool   `yaml:"use_ssl"`
+	CreateBucket bool   `yaml:"create_bucket"` // Auto-create bucket if missing
+}
+
+// ExecutorConfig holds executor configuration
+type ExecutorConfig struct {
+	Type  string      `yaml:"type"` // swarm, kube
+	Swarm SwarmConfig `yaml:"swarm"`
+	Kube  KubeConfig  `yaml:"kube"`
+}
+
+// SwarmConfig holds Docker Swarm executor configuration
+type SwarmConfig struct {
+	// ⚠️ CRITICAL: NFS mount base path
+	// Must be accessible on all Swarm nodes
+	NFSBasePath string `yaml:"nfs_base_path"`
+
+	DockerHost      string              `yaml:"docker_host"`
+	NetworkDriver   string              `yaml:"network_driver"`
+	NetworkIsolated bool                `yaml:"network_isolated"`
+	Defaults        SwarmDefaultsConfig `yaml:"defaults"`
+	Cleanup         CleanupConfig       `yaml:"cleanup"`
+}
+
+// SwarmDefaultsConfig holds default settings for Swarm jobs
+type SwarmDefaultsConfig struct {
+	Resources     ResourcesConfig `yaml:"resources"`
+	Timeout       time.Duration   `yaml:"timeout"`
+	RestartPolicy string          `yaml:"restart_policy"`
+	Constraints   []string        `yaml:"constraints"`
+}
+
+// ResourcesConfig holds resource limits
+type ResourcesConfig struct {
+	CPU               string `yaml:"cpu"`
+	Memory            string `yaml:"memory"`
+	MemoryReservation string `yaml:"memory_reservation"`
+}
+
+// CleanupConfig holds cleanup policy configuration
+type CleanupConfig struct {
+	RemoveOnComplete   bool `yaml:"remove_on_complete"`
+	KeepFailedServices bool `yaml:"keep_failed_services"`
+	RetentionHours     int  `yaml:"retention_hours"`
+}
+
+// KubeConfig holds Kubernetes executor configuration (future)
+type KubeConfig struct {
+	Kubeconfig string `yaml:"kubeconfig"`
+	Namespace  string `yaml:"namespace"`
+}
+
+// LoggingConfig holds logging configuration
+type LoggingConfig struct {
+	Level  string `yaml:"level"`  // debug, info, warn, error
+	Format string `yaml:"format"` // json, console
+	Output string `yaml:"output"` // stdout, stderr, file path
+}
+
+// MetricsConfig holds metrics configuration
+type MetricsConfig struct {
+	Enabled bool   `yaml:"enabled"`
+	Port    int    `yaml:"port"`
+	Path    string `yaml:"path"`
+}
+
+// Load reads configuration from a YAML file and applies environment overrides
+func Load(path string) (*Config, error) {
+	// Read file
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read config file: %w", err)
+	}
+
+	// Parse YAML
+	var cfg Config
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return nil, fmt.Errorf("failed to parse config: %w", err)
+	}
+
+	// Apply environment variable overrides
+	applyEnvOverrides(&cfg)
+
+	return &cfg, nil
+}
+
+// applyEnvOverrides applies environment variable overrides to config
+func applyEnvOverrides(cfg *Config) {
+	// API
+	if v := os.Getenv("API_PORT"); v != "" {
+		fmt.Sscanf(v, "%d", &cfg.API.Port)
+	}
+	if v := os.Getenv("API_KEY"); v != "" {
+		cfg.API.Auth.APIKey = v
+	}
+	if v := getEnvFromFile("API_KEY_FILE"); v != "" {
+		cfg.API.Auth.APIKey = v
+	}
+
+	// Database
+	if v := os.Getenv("DATABASE_URL"); v != "" {
+		cfg.Database.URL = v
+	}
+	if v := getEnvFromFile("DATABASE_PASSWORD_FILE"); v != "" {
+		// Extract password and rebuild URL
+		cfg.Database.URL = replacePasswordInURL(cfg.Database.URL, v)
+	}
+
+	// Redis
+	if v := os.Getenv("REDIS_URL"); v != "" {
+		cfg.Queue.URL = v
+	}
+
+	// S3
+	if v := os.Getenv("S3_ENDPOINT"); v != "" {
+		cfg.Storage.Endpoint = v
+	}
+	if v := os.Getenv("S3_ACCESS_KEY"); v != "" {
+		cfg.Storage.AccessKey = v
+	}
+	if v := getEnvFromFile("S3_ACCESS_KEY_FILE"); v != "" {
+		cfg.Storage.AccessKey = v
+	}
+	if v := os.Getenv("S3_SECRET_KEY"); v != "" {
+		cfg.Storage.SecretKey = v
+	}
+	if v := getEnvFromFile("S3_SECRET_KEY_FILE"); v != "" {
+		cfg.Storage.SecretKey = v
+	}
+	if v := os.Getenv("S3_BUCKET"); v != "" {
+		cfg.Storage.Bucket = v
+	}
+	if v := os.Getenv("S3_REGION"); v != "" {
+		cfg.Storage.Region = v
+	}
+
+	// Executor
+	if v := os.Getenv("EXECUTOR_TYPE"); v != "" {
+		cfg.Executor.Type = v
+	}
+	if v := os.Getenv("EXECUTOR_NFS_BASE"); v != "" {
+		cfg.Executor.Swarm.NFSBasePath = v
+	}
+	if v := os.Getenv("DOCKER_HOST"); v != "" {
+		cfg.Executor.Swarm.DockerHost = v
+	}
+
+	// Worker
+	if v := os.Getenv("WORKER_CONCURRENCY"); v != "" {
+		fmt.Sscanf(v, "%d", &cfg.Worker.Concurrency)
+	}
+
+	// Logging
+	if v := os.Getenv("LOG_LEVEL"); v != "" {
+		cfg.Logging.Level = v
+	}
+}
+
+// getEnvFromFile reads a secret from a Docker secret file
+func getEnvFromFile(envVar string) string {
+	path := os.Getenv(envVar)
+	if path == "" {
+		return ""
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	return string(data)
+}
+
+// replacePasswordInURL replaces password in a Postgres URL
+func replacePasswordInURL(url, password string) string {
+	// Simple implementation - in production, use proper URL parsing
+	// For now, assuming format: postgres://user:oldpass@host:port/db
+	return url // TODO: Implement proper password replacement
+}
+
+// Validate checks if the configuration is valid
+func (c *Config) Validate() error {
+	// API validation
+	if c.API.Port < 1 || c.API.Port > 65535 {
+		return fmt.Errorf("invalid API port: %d", c.API.Port)
+	}
+	if c.API.Auth.Enabled && c.API.Auth.APIKey == "" {
+		return fmt.Errorf("API auth is enabled but api_key is empty")
+	}
+
+	// Database validation
+	if c.Database.URL == "" {
+		return fmt.Errorf("database URL is required")
+	}
+
+	// Queue validation
+	if c.Queue.URL == "" {
+		return fmt.Errorf("queue URL is required")
+	}
+
+	// Storage validation
+	if c.Storage.Endpoint == "" {
+		return fmt.Errorf("storage endpoint is required")
+	}
+	if c.Storage.Bucket == "" {
+		return fmt.Errorf("storage bucket is required")
+	}
+	if c.Storage.AccessKey == "" || c.Storage.SecretKey == "" {
+		return fmt.Errorf("storage credentials are required")
+	}
+
+	// Executor validation
+	if c.Executor.Type != "swarm" && c.Executor.Type != "kube" && c.Executor.Type != "docker" {
+		return fmt.Errorf("invalid executor type: %s (must be 'swarm' or 'kube' or 'docker')", c.Executor.Type)
+	}
+
+	if c.Executor.Type == "swarm" || c.Executor.Type == "docker" {
+		if c.Executor.Swarm.NFSBasePath == "" {
+			return fmt.Errorf("swarm executor: nfs_base_path is required")
+		}
+		if c.Executor.Swarm.DockerHost == "" {
+			return fmt.Errorf("swarm executor: docker_host is required")
+		}
+	}
+
+	// Worker validation
+	if c.Worker.Concurrency < 1 {
+		return fmt.Errorf("worker concurrency must be at least 1")
+	}
+
+	return nil
+}
+
+// CheckNFSMount verifies that the NFS base path exists and is writable
+func (c *Config) CheckNFSMount() error {
+	if c.Executor.Type != "swarm" {
+		return nil
+	}
+
+	path := c.Executor.Swarm.NFSBasePath
+
+	// Check if directory exists
+	info, err := os.Stat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("NFS base path does not exist: %s\n"+
+				"Please mount your NFS share at this location or update 'executor.swarm.nfs_base_path' in config.yaml", path)
+		}
+		return fmt.Errorf("failed to stat NFS base path: %w", err)
+	}
+
+	if !info.IsDir() {
+		return fmt.Errorf("NFS base path is not a directory: %s", path)
+	}
+
+	// Check if writable (try to create a test file)
+	testFile := path + "/.switchyard-test"
+	f, err := os.Create(testFile)
+	if err != nil {
+		return fmt.Errorf("NFS base path is not writable: %s\nError: %w", path, err)
+	}
+	f.Close()
+	os.Remove(testFile)
+
+	return nil
+}
