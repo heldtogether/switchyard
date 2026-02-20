@@ -1,5 +1,7 @@
 # Switchyard - Docker Job Runner Platform
 
+[![Build and Push Docker Images](https://github.com/heldtogether/switchyard/actions/workflows/docker-build.yml/badge.svg)](https://github.com/heldtogether/switchyard/actions/workflows/docker-build.yml)
+
 A production-ready job execution platform for running containerized workloads on Docker Swarm (with Kubernetes support planned).
 
 ## 🎯 Overview
