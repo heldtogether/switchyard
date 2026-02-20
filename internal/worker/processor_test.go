@@ -79,6 +79,30 @@ func (m *MockStore) SaveArtefacts(ctx context.Context, jobID uuid.UUID, artefact
 	return args.Error(0)
 }
 
+func (m *MockStore) GetRun(ctx context.Context, id uuid.UUID) (*domain.Run, error) {
+	args := m.Called(ctx, id)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.Run), args.Error(1)
+}
+
+func (m *MockStore) GetProject(ctx context.Context, id uuid.UUID) (*domain.Project, error) {
+	args := m.Called(ctx, id)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.Project), args.Error(1)
+}
+
+func (m *MockStore) GetWorkspace(ctx context.Context, id uuid.UUID) (*domain.Workspace, error) {
+	args := m.Called(ctx, id)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.Workspace), args.Error(1)
+}
+
 // Mock Storage
 type MockStorage struct {
 	mock.Mock
@@ -110,10 +134,38 @@ func (m *MockStorage) List(ctx context.Context, prefix string) ([]ObjectInfo, er
 	return args.Get(0).([]ObjectInfo), args.Error(1)
 }
 
+// createTestHierarchy creates test workspace, project, and run objects
+func createTestHierarchy() (*domain.Workspace, *domain.Project, *domain.Run) {
+	workspace := &domain.Workspace{
+		ID:   uuid.New(),
+		Slug: "test-workspace",
+		Name: "Test Workspace",
+	}
+
+	project := &domain.Project{
+		ID:          uuid.New(),
+		WorkspaceID: workspace.ID,
+		Slug:        "test-project",
+		Name:        "Test Project",
+		CreatedBy:   "test-user",
+	}
+
+	run := &domain.Run{
+		ID:        uuid.New(),
+		ProjectID: project.ID,
+		Slug:      "test-run",
+		Status:    domain.RunStatusPending,
+		CreatedBy: "test-user",
+	}
+
+	return workspace, project, run
+}
+
 // createTestJob creates a test job with default values
-func createTestJob() *domain.Job {
+func createTestJob(runID uuid.UUID) *domain.Job {
 	return &domain.Job{
 		ID:          uuid.New(),
+		RunID:       runID,
 		CreatedBy:   "test-user",
 		Status:      domain.JobStatusPending,
 		Image:       "alpine:latest",
@@ -128,7 +180,8 @@ func createTestJob() *domain.Job {
 
 func TestProcessor_Process_Success(t *testing.T) {
 	ctx := context.Background()
-	job := createTestJob()
+	workspace, project, run := createTestHierarchy()
+	job := createTestJob(run.ID)
 
 	mockStore := new(MockStore)
 	mockExecutor := new(MockExecutor)
@@ -139,6 +192,9 @@ func TestProcessor_Process_Success(t *testing.T) {
 
 	// Setup expectations
 	mockStore.On("GetJob", ctx, job.ID).Return(job, nil)
+	mockStore.On("GetRun", ctx, run.ID).Return(run, nil)
+	mockStore.On("GetProject", ctx, project.ID).Return(project, nil)
+	mockStore.On("GetWorkspace", ctx, workspace.ID).Return(workspace, nil)
 	mockStore.On("UpdateJob", ctx, mock.MatchedBy(func(j *domain.Job) bool {
 		return j.Status == domain.JobStatusRunning
 	})).Return(nil)
@@ -184,7 +240,8 @@ func TestProcessor_Process_Success(t *testing.T) {
 
 func TestProcessor_Process_FailedExitCode(t *testing.T) {
 	ctx := context.Background()
-	job := createTestJob()
+	workspace, project, run := createTestHierarchy()
+	job := createTestJob(run.ID)
 
 	mockStore := new(MockStore)
 	mockExecutor := new(MockExecutor)
@@ -195,6 +252,9 @@ func TestProcessor_Process_FailedExitCode(t *testing.T) {
 
 	// Setup expectations
 	mockStore.On("GetJob", ctx, job.ID).Return(job, nil)
+	mockStore.On("GetRun", ctx, run.ID).Return(run, nil)
+	mockStore.On("GetProject", ctx, project.ID).Return(project, nil)
+	mockStore.On("GetWorkspace", ctx, workspace.ID).Return(workspace, nil)
 	mockStore.On("UpdateJob", ctx, mock.MatchedBy(func(j *domain.Job) bool {
 		return j.Status == domain.JobStatusRunning
 	})).Return(nil)
@@ -233,7 +293,8 @@ func TestProcessor_Process_FailedExitCode(t *testing.T) {
 
 func TestProcessor_Process_Timeout(t *testing.T) {
 	ctx := context.Background()
-	job := createTestJob()
+	workspace, project, run := createTestHierarchy()
+	job := createTestJob(run.ID)
 	job.TimeoutSecs = 1 // 1 second timeout
 
 	mockStore := new(MockStore)
@@ -245,6 +306,9 @@ func TestProcessor_Process_Timeout(t *testing.T) {
 
 	// Setup expectations
 	mockStore.On("GetJob", ctx, job.ID).Return(job, nil)
+	mockStore.On("GetRun", ctx, run.ID).Return(run, nil)
+	mockStore.On("GetProject", ctx, project.ID).Return(project, nil)
+	mockStore.On("GetWorkspace", ctx, workspace.ID).Return(workspace, nil)
 	mockStore.On("UpdateJob", ctx, mock.MatchedBy(func(j *domain.Job) bool {
 		return j.Status == domain.JobStatusRunning
 	})).Return(nil)
@@ -277,7 +341,8 @@ func TestProcessor_Process_Timeout(t *testing.T) {
 
 func TestProcessor_Process_ExecutorCreateFailure(t *testing.T) {
 	ctx := context.Background()
-	job := createTestJob()
+	workspace, project, run := createTestHierarchy()
+	job := createTestJob(run.ID)
 
 	mockStore := new(MockStore)
 	mockExecutor := new(MockExecutor)
@@ -288,6 +353,9 @@ func TestProcessor_Process_ExecutorCreateFailure(t *testing.T) {
 
 	// Setup expectations
 	mockStore.On("GetJob", ctx, job.ID).Return(job, nil)
+	mockStore.On("GetRun", ctx, run.ID).Return(run, nil)
+	mockStore.On("GetProject", ctx, project.ID).Return(project, nil)
+	mockStore.On("GetWorkspace", ctx, workspace.ID).Return(workspace, nil)
 	mockStore.On("UpdateJob", ctx, mock.MatchedBy(func(j *domain.Job) bool {
 		return j.Status == domain.JobStatusRunning
 	})).Return(nil)
@@ -336,7 +404,8 @@ func TestProcessor_Process_GetJobFailure(t *testing.T) {
 
 func TestProcessor_Process_LogUploadFailure_NonFatal(t *testing.T) {
 	ctx := context.Background()
-	job := createTestJob()
+	workspace, project, run := createTestHierarchy()
+	job := createTestJob(run.ID)
 
 	mockStore := new(MockStore)
 	mockExecutor := new(MockExecutor)
@@ -347,6 +416,9 @@ func TestProcessor_Process_LogUploadFailure_NonFatal(t *testing.T) {
 
 	// Setup expectations
 	mockStore.On("GetJob", ctx, job.ID).Return(job, nil)
+	mockStore.On("GetRun", ctx, run.ID).Return(run, nil)
+	mockStore.On("GetProject", ctx, project.ID).Return(project, nil)
+	mockStore.On("GetWorkspace", ctx, workspace.ID).Return(workspace, nil)
 	mockStore.On("UpdateJob", ctx, mock.MatchedBy(func(j *domain.Job) bool {
 		return j.Status == domain.JobStatusRunning
 	})).Return(nil)
@@ -388,7 +460,8 @@ func TestProcessor_Process_LogUploadFailure_NonFatal(t *testing.T) {
 
 func TestProcessor_Process_ArtefactCollectionFailure_NonFatal(t *testing.T) {
 	ctx := context.Background()
-	job := createTestJob()
+	workspace, project, run := createTestHierarchy()
+	job := createTestJob(run.ID)
 
 	mockStore := new(MockStore)
 	mockExecutor := new(MockExecutor)
@@ -399,6 +472,9 @@ func TestProcessor_Process_ArtefactCollectionFailure_NonFatal(t *testing.T) {
 
 	// Setup expectations
 	mockStore.On("GetJob", ctx, job.ID).Return(job, nil)
+	mockStore.On("GetRun", ctx, run.ID).Return(run, nil)
+	mockStore.On("GetProject", ctx, project.ID).Return(project, nil)
+	mockStore.On("GetWorkspace", ctx, workspace.ID).Return(workspace, nil)
 	mockStore.On("UpdateJob", ctx, mock.MatchedBy(func(j *domain.Job) bool {
 		return j.Status == domain.JobStatusRunning
 	})).Return(nil)
@@ -436,7 +512,8 @@ func TestProcessor_Process_ArtefactCollectionFailure_NonFatal(t *testing.T) {
 
 func TestProcessor_Process_NoArtefactsOnFailedJob(t *testing.T) {
 	ctx := context.Background()
-	job := createTestJob()
+	workspace, project, run := createTestHierarchy()
+	job := createTestJob(run.ID)
 
 	mockStore := new(MockStore)
 	mockExecutor := new(MockExecutor)
@@ -447,6 +524,9 @@ func TestProcessor_Process_NoArtefactsOnFailedJob(t *testing.T) {
 
 	// Setup expectations
 	mockStore.On("GetJob", ctx, job.ID).Return(job, nil)
+	mockStore.On("GetRun", ctx, run.ID).Return(run, nil)
+	mockStore.On("GetProject", ctx, project.ID).Return(project, nil)
+	mockStore.On("GetWorkspace", ctx, workspace.ID).Return(workspace, nil)
 	mockStore.On("UpdateJob", ctx, mock.MatchedBy(func(j *domain.Job) bool {
 		return j.Status == domain.JobStatusRunning
 	})).Return(nil)

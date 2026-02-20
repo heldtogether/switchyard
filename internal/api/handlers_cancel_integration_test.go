@@ -41,6 +41,51 @@ func setupTestPostgres(t *testing.T) (*postgres.Store, func()) {
 	return store, cleanup
 }
 
+// setupTestRouter creates a test HTTP router with the cancel endpoint registered
+func setupTestRouter(api *API) *http.ServeMux {
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /v1/workspaces/{workspace_slug}/projects/{project_slug}/runs/{run_slug}/jobs/{job_id}/cancel", api.HandleCancelJob)
+	return mux
+}
+
+// setupTestHierarchy creates a test workspace, project, and run for testing jobs
+func setupTestHierarchy(t *testing.T, store *postgres.Store, ctx context.Context) (workspace *domain.Workspace, project *domain.Project, run *domain.Run) {
+	t.Helper()
+
+	// Create workspace
+	workspace = &domain.Workspace{
+		ID:   uuid.New(),
+		Slug: "test-workspace",
+		Name: "Test Workspace",
+	}
+	err := store.CreateWorkspace(ctx, workspace)
+	require.NoError(t, err)
+
+	// Create project
+	project = &domain.Project{
+		ID:          uuid.New(),
+		WorkspaceID: workspace.ID,
+		Slug:        "test-project",
+		Name:        "Test Project",
+		CreatedBy:   "test-user",
+	}
+	err = store.CreateProject(ctx, project)
+	require.NoError(t, err)
+
+	// Create run
+	run = &domain.Run{
+		ID:        uuid.New(),
+		ProjectID: project.ID,
+		Slug:      "test-run",
+		Status:    domain.RunStatusPending,
+		CreatedBy: "test-user",
+	}
+	err = store.CreateRun(ctx, run)
+	require.NoError(t, err)
+
+	return workspace, project, run
+}
+
 // TestHandleCancelJob_Integration_PendingJob tests cancelling a job that hasn't started
 func TestHandleCancelJob_Integration_PendingJob(t *testing.T) {
 	if testing.Short() {
@@ -49,6 +94,9 @@ func TestHandleCancelJob_Integration_PendingJob(t *testing.T) {
 
 	store, cleanup := setupTestPostgres(t)
 	defer cleanup()
+
+	ctx := context.Background()
+	_, _, run := setupTestHierarchy(t, store, ctx)
 
 	mockExecutor := new(MockExecutor)
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
@@ -61,9 +109,13 @@ func TestHandleCancelJob_Integration_PendingJob(t *testing.T) {
 		baseURL:  "http://test.local",
 	}
 
+	// Create a test server with router to properly handle path parameters
+	mux := setupTestRouter(api)
+
 	// Create a pending job in the database
 	job := &domain.Job{
 		ID:          uuid.New(),
+		RunID:       run.ID,
 		CreatedAt:   time.Now(),
 		UpdatedAt:   time.Now(),
 		CreatedBy:   "test-user",
@@ -75,20 +127,29 @@ func TestHandleCancelJob_Integration_PendingJob(t *testing.T) {
 		Executor:    domain.ExecutorTypeSwarm,
 	}
 
-	err := store.CreateJob(context.Background(), job)
+	err := store.CreateJob(ctx, job)
 	require.NoError(t, err)
 
-	// Call the cancel endpoint
-	req := httptest.NewRequest(http.MethodPost, "/v1/jobs/"+job.ID.String()+"/cancel", nil)
+	// Call the cancel endpoint with hierarchical URL
+	url := fmt.Sprintf("/v1/workspaces/%s/projects/%s/runs/%s/jobs/%s/cancel",
+		"test-workspace", "test-project", "test-run", job.ID.String())
+	req := httptest.NewRequest(http.MethodPost, url, nil)
 	w := httptest.NewRecorder()
 
-	api.HandleCancelJob(w, req)
+	mux.ServeHTTP(w, req)
 
 	// Verify response
+	t.Logf("Response code: %d", w.Code)
+	t.Logf("Response body: %s", w.Body.String())
+	if w.Code != http.StatusOK {
+		t.Logf("Unexpected status code: %d", w.Code)
+	}
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	var resp JobResponse
-	err = json.NewDecoder(w.Body).Decode(&resp)
+	bodyBytes := w.Body.Bytes()
+	err = json.Unmarshal(bodyBytes, &resp)
+	t.Logf("Response decoded: %+v", resp)
 	assert.NoError(t, err)
 	assert.Equal(t, job.ID, resp.ID)
 	assert.Equal(t, "CANCELLED", resp.Status)
@@ -117,6 +178,9 @@ func TestHandleCancelJob_Integration_RunningJob(t *testing.T) {
 	store, cleanup := setupTestPostgres(t)
 	defer cleanup()
 
+	ctx := context.Background()
+	_, _, run := setupTestHierarchy(t, store, ctx)
+
 	mockExecutor := new(MockExecutor)
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
 
@@ -128,12 +192,16 @@ func TestHandleCancelJob_Integration_RunningJob(t *testing.T) {
 		baseURL:  "http://test.local",
 	}
 
+	// Create a test server with router to properly handle path parameters
+	mux := setupTestRouter(api)
+
 	// Create a job, then update it to RUNNING status
 	// (mimicking the real workflow where worker updates job when starting execution)
 	executorRef := "swarm-service-123"
 	startedAt := time.Now().Add(-5 * time.Minute)
 	job := &domain.Job{
 		ID:          uuid.New(),
+		RunID:       run.ID,
 		CreatedBy:   "test-user",
 		Status:      domain.JobStatusPending,
 		Image:       "alpine:latest",
@@ -143,7 +211,7 @@ func TestHandleCancelJob_Integration_RunningJob(t *testing.T) {
 		Executor:    domain.ExecutorTypeSwarm,
 	}
 
-	err := store.CreateJob(context.Background(), job)
+	err := store.CreateJob(ctx, job)
 	require.NoError(t, err)
 
 	// Update to RUNNING status with executor ref
@@ -151,7 +219,7 @@ func TestHandleCancelJob_Integration_RunningJob(t *testing.T) {
 	job.Status = domain.JobStatusRunning
 	job.ExecutorRef = &executorRef
 	job.StartedAt = &startedAt
-	err = store.UpdateJob(context.Background(), job)
+	err = store.UpdateJob(ctx, job)
 	require.NoError(t, err)
 
 	// Verify the job was updated correctly with executor ref
@@ -167,11 +235,13 @@ func TestHandleCancelJob_Integration_RunningJob(t *testing.T) {
 			ref.Reference == executorRef
 	})).Return(nil)
 
-	// Call the cancel endpoint
-	req := httptest.NewRequest(http.MethodPost, "/v1/jobs/"+job.ID.String()+"/cancel", nil)
+	// Call the cancel endpoint with hierarchical URL
+	url := fmt.Sprintf("/v1/workspaces/%s/projects/%s/runs/%s/jobs/%s/cancel",
+		"test-workspace", "test-project", "test-run", job.ID.String())
+	req := httptest.NewRequest(http.MethodPost, url, nil)
 	w := httptest.NewRecorder()
 
-	api.HandleCancelJob(w, req)
+	mux.ServeHTTP(w, req)
 
 	// Verify response
 	if w.Code != http.StatusOK {
@@ -223,6 +293,9 @@ func TestHandleCancelJob_Integration_TerminalStates(t *testing.T) {
 			store, cleanup := setupTestPostgres(t)
 			defer cleanup()
 
+			ctx := context.Background()
+			_, _, run := setupTestHierarchy(t, store, ctx)
+
 			mockExecutor := new(MockExecutor)
 			logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
 
@@ -234,10 +307,14 @@ func TestHandleCancelJob_Integration_TerminalStates(t *testing.T) {
 				baseURL:  "http://test.local",
 			}
 
+			// Create a test server with router to properly handle path parameters
+			mux := setupTestRouter(api)
+
 			// Create a job in terminal state
 			finishedAt := time.Now().Add(-1 * time.Minute)
 			job := &domain.Job{
 				ID:          uuid.New(),
+				RunID:       run.ID,
 				CreatedAt:   time.Now().Add(-10 * time.Minute),
 				UpdatedAt:   time.Now().Add(-1 * time.Minute),
 				CreatedBy:   "test-user",
@@ -250,14 +327,16 @@ func TestHandleCancelJob_Integration_TerminalStates(t *testing.T) {
 				FinishedAt:  &finishedAt,
 			}
 
-			err := store.CreateJob(context.Background(), job)
+			err := store.CreateJob(ctx, job)
 			require.NoError(t, err)
 
-			// Call the cancel endpoint
-			req := httptest.NewRequest(http.MethodPost, "/v1/jobs/"+job.ID.String()+"/cancel", nil)
+			// Call the cancel endpoint with hierarchical URL
+			url := fmt.Sprintf("/v1/workspaces/%s/projects/%s/runs/%s/jobs/%s/cancel",
+				"test-workspace", "test-project", "test-run", job.ID.String())
+			req := httptest.NewRequest(http.MethodPost, url, nil)
 			w := httptest.NewRecorder()
 
-			api.HandleCancelJob(w, req)
+			mux.ServeHTTP(w, req)
 
 			// Verify response
 			assert.Equal(t, http.StatusConflict, w.Code)
@@ -301,13 +380,19 @@ func TestHandleCancelJob_Integration_JobNotFound(t *testing.T) {
 		baseURL:  "http://test.local",
 	}
 
+	// Create a test server with router to properly handle path parameters
+	mux := setupTestRouter(api)
+
 	// Use a non-existent job ID
 	jobID := uuid.New()
 
-	req := httptest.NewRequest(http.MethodPost, "/v1/jobs/"+jobID.String()+"/cancel", nil)
+	// Call the cancel endpoint with hierarchical URL
+	url := fmt.Sprintf("/v1/workspaces/%s/projects/%s/runs/%s/jobs/%s/cancel",
+		"test-workspace", "test-project", "test-run", jobID.String())
+	req := httptest.NewRequest(http.MethodPost, url, nil)
 	w := httptest.NewRecorder()
 
-	api.HandleCancelJob(w, req)
+	mux.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusNotFound, w.Code)
 
@@ -345,6 +430,9 @@ func TestHandleCancelJob_Integration_RunningJobNoExecutorRef(t *testing.T) {
 			store, cleanup := setupTestPostgres(t)
 			defer cleanup()
 
+			ctx := context.Background()
+			_, _, run := setupTestHierarchy(t, store, ctx)
+
 			mockExecutor := new(MockExecutor)
 			logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
 
@@ -356,10 +444,14 @@ func TestHandleCancelJob_Integration_RunningJobNoExecutorRef(t *testing.T) {
 				baseURL:  "http://test.local",
 			}
 
+			// Create a test server with router to properly handle path parameters
+			mux := setupTestRouter(api)
+
 			// Create a running job WITHOUT executor ref (orphaned state)
 			startedAt := time.Now().Add(-5 * time.Minute)
 			job := &domain.Job{
 				ID:          uuid.New(),
+				RunID:       run.ID,
 				CreatedAt:   time.Now().Add(-10 * time.Minute),
 				UpdatedAt:   time.Now().Add(-5 * time.Minute),
 				CreatedBy:   "test-user",
@@ -373,14 +465,16 @@ func TestHandleCancelJob_Integration_RunningJobNoExecutorRef(t *testing.T) {
 				StartedAt:   &startedAt,
 			}
 
-			err := store.CreateJob(context.Background(), job)
+			err := store.CreateJob(ctx, job)
 			require.NoError(t, err)
 
-			// Call the cancel endpoint
-			req := httptest.NewRequest(http.MethodPost, "/v1/jobs/"+job.ID.String()+"/cancel", nil)
+			// Call the cancel endpoint with hierarchical URL
+			url := fmt.Sprintf("/v1/workspaces/%s/projects/%s/runs/%s/jobs/%s/cancel",
+				"test-workspace", "test-project", "test-run", job.ID.String())
+			req := httptest.NewRequest(http.MethodPost, url, nil)
 			w := httptest.NewRecorder()
 
-			api.HandleCancelJob(w, req)
+			mux.ServeHTTP(w, req)
 
 			// Verify response
 			assert.Equal(t, http.StatusInternalServerError, w.Code)
@@ -411,6 +505,9 @@ func TestHandleCancelJob_Integration_ExecutorCancelFails(t *testing.T) {
 	store, cleanup := setupTestPostgres(t)
 	defer cleanup()
 
+	ctx := context.Background()
+	_, _, run := setupTestHierarchy(t, store, ctx)
+
 	mockExecutor := new(MockExecutor)
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
 
@@ -422,11 +519,15 @@ func TestHandleCancelJob_Integration_ExecutorCancelFails(t *testing.T) {
 		baseURL:  "http://test.local",
 	}
 
+	// Create a test server with router to properly handle path parameters
+	mux := setupTestRouter(api)
+
 	// Create a job, then update it to RUNNING status
 	executorRef := "swarm-service-123"
 	startedAt := time.Now().Add(-5 * time.Minute)
 	job := &domain.Job{
 		ID:          uuid.New(),
+		RunID:       run.ID,
 		CreatedBy:   "test-user",
 		Status:      domain.JobStatusPending,
 		Image:       "alpine:latest",
@@ -436,14 +537,14 @@ func TestHandleCancelJob_Integration_ExecutorCancelFails(t *testing.T) {
 		Executor:    domain.ExecutorTypeSwarm,
 	}
 
-	err := store.CreateJob(context.Background(), job)
+	err := store.CreateJob(ctx, job)
 	require.NoError(t, err)
 
 	// Update to RUNNING status with executor ref
 	job.Status = domain.JobStatusRunning
 	job.ExecutorRef = &executorRef
 	job.StartedAt = &startedAt
-	err = store.UpdateJob(context.Background(), job)
+	err = store.UpdateJob(ctx, job)
 	require.NoError(t, err)
 
 	// Mock executor Cancel to fail
@@ -453,11 +554,13 @@ func TestHandleCancelJob_Integration_ExecutorCancelFails(t *testing.T) {
 			ref.Reference == executorRef
 	})).Return(fmt.Errorf("executor service unavailable"))
 
-	// Call the cancel endpoint
-	req := httptest.NewRequest(http.MethodPost, "/v1/jobs/"+job.ID.String()+"/cancel", nil)
+	// Call the cancel endpoint with hierarchical URL
+	url := fmt.Sprintf("/v1/workspaces/%s/projects/%s/runs/%s/jobs/%s/cancel",
+		"test-workspace", "test-project", "test-run", job.ID.String())
+	req := httptest.NewRequest(http.MethodPost, url, nil)
 	w := httptest.NewRecorder()
 
-	api.HandleCancelJob(w, req)
+	mux.ServeHTTP(w, req)
 
 	// Verify response
 	assert.Equal(t, http.StatusInternalServerError, w.Code)

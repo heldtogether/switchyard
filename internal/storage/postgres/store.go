@@ -102,6 +102,13 @@ func (s *Store) GetJob(ctx context.Context, id uuid.UUID) (*domain.Job, error) {
 
 // UpdateJobStatus updates a job's status and related fields
 func (s *Store) UpdateJobStatus(ctx context.Context, id uuid.UUID, status domain.JobStatus, message *string) error {
+	// Set finished_at when transitioning to a terminal state
+	if status.IsTerminal() {
+		query := `UPDATE jobs SET status = $1, status_message = $2, finished_at = NOW() WHERE id = $3`
+		_, err := s.db.ExecContext(ctx, query, status, message, id)
+		return err
+	}
+
 	query := `UPDATE jobs SET status = $1, status_message = $2 WHERE id = $3`
 	_, err := s.db.ExecContext(ctx, query, status, message, id)
 	return err

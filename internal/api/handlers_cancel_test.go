@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -258,6 +259,10 @@ func TestHandleCancelJob_InvalidJobID(t *testing.T) {
 		baseURL:  "http://test.local",
 	}
 
+	// Create a test server with router to properly handle path parameters
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /v1/workspaces/{workspace_slug}/projects/{project_slug}/runs/{run_slug}/jobs/{job_id}/cancel", api.HandleCancelJob)
+
 	tests := []struct {
 		name  string
 		jobID string
@@ -267,10 +272,6 @@ func TestHandleCancelJob_InvalidJobID(t *testing.T) {
 			jobID: "not-a-uuid",
 		},
 		{
-			name:  "empty string",
-			jobID: "",
-		},
-		{
 			name:  "malformed UUID",
 			jobID: "123e4567-e89b-12d3-a456",
 		},
@@ -278,17 +279,19 @@ func TestHandleCancelJob_InvalidJobID(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodPost, "/v1/jobs/"+tt.jobID+"/cancel", nil)
+			url := fmt.Sprintf("/v1/workspaces/%s/projects/%s/runs/%s/jobs/%s/cancel",
+				"test-workspace", "test-project", "test-run", tt.jobID)
+			req := httptest.NewRequest(http.MethodPost, url, nil)
 			w := httptest.NewRecorder()
 
-			api.HandleCancelJob(w, req)
+			mux.ServeHTTP(w, req)
 
 			assert.Equal(t, http.StatusBadRequest, w.Code)
 
 			var errResp ErrorResponse
 			err := json.NewDecoder(w.Body).Decode(&errResp)
 			assert.NoError(t, err)
-			assert.Equal(t, "invalid_id", errResp.Error)
+			assert.Equal(t, "invalid_request", errResp.Error)
 			assert.Equal(t, "Invalid job ID", errResp.Message)
 			assert.Equal(t, http.StatusBadRequest, errResp.Code)
 		})
