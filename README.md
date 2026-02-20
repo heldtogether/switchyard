@@ -12,12 +12,13 @@ Switchyard is an internal platform that:
 - Provides job status tracking and artefact download
 
 **Key Features:**
-- ✅ Clean executor abstraction (Swarm implemented, Kubernetes stub ready)
+- ✅ Clean executor abstraction (Docker and Swarm implemented, Kubernetes ready)
+- ✅ Automatic system environment variable injection (job context, metadata)
 - ✅ Resource limits (CPU, memory) and timeout enforcement
-- ✅ Network isolation (jobs run in isolated overlay networks)
-- ✅ NFS-based artefact collection
+- ✅ Network isolation (jobs run in isolated networks)
+- ✅ NFS-based artefact collection with S3 upload
 - ✅ Redis job queue for reliable job dispatch
-- ✅ Postgres for job metadata
+- ✅ Postgres for job metadata and history
 - ✅ S3-compatible storage for logs and artefacts
 - ✅ API key authentication (extensible to SSO/OIDC)
 - ✅ Private registry support
@@ -144,7 +145,7 @@ curl -X POST http://localhost:8080/v1/jobs \
     "image": "ghcr.io/heldtogether/switchyard-example-job:latest",
     "command": ["/app/entrypoint.sh"],
     "env": {
-      "JOB_ID": "test-001"
+      "CUSTOM_VAR": "my-value"
     },
     "outputs": ["/outputs"],
     "resources": {
@@ -184,6 +185,45 @@ curl -H "X-API-Key: your-secret-api-key" \
   http://localhost:8080/v1/jobs/$JOB_ID/artefacts/result.txt
 ```
 
+## 🔐 Environment Variables
+
+### System-Managed Variables
+
+Switchyard automatically injects environment variables into every job container to provide context and metadata:
+
+```bash
+# Your job containers automatically have access to:
+SWITCHYARD_JOB_ID=550e8400-e29b-41d4-a716-446655440000
+SWITCHYARD_JOB_CREATED_AT=2026-02-20T14:30:00Z
+SWITCHYARD_JOB_TIMEOUT=3600
+SWITCHYARD_EXECUTOR_TYPE=swarm
+SWITCHYARD_IMAGE=myapp:v1.0
+SWITCHYARD_OUTPUTS_DIR=/outputs
+SWITCHYARD_BUCKET=jobrunner
+SWITCHYARD_VERSION=v1.0.0
+SWITCHYARD_API_URL=http://localhost:8080
+# ... plus any custom variables you provide
+```
+
+**Important:** 
+- The `SWITCHYARD_*` prefix is reserved for system use
+- Attempting to set `SWITCHYARD_*` variables in your job submission will result in a 400 validation error
+- System variables are injected at runtime and are NOT stored in the database
+- The API returns only your custom environment variables, not system ones
+
+**Example:**
+```json
+{
+  "env": {
+    "MY_VAR": "value",         // ✅ OK
+    "DATABASE_URL": "...",     // ✅ OK
+    "SWITCHYARD_FOO": "bar"    // ❌ Error: reserved prefix
+  }
+}
+```
+
+See [ARCHITECTURE.md](ARCHITECTURE.md#environment-variable-handling) for the complete list of system variables and their purposes.
+
 ## 📁 Repository Structure
 
 ```
@@ -196,7 +236,10 @@ switchyard/
 │   ├── api/        # HTTP handlers & routes
 │   ├── domain/     # Domain models (Job, Artefact, etc.)
 │   ├── config/     # Configuration loading
-│   ├── executor/   # Execution backends (Swarm, Kube stub)
+│   ├── executor/   # Execution backends (Docker, Swarm, shared utilities)
+│   │   ├── common.go      # Shared BaseExecutor and utilities
+│   │   ├── docker/        # Docker executor
+│   │   └── swarm/         # Swarm executor
 │   ├── storage/    # Postgres, Redis, S3 clients
 │   └── worker/     # Job processing logic
 ├── migrations/     # Database migrations
@@ -305,7 +348,10 @@ Submit a new job.
 {
   "image": "alpine:latest",
   "command": ["sh", "-c", "echo 'Hello' > /outputs/result.txt"],
-  "env": {"KEY": "value"},
+  "env": {
+    "MY_VAR": "value",
+    "DATABASE_URL": "postgres://..."
+  },
   "outputs": ["/outputs"],
   "resources": {
     "cpu": "1.0",
@@ -318,6 +364,8 @@ Submit a new job.
   }
 }
 ```
+
+**Note:** Environment variables with the `SWITCHYARD_` prefix are reserved and will be rejected. System variables are automatically injected at runtime.
 
 **Response:**
 ```json
