@@ -10,23 +10,21 @@ import (
 	"github.com/google/uuid"
 	"github.com/heldtogether/switchyard/internal/domain"
 	"github.com/heldtogether/switchyard/internal/executor"
-	"github.com/heldtogether/switchyard/internal/storage/objectstore"
-	"github.com/heldtogether/switchyard/internal/storage/postgres"
 	"github.com/heldtogether/switchyard/internal/version"
 )
 
 // Processor handles individual job execution
 type Processor struct {
-	store      *postgres.Store
+	store      JobStore
 	executor   executor.Executor
-	storage    *objectstore.S3Store
+	storage    ObjectStorage
 	logger     *slog.Logger
 	apiBaseURL string
 	bucket     string
 }
 
 // NewProcessor creates a new job processor
-func NewProcessor(store *postgres.Store, exec executor.Executor, storage *objectstore.S3Store, logger *slog.Logger, apiBaseURL string, bucket string) *Processor {
+func NewProcessor(store JobStore, exec executor.Executor, storage ObjectStorage, logger *slog.Logger, apiBaseURL string, bucket string) *Processor {
 	return &Processor{
 		store:      store,
 		executor:   exec,

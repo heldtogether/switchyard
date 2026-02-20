@@ -18,7 +18,7 @@ build: ## Build all binaries
 	go build -o $(BINARY_MIGRATE) ./cmd/migrate
 
 test: ## Run tests
-	go test -v -race -coverprofile=coverage.out ./...
+	go test -race -coverprofile=coverage.out ./...
 
 clean: ## Clean build artifacts
 	rm -rf bin/

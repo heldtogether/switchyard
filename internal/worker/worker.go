@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"sync"
 	"time"
@@ -127,8 +128,45 @@ func (w *Worker) processJob(ctx context.Context, jobIDStr string) error {
 		return fmt.Errorf("invalid job ID: %w", err)
 	}
 
-	processor := NewProcessor(w.store, w.executor, w.storage, w.logger, w.cfg.API.BaseURL, w.cfg.Storage.Bucket)
+	// Wrap S3Store to match ObjectStorage interface
+	storageAdapter := &s3StorageAdapter{store: w.storage}
+	processor := NewProcessor(w.store, w.executor, storageAdapter, w.logger, w.cfg.API.BaseURL, w.cfg.Storage.Bucket)
 	return processor.Process(ctx, jobID)
+}
+
+// s3StorageAdapter adapts *objectstore.S3Store to ObjectStorage interface
+type s3StorageAdapter struct {
+	store *objectstore.S3Store
+}
+
+func (a *s3StorageAdapter) Upload(ctx context.Context, key string, r io.Reader, contentType string) error {
+	return a.store.Upload(ctx, key, r, contentType)
+}
+
+func (a *s3StorageAdapter) Download(ctx context.Context, key string) (io.ReadCloser, error) {
+	return a.store.Download(ctx, key)
+}
+
+func (a *s3StorageAdapter) PresignedURL(ctx context.Context, key string, expiry time.Duration) (string, error) {
+	return a.store.PresignedURL(ctx, key, expiry)
+}
+
+func (a *s3StorageAdapter) List(ctx context.Context, prefix string) ([]ObjectInfo, error) {
+	objects, err := a.store.List(ctx, prefix)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]ObjectInfo, len(objects))
+	for i, obj := range objects {
+		result[i] = ObjectInfo{
+			Key:          obj.Key,
+			SizeBytes:    obj.SizeBytes,
+			ContentType:  obj.ContentType,
+			LastModified: obj.LastModified,
+		}
+	}
+	return result, nil
 }
 
 // recoverOrphanedJobs checks for jobs stuck in RUNNING state on startup

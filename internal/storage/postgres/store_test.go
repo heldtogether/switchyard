@@ -7,90 +7,25 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/heldtogether/switchyard/internal/domain"
+	"github.com/heldtogether/switchyard/internal/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
 )
 
-// setupTestDB creates a Postgres container and runs migrations
+// setupTestDB creates a Postgres container with migrations and returns a store
 func setupTestDB(t *testing.T) (*Store, func()) {
-	ctx := context.Background()
+	t.Helper()
 
-	postgresContainer, err := postgres.Run(ctx,
-		"postgres:16-alpine",
-		postgres.WithDatabase("testdb"),
-		postgres.WithUsername("testuser"),
-		postgres.WithPassword("testpass"),
-		testcontainers.WithWaitStrategy(
-			wait.ForLog("database system is ready to accept connections").
-				WithOccurrence(2).
-				WithStartupTimeout(60*time.Second)),
-	)
-	require.NoError(t, err)
+	// Setup Postgres container with migrations
+	pgContainer := testutil.SetupTestPostgres(t)
 
-	connStr, err := postgresContainer.ConnectionString(ctx, "sslmode=disable")
-	require.NoError(t, err)
-
-	store, err := New(connStr)
-	require.NoError(t, err)
-
-	// Run migrations by executing the schema
-	_, err = store.db.Exec(`
-		CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-		
-		CREATE TYPE job_status AS ENUM (
-			'PENDING', 'RUNNING', 'SUCCEEDED', 'FAILED', 'CANCELLED', 'TIMEOUT'
-		);
-		
-		CREATE TYPE executor_type AS ENUM ('swarm', 'kube');
-		
-		CREATE TABLE jobs (
-			id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-			updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-			created_by VARCHAR(255) NOT NULL,
-			status job_status NOT NULL DEFAULT 'PENDING',
-			status_message TEXT,
-			image VARCHAR(512) NOT NULL,
-			image_digest VARCHAR(128),
-			command JSONB,
-			env JSONB DEFAULT '{}',
-			cpu_limit VARCHAR(10),
-			memory_limit VARCHAR(20),
-			timeout_seconds INTEGER DEFAULT 3600,
-			outputs JSONB NOT NULL DEFAULT '[]',
-			started_at TIMESTAMPTZ,
-			finished_at TIMESTAMPTZ,
-			exit_code INTEGER,
-			artefact_prefix VARCHAR(512),
-			log_object_key VARCHAR(512),
-			executor executor_type NOT NULL DEFAULT 'swarm',
-			executor_ref VARCHAR(255),
-			executor_metadata JSONB DEFAULT '{}',
-			registry_secret_id UUID,
-			metadata JSONB DEFAULT '{}'
-		);
-		
-		CREATE TABLE artefacts (
-			id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-			job_id UUID NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
-			path VARCHAR(512) NOT NULL,
-			object_key VARCHAR(512) NOT NULL,
-			size_bytes BIGINT NOT NULL,
-			content_type VARCHAR(128),
-			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-			UNIQUE(job_id, path)
-		);
-	`)
+	// Create store
+	store, err := New(pgContainer.ConnString)
 	require.NoError(t, err)
 
 	cleanup := func() {
 		store.Close()
-		if err := testcontainers.TerminateContainer(postgresContainer); err != nil {
-			t.Logf("failed to terminate container: %v", err)
-		}
+		pgContainer.Cleanup(t)
 	}
 
 	return store, cleanup

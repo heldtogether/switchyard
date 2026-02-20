@@ -6,15 +6,14 @@ import (
 	"time"
 
 	"github.com/heldtogether/switchyard/internal/executor"
-	"github.com/heldtogether/switchyard/internal/storage/objectstore"
 )
 
-// S3Adapter adapts S3Store to executor.ObjectStore interface
+// S3Adapter adapts ObjectStorage to executor.ObjectStore interface
 type S3Adapter struct {
-	store *objectstore.S3Store
+	store ObjectStorage
 }
 
-func NewS3Adapter(store *objectstore.S3Store) *S3Adapter {
+func NewS3Adapter(store ObjectStorage) *S3Adapter {
 	return &S3Adapter{store: store}
 }
 

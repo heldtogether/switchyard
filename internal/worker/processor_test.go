@@ -1,0 +1,486 @@
+package worker
+
+import (
+	"context"
+	"errors"
+	"io"
+	"log/slog"
+	"os"
+	"testing"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/heldtogether/switchyard/internal/domain"
+	"github.com/heldtogether/switchyard/internal/executor"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+)
+
+// Mock Executor
+type MockExecutor struct {
+	mock.Mock
+}
+
+func (m *MockExecutor) CreateRun(ctx context.Context, spec executor.RunSpec) (executor.RunRef, error) {
+	args := m.Called(ctx, spec)
+	return args.Get(0).(executor.RunRef), args.Error(1)
+}
+
+func (m *MockExecutor) Wait(ctx context.Context, ref executor.RunRef) (executor.Result, error) {
+	args := m.Called(ctx, ref)
+	return args.Get(0).(executor.Result), args.Error(1)
+}
+
+func (m *MockExecutor) GetLogs(ctx context.Context, ref executor.RunRef, w io.Writer) error {
+	args := m.Called(ctx, ref, w)
+	return args.Error(0)
+}
+
+func (m *MockExecutor) CollectOutputs(ctx context.Context, ref executor.RunRef, spec executor.OutputSpec) ([]domain.Artefact, error) {
+	args := m.Called(ctx, ref, spec)
+	return args.Get(0).([]domain.Artefact), args.Error(1)
+}
+
+func (m *MockExecutor) Cancel(ctx context.Context, ref executor.RunRef) error {
+	args := m.Called(ctx, ref)
+	return args.Error(0)
+}
+
+func (m *MockExecutor) Cleanup(ctx context.Context, ref executor.RunRef) error {
+	args := m.Called(ctx, ref)
+	return args.Error(0)
+}
+
+func (m *MockExecutor) Status(ctx context.Context, ref executor.RunRef) (executor.ExecutorStatus, error) {
+	args := m.Called(ctx, ref)
+	return args.Get(0).(executor.ExecutorStatus), args.Error(1)
+}
+
+// Mock Store
+type MockStore struct {
+	mock.Mock
+}
+
+func (m *MockStore) GetJob(ctx context.Context, id uuid.UUID) (*domain.Job, error) {
+	args := m.Called(ctx, id)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.Job), args.Error(1)
+}
+
+func (m *MockStore) UpdateJob(ctx context.Context, job *domain.Job) error {
+	args := m.Called(ctx, job)
+	return args.Error(0)
+}
+
+func (m *MockStore) SaveArtefacts(ctx context.Context, jobID uuid.UUID, artefacts []domain.Artefact) error {
+	args := m.Called(ctx, jobID, artefacts)
+	return args.Error(0)
+}
+
+// Mock Storage
+type MockStorage struct {
+	mock.Mock
+}
+
+func (m *MockStorage) Upload(ctx context.Context, key string, r io.Reader, contentType string) error {
+	args := m.Called(ctx, key, r, contentType)
+	return args.Error(0)
+}
+
+func (m *MockStorage) Download(ctx context.Context, key string) (io.ReadCloser, error) {
+	args := m.Called(ctx, key)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(io.ReadCloser), args.Error(1)
+}
+
+func (m *MockStorage) PresignedURL(ctx context.Context, key string, expiry time.Duration) (string, error) {
+	args := m.Called(ctx, key, expiry)
+	return args.String(0), args.Error(1)
+}
+
+func (m *MockStorage) List(ctx context.Context, prefix string) ([]ObjectInfo, error) {
+	args := m.Called(ctx, prefix)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]ObjectInfo), args.Error(1)
+}
+
+// createTestJob creates a test job with default values
+func createTestJob() *domain.Job {
+	return &domain.Job{
+		ID:          uuid.New(),
+		CreatedBy:   "test-user",
+		Status:      domain.JobStatusPending,
+		Image:       "alpine:latest",
+		Command:     []string{"echo", "hello"},
+		Env:         map[string]string{"FOO": "bar"},
+		Outputs:     []string{"/outputs"},
+		TimeoutSecs: 3600,
+		Executor:    domain.ExecutorTypeSwarm,
+		CreatedAt:   time.Now(),
+	}
+}
+
+func TestProcessor_Process_Success(t *testing.T) {
+	ctx := context.Background()
+	job := createTestJob()
+
+	mockStore := new(MockStore)
+	mockExecutor := new(MockExecutor)
+	mockStorage := new(MockStorage)
+
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	processor := NewProcessor(mockStore, mockExecutor, mockStorage, logger, "http://localhost:8080", "test-bucket")
+
+	// Setup expectations
+	mockStore.On("GetJob", ctx, job.ID).Return(job, nil)
+	mockStore.On("UpdateJob", ctx, mock.MatchedBy(func(j *domain.Job) bool {
+		return j.Status == domain.JobStatusRunning
+	})).Return(nil)
+
+	ref := executor.RunRef{
+		ExecutorType: "swarm",
+		Reference:    "service-123",
+	}
+	mockExecutor.On("CreateRun", ctx, mock.Anything).Return(ref, nil)
+
+	result := executor.Result{
+		Status:     executor.StatusSuccess,
+		ExitCode:   0,
+		StartedAt:  time.Now(),
+		FinishedAt: time.Now().Add(5 * time.Second),
+	}
+	mockExecutor.On("Wait", mock.Anything, ref).Return(result, nil)
+	mockExecutor.On("GetLogs", ctx, ref, mock.Anything).Return(nil)
+
+	artefacts := []domain.Artefact{
+		{Path: "/outputs/file.txt", ObjectKey: "key", SizeBytes: 100, ContentType: "text/plain"},
+	}
+	mockExecutor.On("CollectOutputs", ctx, ref, mock.Anything).Return(artefacts, nil)
+
+	mockStore.On("SaveArtefacts", ctx, job.ID, artefacts).Return(nil)
+	mockStorage.On("Upload", ctx, mock.Anything, mock.Anything, "text/plain").Return(nil)
+
+	mockStore.On("UpdateJob", ctx, mock.MatchedBy(func(j *domain.Job) bool {
+		return j.Status == domain.JobStatusSucceeded && j.ExitCode != nil && *j.ExitCode == 0
+	})).Return(nil)
+
+	mockExecutor.On("Cleanup", ctx, ref).Return(nil)
+
+	// Execute
+	err := processor.Process(ctx, job.ID)
+
+	// Verify
+	assert.NoError(t, err)
+	mockStore.AssertExpectations(t)
+	mockExecutor.AssertExpectations(t)
+	mockStorage.AssertExpectations(t)
+}
+
+func TestProcessor_Process_FailedExitCode(t *testing.T) {
+	ctx := context.Background()
+	job := createTestJob()
+
+	mockStore := new(MockStore)
+	mockExecutor := new(MockExecutor)
+	mockStorage := new(MockStorage)
+
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	processor := NewProcessor(mockStore, mockExecutor, mockStorage, logger, "http://localhost:8080", "test-bucket")
+
+	// Setup expectations
+	mockStore.On("GetJob", ctx, job.ID).Return(job, nil)
+	mockStore.On("UpdateJob", ctx, mock.MatchedBy(func(j *domain.Job) bool {
+		return j.Status == domain.JobStatusRunning
+	})).Return(nil)
+
+	ref := executor.RunRef{ExecutorType: "swarm", Reference: "service-123"}
+	mockExecutor.On("CreateRun", ctx, mock.Anything).Return(ref, nil)
+
+	// Job exits with non-zero code
+	result := executor.Result{
+		Status:     executor.StatusFailed,
+		ExitCode:   1,
+		StartedAt:  time.Now(),
+		FinishedAt: time.Now().Add(5 * time.Second),
+	}
+	mockExecutor.On("Wait", mock.Anything, ref).Return(result, nil)
+	mockExecutor.On("GetLogs", ctx, ref, mock.Anything).Return(nil)
+	mockStorage.On("Upload", ctx, mock.Anything, mock.Anything, "text/plain").Return(nil)
+
+	// Should mark as FAILED with exit code
+	mockStore.On("UpdateJob", ctx, mock.MatchedBy(func(j *domain.Job) bool {
+		return j.Status == domain.JobStatusFailed &&
+			j.ExitCode != nil && *j.ExitCode == 1 &&
+			j.StatusMessage != nil
+	})).Return(nil)
+
+	mockExecutor.On("Cleanup", ctx, ref).Return(nil)
+
+	// Execute
+	err := processor.Process(ctx, job.ID)
+
+	// Verify - should complete without error even though job failed
+	assert.NoError(t, err)
+	mockStore.AssertExpectations(t)
+	mockExecutor.AssertExpectations(t)
+}
+
+func TestProcessor_Process_Timeout(t *testing.T) {
+	ctx := context.Background()
+	job := createTestJob()
+	job.TimeoutSecs = 1 // 1 second timeout
+
+	mockStore := new(MockStore)
+	mockExecutor := new(MockExecutor)
+	mockStorage := new(MockStorage)
+
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	processor := NewProcessor(mockStore, mockExecutor, mockStorage, logger, "http://localhost:8080", "test-bucket")
+
+	// Setup expectations
+	mockStore.On("GetJob", ctx, job.ID).Return(job, nil)
+	mockStore.On("UpdateJob", ctx, mock.MatchedBy(func(j *domain.Job) bool {
+		return j.Status == domain.JobStatusRunning
+	})).Return(nil)
+
+	ref := executor.RunRef{ExecutorType: "swarm", Reference: "service-123"}
+	mockExecutor.On("CreateRun", ctx, mock.Anything).Return(ref, nil)
+
+	// Wait returns context deadline exceeded
+	mockExecutor.On("Wait", mock.Anything, ref).Return(executor.Result{}, context.DeadlineExceeded)
+	mockExecutor.On("Cancel", mock.Anything, ref).Return(nil)
+	mockExecutor.On("GetLogs", mock.Anything, ref, mock.Anything).Return(nil)
+	mockStorage.On("Upload", mock.Anything, mock.Anything, mock.Anything, "text/plain").Return(nil)
+
+	// Should mark as TIMEOUT
+	mockStore.On("UpdateJob", mock.Anything, mock.MatchedBy(func(j *domain.Job) bool {
+		return j.Status == domain.JobStatusTimeout &&
+			j.StatusMessage != nil
+	})).Return(nil)
+
+	mockExecutor.On("Cleanup", mock.Anything, ref).Return(nil)
+
+	// Execute
+	err := processor.Process(ctx, job.ID)
+
+	// Verify
+	assert.NoError(t, err)
+	mockStore.AssertExpectations(t)
+	mockExecutor.AssertExpectations(t)
+}
+
+func TestProcessor_Process_ExecutorCreateFailure(t *testing.T) {
+	ctx := context.Background()
+	job := createTestJob()
+
+	mockStore := new(MockStore)
+	mockExecutor := new(MockExecutor)
+	mockStorage := new(MockStorage)
+
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	processor := NewProcessor(mockStore, mockExecutor, mockStorage, logger, "http://localhost:8080", "test-bucket")
+
+	// Setup expectations
+	mockStore.On("GetJob", ctx, job.ID).Return(job, nil)
+	mockStore.On("UpdateJob", ctx, mock.MatchedBy(func(j *domain.Job) bool {
+		return j.Status == domain.JobStatusRunning
+	})).Return(nil)
+
+	// Executor creation fails
+	mockExecutor.On("CreateRun", ctx, mock.Anything).Return(executor.RunRef{}, errors.New("failed to create service"))
+
+	// Should mark as FAILED
+	mockStore.On("UpdateJob", ctx, mock.MatchedBy(func(j *domain.Job) bool {
+		return j.Status == domain.JobStatusFailed &&
+			j.StatusMessage != nil
+	})).Return(nil)
+
+	// Execute
+	err := processor.Process(ctx, job.ID)
+
+	// Verify - should return error (job marked failed in DB though)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to create service")
+	mockStore.AssertExpectations(t)
+	mockExecutor.AssertExpectations(t)
+}
+
+func TestProcessor_Process_GetJobFailure(t *testing.T) {
+	ctx := context.Background()
+	jobID := uuid.New()
+
+	mockStore := new(MockStore)
+	mockExecutor := new(MockExecutor)
+	mockStorage := new(MockStorage)
+
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	processor := NewProcessor(mockStore, mockExecutor, mockStorage, logger, "http://localhost:8080", "test-bucket")
+
+	// Job not found
+	mockStore.On("GetJob", ctx, jobID).Return(nil, errors.New("job not found"))
+
+	// Execute
+	err := processor.Process(ctx, jobID)
+
+	// Verify - should return error
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to fetch job")
+	mockStore.AssertExpectations(t)
+}
+
+func TestProcessor_Process_LogUploadFailure_NonFatal(t *testing.T) {
+	ctx := context.Background()
+	job := createTestJob()
+
+	mockStore := new(MockStore)
+	mockExecutor := new(MockExecutor)
+	mockStorage := new(MockStorage)
+
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	processor := NewProcessor(mockStore, mockExecutor, mockStorage, logger, "http://localhost:8080", "test-bucket")
+
+	// Setup expectations
+	mockStore.On("GetJob", ctx, job.ID).Return(job, nil)
+	mockStore.On("UpdateJob", ctx, mock.MatchedBy(func(j *domain.Job) bool {
+		return j.Status == domain.JobStatusRunning
+	})).Return(nil)
+
+	ref := executor.RunRef{ExecutorType: "swarm", Reference: "service-123"}
+	mockExecutor.On("CreateRun", ctx, mock.Anything).Return(ref, nil)
+
+	result := executor.Result{
+		Status:     executor.StatusSuccess,
+		ExitCode:   0,
+		StartedAt:  time.Now(),
+		FinishedAt: time.Now().Add(5 * time.Second),
+	}
+	mockExecutor.On("Wait", mock.Anything, ref).Return(result, nil)
+	mockExecutor.On("GetLogs", ctx, ref, mock.Anything).Return(nil)
+
+	// Log upload fails - should not stop job processing
+	mockStorage.On("Upload", ctx, mock.Anything, mock.Anything, "text/plain").Return(errors.New("s3 upload failed"))
+
+	artefacts := []domain.Artefact{}
+	mockExecutor.On("CollectOutputs", ctx, ref, mock.Anything).Return(artefacts, nil)
+	// Note: SaveArtefacts is NOT called when artefacts list is empty
+
+	mockStore.On("UpdateJob", ctx, mock.MatchedBy(func(j *domain.Job) bool {
+		return j.Status == domain.JobStatusSucceeded
+	})).Return(nil)
+
+	mockExecutor.On("Cleanup", ctx, ref).Return(nil)
+
+	// Execute
+	err := processor.Process(ctx, job.ID)
+
+	// Verify - should still succeed despite log upload failure
+	assert.NoError(t, err)
+	mockStore.AssertExpectations(t)
+	mockExecutor.AssertExpectations(t)
+	mockStorage.AssertExpectations(t)
+}
+
+func TestProcessor_Process_ArtefactCollectionFailure_NonFatal(t *testing.T) {
+	ctx := context.Background()
+	job := createTestJob()
+
+	mockStore := new(MockStore)
+	mockExecutor := new(MockExecutor)
+	mockStorage := new(MockStorage)
+
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	processor := NewProcessor(mockStore, mockExecutor, mockStorage, logger, "http://localhost:8080", "test-bucket")
+
+	// Setup expectations
+	mockStore.On("GetJob", ctx, job.ID).Return(job, nil)
+	mockStore.On("UpdateJob", ctx, mock.MatchedBy(func(j *domain.Job) bool {
+		return j.Status == domain.JobStatusRunning
+	})).Return(nil)
+
+	ref := executor.RunRef{ExecutorType: "swarm", Reference: "service-123"}
+	mockExecutor.On("CreateRun", ctx, mock.Anything).Return(ref, nil)
+
+	result := executor.Result{
+		Status:     executor.StatusSuccess,
+		ExitCode:   0,
+		StartedAt:  time.Now(),
+		FinishedAt: time.Now().Add(5 * time.Second),
+	}
+	mockExecutor.On("Wait", mock.Anything, ref).Return(result, nil)
+	mockExecutor.On("GetLogs", ctx, ref, mock.Anything).Return(nil)
+	mockStorage.On("Upload", ctx, mock.Anything, mock.Anything, "text/plain").Return(nil)
+
+	// Artefact collection fails - should not stop job from being marked successful
+	mockExecutor.On("CollectOutputs", ctx, ref, mock.Anything).Return([]domain.Artefact{}, errors.New("nfs read failed"))
+
+	mockStore.On("UpdateJob", ctx, mock.MatchedBy(func(j *domain.Job) bool {
+		return j.Status == domain.JobStatusSucceeded
+	})).Return(nil)
+
+	mockExecutor.On("Cleanup", ctx, ref).Return(nil)
+
+	// Execute
+	err := processor.Process(ctx, job.ID)
+
+	// Verify - should still succeed
+	assert.NoError(t, err)
+	mockStore.AssertExpectations(t)
+	mockExecutor.AssertExpectations(t)
+}
+
+func TestProcessor_Process_NoArtefactsOnFailedJob(t *testing.T) {
+	ctx := context.Background()
+	job := createTestJob()
+
+	mockStore := new(MockStore)
+	mockExecutor := new(MockExecutor)
+	mockStorage := new(MockStorage)
+
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	processor := NewProcessor(mockStore, mockExecutor, mockStorage, logger, "http://localhost:8080", "test-bucket")
+
+	// Setup expectations
+	mockStore.On("GetJob", ctx, job.ID).Return(job, nil)
+	mockStore.On("UpdateJob", ctx, mock.MatchedBy(func(j *domain.Job) bool {
+		return j.Status == domain.JobStatusRunning
+	})).Return(nil)
+
+	ref := executor.RunRef{ExecutorType: "swarm", Reference: "service-123"}
+	mockExecutor.On("CreateRun", ctx, mock.Anything).Return(ref, nil)
+
+	// Job fails with non-zero exit code
+	result := executor.Result{
+		Status:     executor.StatusFailed,
+		ExitCode:   1,
+		StartedAt:  time.Now(),
+		FinishedAt: time.Now().Add(5 * time.Second),
+	}
+	mockExecutor.On("Wait", mock.Anything, ref).Return(result, nil)
+	mockExecutor.On("GetLogs", ctx, ref, mock.Anything).Return(nil)
+	mockStorage.On("Upload", ctx, mock.Anything, mock.Anything, "text/plain").Return(nil)
+
+	// CollectOutputs should NOT be called for failed jobs
+	// (verified by not setting up the mock expectation)
+
+	mockStore.On("UpdateJob", ctx, mock.MatchedBy(func(j *domain.Job) bool {
+		return j.Status == domain.JobStatusFailed
+	})).Return(nil)
+
+	mockExecutor.On("Cleanup", ctx, ref).Return(nil)
+
+	// Execute
+	err := processor.Process(ctx, job.ID)
+
+	// Verify
+	assert.NoError(t, err)
+	mockStore.AssertExpectations(t)
+	mockExecutor.AssertExpectations(t)
+	// Verify CollectOutputs was NOT called
+	mockExecutor.AssertNotCalled(t, "CollectOutputs", ctx, ref, mock.Anything)
+}
