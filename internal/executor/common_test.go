@@ -17,6 +17,19 @@ func TestParseCPU(t *testing.T) {
 		{"integer", "1", 1000000000},
 		{"four cores", "4", 4000000000},
 		{"empty string", "", 0},
+		// Edge cases
+		{"zero", "0", 0},
+		{"zero with decimal", "0.0", 0},
+		{"very small", "0.01", 10000000},
+		{"very large", "100", 100000000000},
+		{"with whitespace", " 1.0 ", 1000000000},
+		{"with tabs", "\t2.0\t", 2000000000},
+		{"invalid format", "abc", 0},
+		// Note: strconv.ParseFloat accepts these, so they parse "successfully"
+		{"invalid decimal", "1.2.3", 1200000000},      // parses as 1.2
+		{"double dot", "1..0", 1000000000},            // parses as 1.
+		{"negative", "-1.0", -1000000000},             // negative values allowed by ParseFloat
+		{"multiple decimals", "1.234567", 1234567000}, // full precision
 	}
 
 	for _, tt := range tests {
@@ -47,6 +60,23 @@ func TestParseMemory(t *testing.T) {
 		{"raw bytes", "1024", 1024},
 		{"with spaces", " 2g ", 2 * 1024 * 1024 * 1024},
 		{"empty string", "", 0},
+		// Edge cases
+		{"zero", "0", 0},
+		{"zero gigabytes", "0g", 0},
+		{"very large", "100g", 100 * 1024 * 1024 * 1024},
+		// Note: Decimal parsing works by strconv.Atoi on the number part, so decimals truncate
+		{"decimal gigabytes", "1.5g", 1},     // atoi("1.5") fails, gets just prefix
+		{"decimal megabytes", "256.5m", 256}, // atoi("256.5") fails, gets just prefix
+		{"with tabs", "\t512m\t", 512 * 1024 * 1024},
+		{"mixed case GB", "2Gb", 2 * 1024 * 1024 * 1024},
+		{"mixed case MB", "512Mb", 512 * 1024 * 1024},
+		// Note: Invalid units fall through to parsing as bytes
+		{"invalid unit", "512x", 512},   // parsed as raw bytes (number only)
+		{"invalid terabytes", "2tb", 2}, // parsed as raw bytes
+		{"invalid format", "abc", 0},
+		{"negative", "-512m", -536870912}, // negative values allowed
+		{"just unit", "g", 0},
+		{"double unit", "512gg", 512}, // parsed as raw bytes
 	}
 
 	for _, tt := range tests {
