@@ -31,7 +31,7 @@ export function JobsListPage() {
     return (jobsQuery.data ?? [])
       .filter((job) => (statusFilter === "all" ? true : job.status === statusFilter))
       .filter((job) => (projectFilter === "all" ? true : job.project_slug === projectFilter))
-      .filter((job) => job.name.toLowerCase().includes(search.toLowerCase()));
+      .filter((job) => (job.name ?? job.image ?? "").toLowerCase().includes(search.toLowerCase()));
   }, [jobsQuery.data, statusFilter, projectFilter, search]);
 
   return (
