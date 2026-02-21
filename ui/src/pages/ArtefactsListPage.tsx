@@ -81,7 +81,12 @@ export function ArtefactsListPage() {
                   <div className="font-semibold text-ink-900">{art.path}</div>
                   <div className="text-xs text-ink-500">{art.project_name}</div>
                 </DataTableCell>
-                <DataTableCell>{art.job_name}</DataTableCell>
+                <DataTableCell>
+                  <div className="font-semibold text-ink-900">{art.job_name}</div>
+                  {art.job_image && art.job_image !== art.job_name && (
+                    <div className="text-xs text-ink-500">{art.job_image}</div>
+                  )}
+                </DataTableCell>
                 <DataTableCell>#{art.run_number}</DataTableCell>
                 <DataTableCell>{formatBytes(art.size_bytes)}</DataTableCell>
                 <DataTableCell>

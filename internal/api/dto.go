@@ -116,6 +116,7 @@ type RegistryAuthRequest struct {
 // JobResponse is the response for a job
 type JobResponse struct {
 	ID            uuid.UUID         `json:"id"`
+	Name          *string           `json:"name,omitempty"`
 	CreatedAt     time.Time         `json:"created_at"`
 	UpdatedAt     time.Time         `json:"updated_at"`
 	CreatedBy     string            `json:"created_by"`
@@ -218,6 +219,7 @@ func toRunResponse(run *domain.Run) RunResponse {
 func toJobResponse(job *domain.Job, baseURL string, workspaceSlug string, projectSlug string, runSlug string) JobResponse {
 	resp := JobResponse{
 		ID:            job.ID,
+		Name:          job.Name,
 		CreatedAt:     job.CreatedAt,
 		UpdatedAt:     job.UpdatedAt,
 		CreatedBy:     job.CreatedBy,

@@ -50,7 +50,7 @@ function mapJob(job: any, runId?: string): Job {
   return {
     id: job.id,
     run_id: job.run_id ?? runId ?? "",
-    name: job.name ?? job.image,
+    name: job.name || job.image,
     image: job.image,
     image_digest: job.image_digest,
     command: job.command ?? [],
@@ -268,7 +268,8 @@ export async function listAllArtefacts() {
               project_name: project.name,
               run_slug: run.slug,
               run_number: run.run_number,
-              job_name: job.name
+              job_name: job.name,
+              job_image: job.image
             }))
           );
         })

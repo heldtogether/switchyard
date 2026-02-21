@@ -99,7 +99,9 @@ export function JobsListPage() {
               >
                 <DataTableCell>
                   <div className="font-semibold text-ink-900">{job.name}</div>
-                  <div className="text-xs text-ink-500">{job.image}</div>
+                  {job.image && job.image !== job.name && (
+                    <div className="text-xs text-ink-500">{job.image}</div>
+                  )}
                 </DataTableCell>
                 <DataTableCell>
                   <StatusPill status={job.status} />

@@ -39,11 +39,14 @@ export function JobDetailPage() {
     return <ErrorBanner message={(jobQuery.error as Error).message} onRetry={() => jobQuery.refetch()} />;
   }
 
+  const jobName = jobQuery.data?.name ?? "Job";
+  const jobSubtitle = jobQuery.data?.image && jobQuery.data?.image !== jobName ? jobQuery.data?.image : "";
+
   return (
     <div className="space-y-6">
       <PageHeader
-        title={jobQuery.data?.name ?? "Job"}
-        subtitle={jobQuery.data?.image ?? ""}
+        title={jobName}
+        subtitle={jobSubtitle}
         meta={
           <div className="flex flex-wrap gap-4 text-xs text-ink-500">
             <span>Started: <RelativeTime value={jobQuery.data?.started_at} /></span>
