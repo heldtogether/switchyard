@@ -1,4 +1,4 @@
-export type Status = "SUCCEEDED" | "FAILED" | "RUNNING" | "PENDING" | "CANCELLED" | "TIMEOUT";
+export type Status = "SUCCEEDED" | "FAILED" | "RUNNING" | "PENDING" | "CANCELLED" | "TIMEOUT" | "PARTIAL";
 
 export interface Project {
   id: string;

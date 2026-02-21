@@ -101,7 +101,7 @@ export function ProjectsListPage() {
               <tr
                 key={project.id}
                 className="cursor-pointer hover:bg-ink-50"
-                onClick={() => navigate(`/projects/${project.slug}`)}
+                onClick={() => navigate(`/${project.slug}`)}
               >
                 <DataTableCell>
                   <div className="font-semibold text-ink-900">{project.name}</div>

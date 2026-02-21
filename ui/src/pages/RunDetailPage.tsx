@@ -122,10 +122,6 @@ export function RunDetailPage() {
                 {jobsQuery.data?.length ?? 0}
               </p>
             </div>
-            <div className="card p-4">
-              <p className="text-xs uppercase tracking-[0.2em] text-ink-400">Trigger</p>
-              <p className="mt-3 text-sm font-semibold text-ink-900">{runQuery.data?.trigger ?? "API"}</p>
-            </div>
           </div>
 
           {jobsQuery.data && jobsQuery.data.length > 0 ? (

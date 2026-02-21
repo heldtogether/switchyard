@@ -6,7 +6,8 @@ export const STATUS_LABELS: Record<Status, string> = {
   RUNNING: "Running",
   PENDING: "Pending",
   CANCELLED: "Cancelled",
-  TIMEOUT: "Timeout"
+  TIMEOUT: "Timeout",
+  PARTIAL: "Partial"
 };
 
 export function statusTone(status: Status) {
@@ -21,6 +22,8 @@ export function statusTone(status: Status) {
       return "bg-warning/10 text-warning border-warning/30";
     case "CANCELLED":
       return "bg-ink-100 text-ink-500 border-ink-200";
+    case "PARTIAL":
+      return "bg-warning/10 text-warning border-warning/30";
     default:
       return "bg-ink-100 text-ink-500 border-ink-200";
   }
