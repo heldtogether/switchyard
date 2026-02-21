@@ -9,8 +9,9 @@ import {
 } from "./mocks";
 import { Artefact, Job, Project, Promotion, Run } from "../models/types";
 
-const WORKSPACE = import.meta.env.VITE_WORKSPACE_SLUG ?? "default";
-const AGGREGATE_LIMIT = Number(import.meta.env.VITE_AGGREGATE_LIMIT ?? 5);
+const runtimeEnv = (window as any).__ENV ?? {};
+const WORKSPACE = runtimeEnv.WORKSPACE_SLUG ?? import.meta.env.VITE_WORKSPACE_SLUG ?? "default";
+const AGGREGATE_LIMIT = Number(runtimeEnv.AGGREGATE_LIMIT ?? import.meta.env.VITE_AGGREGATE_LIMIT ?? 5);
 
 function mapRun(run: any, index?: number): Run {
   const metadata = run.metadata ?? {};

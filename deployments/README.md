@@ -27,6 +27,7 @@ docker stack deploy -c stack.yml switchyard
 # Verify
 curl http://localhost:8080/healthz
 ```
+UI will be available at `http://localhost:3000`.
 
 ## Local Dev Services
 ```bash

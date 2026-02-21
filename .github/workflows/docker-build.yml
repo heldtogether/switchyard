@@ -56,6 +56,9 @@ jobs:
           - name: example-job
             dockerfile: build/example-job/Dockerfile
             context: ./build/example-job
+          - name: ui
+            dockerfile: build/ui.Dockerfile
+            context: .
 
     steps:
       - name: Checkout code
@@ -112,7 +115,7 @@ jobs:
         run: |
           if [ "${{ needs.build-and-push.result }}" == "success" ]; then
             echo "✅ All images built and pushed successfully"
-            echo "Images available at: https://github.com/heldtogether/switchyard/pkgs/container/switchyard-api"
+            echo "Images available at: https://github.com/heldtogether/switchyard/pkgs/container"
           else
             echo "❌ Build failed"
             exit 1

@@ -22,6 +22,16 @@ VITE_AGGREGATE_LIMIT=5
 - Set `VITE_USE_MOCKS=false` to hit real endpoints.
 - `VITE_API_KEY` is sent as `X-API-Key`.
 
+## Runtime config (Docker)
+The UI image reads runtime env vars and writes `/config.js` on container start:
+```
+UI_API_BASE_URL=http://localhost:8080
+UI_API_KEY=your-api-key
+UI_WORKSPACE_SLUG=default
+UI_USE_MOCKS=false
+UI_AGGREGATE_LIMIT=5
+```
+
 ## Routes
 - `/` Projects list
 - `/projects/:projectSlug` Project runs list

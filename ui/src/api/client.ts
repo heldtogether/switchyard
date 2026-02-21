@@ -6,8 +6,9 @@ export class ApiError extends Error {
   }
 }
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8080";
-const API_KEY = import.meta.env.VITE_API_KEY as string | undefined;
+const runtimeEnv = (window as any).__ENV ?? {};
+const API_BASE_URL = runtimeEnv.API_BASE_URL ?? import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8080";
+const API_KEY = runtimeEnv.API_KEY ?? (import.meta.env.VITE_API_KEY as string | undefined);
 
 export async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE_URL}${path}`, {
@@ -35,6 +36,7 @@ export async function fetchJson<T>(path: string, init?: RequestInit): Promise<T>
 
 export function shouldUseMocks(error: unknown) {
   return (
+    runtimeEnv.USE_MOCKS === "true" ||
     import.meta.env.VITE_USE_MOCKS === "true" ||
     (error instanceof ApiError && (error.status === 404 || error.status === 501))
   );

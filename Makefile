@@ -6,6 +6,10 @@ BINARY_WORKER=bin/worker
 BINARY_MIGRATE=bin/migrate
 DOCKER_REGISTRY?=ghcr.io/heldtogether
 VERSION?=$(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+UI_API_BASE_URL?=http://localhost:8080
+UI_WORKSPACE_SLUG?=default
+UI_USE_MOCKS?=false
+UI_AGGREGATE_LIMIT?=5
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
@@ -28,11 +32,14 @@ docker-build: ## Build Docker images
 	docker build -f build/api.Dockerfile -t $(DOCKER_REGISTRY)/switchyard-api:$(VERSION) .
 	docker build -f build/worker.Dockerfile -t $(DOCKER_REGISTRY)/switchyard-worker:$(VERSION) .
 	docker build -f build/example-job/Dockerfile -t $(DOCKER_REGISTRY)/switchyard-example-job:$(VERSION) ./build/example-job
+	docker build -f build/ui.Dockerfile \
+		-t $(DOCKER_REGISTRY)/switchyard-ui:$(VERSION) .
 
 docker-push: ## Push Docker images
 	docker push $(DOCKER_REGISTRY)/switchyard-api:$(VERSION)
 	docker push $(DOCKER_REGISTRY)/switchyard-worker:$(VERSION)
 	docker push $(DOCKER_REGISTRY)/switchyard-example-job:$(VERSION)
+	docker push $(DOCKER_REGISTRY)/switchyard-ui:$(VERSION)
 
 migrate-up: ## Run database migrations up
 	@echo "Running migrations..."

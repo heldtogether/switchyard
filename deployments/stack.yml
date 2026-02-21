@@ -189,6 +189,30 @@ services:
       labels:
         - "com.switchyard.service=worker"
 
+  # =============================================================================
+  # UI - Web Frontend
+  # =============================================================================
+  ui:
+    image: ghcr.io/heldtogether/switchyard-ui:${VERSION:-latest}
+    networks:
+      - public
+    ports:
+      - "3000:80"
+    environment:
+      UI_API_BASE_URL: ${UI_API_BASE_URL:-http://localhost:8080}
+      UI_API_KEY: ${UI_API_KEY:-}
+      UI_WORKSPACE_SLUG: ${UI_WORKSPACE_SLUG:-default}
+      UI_USE_MOCKS: ${UI_USE_MOCKS:-false}
+      UI_AGGREGATE_LIMIT: ${UI_AGGREGATE_LIMIT:-5}
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+    labels:
+      - "com.switchyard.service=ui"
+
 # =============================================================================
 # Networks
 # =============================================================================

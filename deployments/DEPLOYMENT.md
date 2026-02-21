@@ -55,6 +55,7 @@ docker stack deploy -c deployments/stack.yml switchyard
 curl http://localhost:8080/healthz
 curl http://localhost:8080/readyz
 ```
+UI will be available at `http://localhost:3000`.
 
 ## Configuration Reference (Environment Variables)
 Key `.env` variables (see `.env.example` for full list):
