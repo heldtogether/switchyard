@@ -21,7 +21,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
               SY
             </div>
             <div>
-              <p className="text-xs uppercase tracking-[0.2em] text-ink-400">Product</p>
               <p className="text-sm font-semibold text-ink-900">Switchyard</p>
             </div>
           </div>
