@@ -103,6 +103,11 @@ func (m *MockStore) GetWorkspace(ctx context.Context, id uuid.UUID) (*domain.Wor
 	return args.Get(0).(*domain.Workspace), args.Error(1)
 }
 
+func (m *MockStore) RecomputeRunStatus(ctx context.Context, id uuid.UUID) error {
+	args := m.Called(ctx, id)
+	return args.Error(0)
+}
+
 // Mock Storage
 type MockStorage struct {
 	mock.Mock
@@ -198,6 +203,7 @@ func TestProcessor_Process_Success(t *testing.T) {
 	mockStore.On("UpdateJob", ctx, mock.MatchedBy(func(j *domain.Job) bool {
 		return j.Status == domain.JobStatusRunning
 	})).Return(nil)
+	mockStore.On("RecomputeRunStatus", ctx, run.ID).Return(nil).Twice()
 
 	ref := executor.RunRef{
 		ExecutorType: "swarm",
@@ -258,6 +264,7 @@ func TestProcessor_Process_FailedExitCode(t *testing.T) {
 	mockStore.On("UpdateJob", ctx, mock.MatchedBy(func(j *domain.Job) bool {
 		return j.Status == domain.JobStatusRunning
 	})).Return(nil)
+	mockStore.On("RecomputeRunStatus", ctx, run.ID).Return(nil).Twice()
 
 	ref := executor.RunRef{ExecutorType: "swarm", Reference: "service-123"}
 	mockExecutor.On("CreateRun", ctx, mock.Anything).Return(ref, nil)
@@ -312,6 +319,7 @@ func TestProcessor_Process_Timeout(t *testing.T) {
 	mockStore.On("UpdateJob", ctx, mock.MatchedBy(func(j *domain.Job) bool {
 		return j.Status == domain.JobStatusRunning
 	})).Return(nil)
+	mockStore.On("RecomputeRunStatus", ctx, run.ID).Return(nil).Twice()
 
 	ref := executor.RunRef{ExecutorType: "swarm", Reference: "service-123"}
 	mockExecutor.On("CreateRun", ctx, mock.Anything).Return(ref, nil)
@@ -359,6 +367,7 @@ func TestProcessor_Process_ExecutorCreateFailure(t *testing.T) {
 	mockStore.On("UpdateJob", ctx, mock.MatchedBy(func(j *domain.Job) bool {
 		return j.Status == domain.JobStatusRunning
 	})).Return(nil)
+	mockStore.On("RecomputeRunStatus", ctx, run.ID).Return(nil).Twice()
 
 	// Executor creation fails
 	mockExecutor.On("CreateRun", ctx, mock.Anything).Return(executor.RunRef{}, errors.New("failed to create service"))
@@ -422,6 +431,7 @@ func TestProcessor_Process_LogUploadFailure_NonFatal(t *testing.T) {
 	mockStore.On("UpdateJob", ctx, mock.MatchedBy(func(j *domain.Job) bool {
 		return j.Status == domain.JobStatusRunning
 	})).Return(nil)
+	mockStore.On("RecomputeRunStatus", ctx, run.ID).Return(nil).Twice()
 
 	ref := executor.RunRef{ExecutorType: "swarm", Reference: "service-123"}
 	mockExecutor.On("CreateRun", ctx, mock.Anything).Return(ref, nil)
@@ -478,6 +488,7 @@ func TestProcessor_Process_ArtefactCollectionFailure_NonFatal(t *testing.T) {
 	mockStore.On("UpdateJob", ctx, mock.MatchedBy(func(j *domain.Job) bool {
 		return j.Status == domain.JobStatusRunning
 	})).Return(nil)
+	mockStore.On("RecomputeRunStatus", ctx, run.ID).Return(nil).Twice()
 
 	ref := executor.RunRef{ExecutorType: "swarm", Reference: "service-123"}
 	mockExecutor.On("CreateRun", ctx, mock.Anything).Return(ref, nil)
@@ -530,6 +541,7 @@ func TestProcessor_Process_NoArtefactsOnFailedJob(t *testing.T) {
 	mockStore.On("UpdateJob", ctx, mock.MatchedBy(func(j *domain.Job) bool {
 		return j.Status == domain.JobStatusRunning
 	})).Return(nil)
+	mockStore.On("RecomputeRunStatus", ctx, run.ID).Return(nil).Twice()
 
 	ref := executor.RunRef{ExecutorType: "swarm", Reference: "service-123"}
 	mockExecutor.On("CreateRun", ctx, mock.Anything).Return(ref, nil)

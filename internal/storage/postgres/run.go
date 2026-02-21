@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/heldtogether/switchyard/internal/domain"
@@ -146,6 +147,83 @@ func (s *Store) UpdateRun(ctx context.Context, run *domain.Run) error {
 func (s *Store) UpdateRunStatus(ctx context.Context, id uuid.UUID, status domain.RunStatus) error {
 	query := `UPDATE runs SET status = $1 WHERE id = $2`
 	_, err := s.db.ExecContext(ctx, query, status, id)
+	return err
+}
+
+// RecomputeRunStatus updates a run's status based on the current job statuses.
+func (s *Store) RecomputeRunStatus(ctx context.Context, id uuid.UUID) error {
+	query := `
+		SELECT
+			COUNT(*) FILTER (WHERE status = 'PENDING'),
+			COUNT(*) FILTER (WHERE status = 'RUNNING'),
+			COUNT(*) FILTER (WHERE status = 'SUCCEEDED'),
+			COUNT(*) FILTER (WHERE status = 'FAILED'),
+			COUNT(*) FILTER (WHERE status = 'CANCELLED'),
+			COUNT(*) FILTER (WHERE status = 'TIMEOUT'),
+			COUNT(*),
+			MIN(started_at),
+			MAX(finished_at)
+		FROM jobs
+		WHERE run_id = $1
+	`
+
+	var pendingCount, runningCount, succeededCount, failedCount, cancelledCount, timeoutCount, totalCount int
+	var minStartedAt sql.NullTime
+	var maxFinishedAt sql.NullTime
+
+	if err := s.db.QueryRowContext(ctx, query, id).Scan(
+		&pendingCount,
+		&runningCount,
+		&succeededCount,
+		&failedCount,
+		&cancelledCount,
+		&timeoutCount,
+		&totalCount,
+		&minStartedAt,
+		&maxFinishedAt,
+	); err != nil {
+		return err
+	}
+
+	var newStatus domain.RunStatus
+	switch {
+	case totalCount == 0:
+		newStatus = domain.RunStatusPending
+	case runningCount > 0:
+		newStatus = domain.RunStatusRunning
+	case cancelledCount > 0:
+		newStatus = domain.RunStatusCancelled
+	case failedCount+timeoutCount > 0:
+		newStatus = domain.RunStatusFailed
+	case succeededCount == totalCount:
+		newStatus = domain.RunStatusSucceeded
+	case pendingCount == totalCount:
+		newStatus = domain.RunStatusPending
+	case pendingCount == 0:
+		newStatus = domain.RunStatusPartial
+	default:
+		newStatus = domain.RunStatusRunning
+	}
+
+	var startedAt *time.Time
+	if minStartedAt.Valid {
+		startedAt = &minStartedAt.Time
+	}
+
+	var finishedAt *time.Time
+	if newStatus.IsTerminal() && maxFinishedAt.Valid {
+		finishedAt = &maxFinishedAt.Time
+	}
+
+	updateQuery := `
+		UPDATE runs
+		SET status = $1,
+			started_at = COALESCE(started_at, $2),
+			finished_at = $3
+		WHERE id = $4
+	`
+
+	_, err := s.db.ExecContext(ctx, updateQuery, newStatus, startedAt, finishedAt, id)
 	return err
 }
 

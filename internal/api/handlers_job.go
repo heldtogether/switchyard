@@ -516,6 +516,15 @@ func (a *API) HandleCancelJob(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	if err := a.store.RecomputeRunStatus(r.Context(), job.RunID); err != nil {
+		a.logger.Error("failed to update run status after cancel", "error", err)
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{
+			Error:   "internal_error",
+			Message: "Failed to update run status",
+			Code:    http.StatusInternalServerError,
+		})
+		return
+	}
 
 	// Get updated job to return full details
 	updatedJob, err := a.store.GetJob(r.Context(), id)

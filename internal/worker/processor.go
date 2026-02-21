@@ -80,6 +80,10 @@ func (p *Processor) Process(ctx context.Context, jobID uuid.UUID) error {
 	if err := p.store.UpdateJob(ctx, job); err != nil {
 		return fmt.Errorf("failed to update job status to RUNNING: %w", err)
 	}
+	if err := p.store.RecomputeRunStatus(ctx, job.RunID); err != nil {
+		logger.Error("failed to recompute run status", "error", err)
+		return fmt.Errorf("failed to recompute run status: %w", err)
+	}
 
 	logger.Info("job status updated to RUNNING")
 
@@ -206,6 +210,10 @@ func (p *Processor) Process(ctx context.Context, jobID uuid.UUID) error {
 		logger.Error("failed to update final job status", "error", err)
 		return err
 	}
+	if err := p.store.RecomputeRunStatus(ctx, job.RunID); err != nil {
+		logger.Error("failed to recompute run status", "error", err)
+		return err
+	}
 
 	logger.Info("job processing complete", "status", job.Status, "duration", job.FinishedAt.Sub(*job.StartedAt))
 
@@ -230,6 +238,10 @@ func (p *Processor) failJob(ctx context.Context, job *domain.Job, err error) err
 	if updateErr := p.store.UpdateJob(ctx, job); updateErr != nil {
 		logger.Error("failed to update job status to FAILED", "error", updateErr)
 		return fmt.Errorf("original error: %w, update error: %v", err, updateErr)
+	}
+	if recomputeErr := p.store.RecomputeRunStatus(ctx, job.RunID); recomputeErr != nil {
+		logger.Error("failed to recompute run status", "error", recomputeErr)
+		return fmt.Errorf("original error: %w, recompute error: %v", err, recomputeErr)
 	}
 
 	logger.Info("job marked as failed")

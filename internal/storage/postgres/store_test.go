@@ -337,3 +337,63 @@ func TestStore_GetRunningJobs(t *testing.T) {
 		assert.Equal(t, domain.JobStatusRunning, job.Status)
 	}
 }
+
+func TestStore_RecomputeRunStatus(t *testing.T) {
+	store, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	_, _, run := setupTestHierarchy(t, store, ctx)
+
+	job1 := &domain.Job{
+		ID:          uuid.New(),
+		RunID:       run.ID,
+		CreatedBy:   "test-user",
+		Status:      domain.JobStatusPending,
+		Image:       "alpine:latest",
+		Command:     []string{},
+		Env:         map[string]string{},
+		Outputs:     []string{"/outputs"},
+		TimeoutSecs: 3600,
+		Executor:    domain.ExecutorTypeSwarm,
+	}
+	job2 := &domain.Job{
+		ID:          uuid.New(),
+		RunID:       run.ID,
+		CreatedBy:   "test-user",
+		Status:      domain.JobStatusPending,
+		Image:       "alpine:latest",
+		Command:     []string{},
+		Env:         map[string]string{},
+		Outputs:     []string{"/outputs"},
+		TimeoutSecs: 3600,
+		Executor:    domain.ExecutorTypeSwarm,
+	}
+
+	require.NoError(t, store.CreateJob(ctx, job1))
+	require.NoError(t, store.CreateJob(ctx, job2))
+
+	started1 := time.Now().Add(-2 * time.Minute)
+	finished1 := time.Now().Add(-1 * time.Minute)
+	job1.Status = domain.JobStatusSucceeded
+	job1.StartedAt = &started1
+	job1.FinishedAt = &finished1
+	require.NoError(t, store.UpdateJob(ctx, job1))
+
+	started2 := time.Now().Add(-90 * time.Second)
+	finished2 := time.Now().Add(-30 * time.Second)
+	job2.Status = domain.JobStatusCancelled
+	job2.StartedAt = &started2
+	job2.FinishedAt = &finished2
+	require.NoError(t, store.UpdateJob(ctx, job2))
+
+	require.NoError(t, store.RecomputeRunStatus(ctx, run.ID))
+
+	updatedRun, err := store.GetRun(ctx, run.ID)
+	require.NoError(t, err)
+	assert.Equal(t, domain.RunStatusCancelled, updatedRun.Status)
+	assert.NotNil(t, updatedRun.StartedAt)
+	assert.NotNil(t, updatedRun.FinishedAt)
+	assert.WithinDuration(t, started1, *updatedRun.StartedAt, time.Second)
+	assert.WithinDuration(t, finished2, *updatedRun.FinishedAt, time.Second)
+}

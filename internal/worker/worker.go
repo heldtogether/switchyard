@@ -185,6 +185,8 @@ func (w *Worker) recoverOrphanedJobs() error {
 
 	w.logger.Info("found orphaned jobs", "count", len(jobs))
 
+	updatedRuns := make(map[uuid.UUID]struct{})
+
 	for _, job := range jobs {
 		logger := w.logger.With("job_id", job.ID)
 
@@ -194,6 +196,8 @@ func (w *Worker) recoverOrphanedJobs() error {
 			msg := "worker crashed before job started"
 			if err := w.store.UpdateJobStatus(w.ctx, job.ID, "FAILED", &msg); err != nil {
 				logger.Error("failed to update orphaned job", "error", err)
+			} else {
+				updatedRuns[job.RunID] = struct{}{}
 			}
 			continue
 		}
@@ -239,6 +243,14 @@ func (w *Worker) recoverOrphanedJobs() error {
 
 		if err := w.store.UpdateJob(w.ctx, job); err != nil {
 			logger.Error("failed to update recovered job", "error", err)
+		} else {
+			updatedRuns[job.RunID] = struct{}{}
+		}
+	}
+
+	for runID := range updatedRuns {
+		if err := w.store.RecomputeRunStatus(w.ctx, runID); err != nil {
+			w.logger.Error("failed to recompute run status after recovery", "run_id", runID, "error", err)
 		}
 	}
 
