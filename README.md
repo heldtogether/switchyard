@@ -22,6 +22,24 @@ make build
 ./bin/api -config config.yaml
 ./bin/worker -config config.yaml
 ```
+### UI (Local Dev)
+```bash
+cd ui
+npm install
+npm run dev
+```
+Then open `http://localhost:5173`.
+
+### UI (Docker)
+```bash
+docker build -f build/ui.Dockerfile -t switchyard-ui:latest .
+docker run -p 3000:80 \
+  -e UI_API_BASE_URL=http://localhost:8080 \
+  -e UI_API_KEY=your-api-key \
+  -e UI_WORKSPACE_SLUG=default \
+  -e UI_USE_MOCKS=false \
+  switchyard-ui:latest
+```
 For deployment and ops, see `deployments/README.md` and `deployments/DEPLOYMENT.md`.
 
 ## Repository Structure
