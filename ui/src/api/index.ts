@@ -12,13 +12,14 @@ import { Artefact, Job, Project, Promotion, Run } from "../models/types";
 const WORKSPACE = import.meta.env.VITE_WORKSPACE_SLUG ?? "default";
 const AGGREGATE_LIMIT = Number(import.meta.env.VITE_AGGREGATE_LIMIT ?? 5);
 
-function mapRun(run: any, index: number): Run {
+function mapRun(run: any, index?: number): Run {
   const metadata = run.metadata ?? {};
+  const computedNumber = metadata.run_number ?? (typeof index === "number" ? index + 1 : 0);
   return {
     id: run.id,
     project_id: run.project_id,
     slug: run.slug ?? run.id,
-    run_number: metadata.run_number ?? index + 1,
+    run_number: computedNumber,
     name: run.name,
     status: run.status,
     created_by: run.created_by ?? "system",
@@ -105,7 +106,7 @@ export async function getRun(projectSlug: string, runSlug: string): Promise<Run>
     const res = await fetchJson<any>(
       `/v1/workspaces/${WORKSPACE}/projects/${projectSlug}/runs/${runSlug}`
     );
-    return mapRun(res, 0);
+    return mapRun(res);
   } catch (error) {
     if (shouldUseMocks(error)) {
       const run = mockRuns.find((r) => r.slug === runSlug || r.id === runSlug);
@@ -275,4 +276,32 @@ export async function listAllArtefacts() {
     })
   );
   return entries.flat();
+}
+
+export async function createRun(projectSlug: string, payload: { slug: string; name: string; description?: string; metadata?: Record<string, any> }) {
+  try {
+    return await fetchJson<any>(
+      `/v1/workspaces/${WORKSPACE}/projects/${projectSlug}/runs`,
+      {
+        method: "POST",
+        body: JSON.stringify(payload)
+      }
+    );
+  } catch (error) {
+    throw error;
+  }
+}
+
+export async function createJob(projectSlug: string, runSlug: string, payload: any) {
+  try {
+    return await fetchJson<any>(
+      `/v1/workspaces/${WORKSPACE}/projects/${projectSlug}/runs/${runSlug}/jobs`,
+      {
+        method: "POST",
+        body: JSON.stringify(payload)
+      }
+    );
+  } catch (error) {
+    throw error;
+  }
 }

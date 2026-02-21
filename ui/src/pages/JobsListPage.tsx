@@ -105,7 +105,7 @@ export function JobsListPage() {
                   <StatusPill status={job.status} />
                 </DataTableCell>
                 <DataTableCell>
-                  <div className="text-sm font-semibold text-ink-900">#{job.run_number}</div>
+                  <div className="text-sm font-semibold text-ink-900">{job.run_slug}</div>
                 </DataTableCell>
                 <DataTableCell>{formatDurationMs(job.duration)}</DataTableCell>
                 <DataTableCell>{job.executor_type}</DataTableCell>

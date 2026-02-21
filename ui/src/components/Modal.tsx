@@ -13,7 +13,7 @@ export function Modal({ open, title, description, onClose, children, footer }: M
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40 p-6">
-      <div className="w-full max-w-lg rounded-xl bg-white shadow-float">
+      <div className="flex w-full max-w-lg max-h-[85vh] flex-col rounded-xl bg-white shadow-float">
         <div className="border-b border-ink-100 px-6 py-4">
           <div className="flex items-start justify-between gap-4">
             <div>
@@ -30,7 +30,7 @@ export function Modal({ open, title, description, onClose, children, footer }: M
             </button>
           </div>
         </div>
-        <div className="px-6 py-5">{children}</div>
+        <div className="flex-1 overflow-auto px-6 py-5">{children}</div>
         {footer && <div className="border-t border-ink-100 px-6 py-4">{footer}</div>}
       </div>
     </div>

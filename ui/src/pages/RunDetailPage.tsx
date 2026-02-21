@@ -73,7 +73,7 @@ export function RunDetailPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title={`Run #${runQuery.data?.run_number ?? "—"} · ${runQuery.data?.name ?? ""}`}
+        title={`Run · ${runQuery.data?.name ?? runQuery.data?.slug ?? runSlug}`}
         subtitle={`Created by ${runQuery.data?.created_by ?? "system"}`}
         meta={
           <div className="flex flex-wrap gap-4 text-xs text-ink-500">

@@ -45,3 +45,7 @@ VITE_AGGREGATE_LIMIT=5
 **Mocked / client-side only:**
 - Promotions (stored in `localStorage`)
 - Run tags, run number, triggers (read from `metadata` when present)
+
+**Write endpoints used:**
+- `POST /v1/workspaces/:workspace/projects/:projectSlug/runs`
+- `POST /v1/workspaces/:workspace/projects/:projectSlug/runs/:runSlug/jobs`

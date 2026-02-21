@@ -8,12 +8,14 @@ import { StatusPill } from "../components/StatusPill";
 import { EmptyState } from "../components/EmptyState";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { RelativeTime } from "../components/RelativeTime";
+import { NewRunModal } from "./NewRunModal";
 
 export function ProjectRunsPage() {
   const { projectSlug = "" } = useParams();
   const navigate = useNavigate();
   const [statusFilter, setStatusFilter] = useState("all");
   const [search, setSearch] = useState("");
+  const [newRunOpen, setNewRunOpen] = useState(false);
 
   const projectQuery = useQuery({
     queryKey: ["project", projectSlug],
@@ -36,7 +38,7 @@ export function ProjectRunsPage() {
       const matchesStatus = statusFilter === "all" || run.status === statusFilter;
       const matchesSearch =
         run.name?.toLowerCase().includes(search.toLowerCase()) ||
-        run.run_number.toString().includes(search);
+        run.slug?.toLowerCase().includes(search.toLowerCase());
       return matchesStatus && matchesSearch;
     });
   }, [runsQuery.data, statusFilter, search]);
@@ -51,6 +53,15 @@ export function ProjectRunsPage() {
             <span>Runs: {runsQuery.data?.length ?? 0}</span>
             <span>Updated: <RelativeTime value={projectQuery.data?.updated_at} /></span>
           </div>
+        }
+        actions={
+          <button
+            type="button"
+            onClick={() => setNewRunOpen(true)}
+            className="rounded-full bg-ink-900 px-4 py-2 text-sm font-semibold text-white"
+          >
+            New Run
+          </button>
         }
       />
 
@@ -128,8 +139,8 @@ export function ProjectRunsPage() {
                 onClick={() => navigate(`/${projectSlug}/${run.slug}`)}
               >
                 <DataTableCell>
-                  <div className="font-semibold text-ink-900">#{run.run_number}</div>
-                  <div className="text-xs text-ink-500">{run.name}</div>
+                  <div className="font-semibold text-ink-900">{run.name ?? run.slug}</div>
+                  <div className="text-xs text-ink-500">{run.slug}</div>
                 </DataTableCell>
                 <DataTableCell>
                   <StatusPill status={run.status} />
@@ -153,6 +164,16 @@ export function ProjectRunsPage() {
           </DataTableBody>
         </DataTable>
       )}
+
+      <NewRunModal
+        open={newRunOpen}
+        projectSlug={projectSlug}
+        onClose={() => setNewRunOpen(false)}
+        onSuccess={(runSlug) => {
+          runsQuery.refetch();
+          navigate(`/${projectSlug}/${runSlug}`);
+        }}
+      />
     </div>
   );
 }

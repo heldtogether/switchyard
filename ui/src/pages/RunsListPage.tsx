@@ -32,7 +32,7 @@ export function RunsListPage() {
       .filter((run) => (projectFilter === "all" ? true : run.project_slug === projectFilter))
       .filter((run) =>
         run.name?.toLowerCase().includes(search.toLowerCase()) ||
-        run.run_number.toString().includes(search)
+        run.slug?.toLowerCase().includes(search.toLowerCase())
       );
   }, [runsQuery.data, statusFilter, projectFilter, search]);
 
@@ -103,8 +103,8 @@ export function RunsListPage() {
                 onClick={() => navigate(`/${run.project_slug}/${run.slug}`)}
               >
                 <DataTableCell>
-                  <div className="font-semibold text-ink-900">#{run.run_number}</div>
-                  <div className="text-xs text-ink-500">{run.name}</div>
+                  <div className="font-semibold text-ink-900">{run.name ?? run.slug}</div>
+                  <div className="text-xs text-ink-500">{run.slug}</div>
                 </DataTableCell>
                 <DataTableCell>
                   <StatusPill status={run.status} />
