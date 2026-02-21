@@ -75,6 +75,9 @@ func (s *Server) Start() error {
 		handler = AuthMiddleware(s.cfg.API.Auth.APIKey, s.logger)(handler)
 	}
 
+	// Add CORS middleware (wrap outermost so OPTIONS preflight is handled)
+	handler = CORSMiddleware()(handler)
+
 	// Create HTTP server
 	addr := fmt.Sprintf("%s:%d", s.cfg.API.Host, s.cfg.API.Port)
 	s.httpServer = &http.Server{
