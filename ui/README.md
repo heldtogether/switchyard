@@ -16,10 +16,20 @@ VITE_API_BASE_URL=http://localhost:8080
 VITE_API_KEY=your-api-key
 VITE_WORKSPACE_SLUG=default
 VITE_USE_MOCKS=true
+VITE_AGGREGATE_LIMIT=5
 ```
 
 - Set `VITE_USE_MOCKS=false` to hit real endpoints.
 - `VITE_API_KEY` is sent as `X-API-Key`.
+
+## Routes
+- `/` Projects list
+- `/projects/:projectSlug` Project runs list
+- `/runs` Runs list (all projects)
+- `/jobs` Jobs list (all projects)
+- `/artefacts` Artefacts list (all projects)
+- `/:projectSlug/:runSlug` Run detail
+- `/:projectSlug/:runSlug/:jobId` Job detail
 
 ## Endpoints used
 **Real endpoints (available in API):**

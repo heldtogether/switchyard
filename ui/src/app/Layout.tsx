@@ -3,7 +3,7 @@ import { NavLink } from "react-router-dom";
 import clsx from "clsx";
 
 const navItems = [
-  { label: "Projects", to: "/projects" },
+  { label: "Projects", to: "/" },
   { label: "Runs", to: "/runs" },
   { label: "Jobs", to: "/jobs" },
   { label: "Artefacts", to: "/artefacts" },
@@ -47,6 +47,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 <NavLink
                   key={item.to}
                   to={item.to}
+                  end={item.to === "/"}
                   className={({ isActive }) =>
                     clsx(
                       "rounded-lg px-3 py-2 text-sm font-medium",

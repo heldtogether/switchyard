@@ -141,7 +141,7 @@ export function RunDetailPage() {
                   <tr
                     key={job.id}
                     className="cursor-pointer hover:bg-ink-50"
-                    onClick={() => navigate(`/projects/${projectSlug}/runs/${runSlug}/jobs/${job.id}`)}
+                    onClick={() => navigate(`/${projectSlug}/${runSlug}/${job.id}`)}
                   >
                     <DataTableCell>
                       <div className="font-semibold text-ink-900">{job.name}</div>
@@ -177,7 +177,7 @@ export function RunDetailPage() {
                   <tr
                     key={job.id}
                     className="cursor-pointer hover:bg-ink-50"
-                    onClick={() => navigate(`/projects/${projectSlug}/runs/${runSlug}/jobs/${job.id}`)}
+                    onClick={() => navigate(`/${projectSlug}/${runSlug}/${job.id}`)}
                   >
                     <DataTableCell>
                       <div className="font-semibold text-ink-900">{job.name}</div>

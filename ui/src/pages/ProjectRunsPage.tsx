@@ -125,7 +125,7 @@ export function ProjectRunsPage() {
               <tr
                 key={run.id}
                 className="cursor-pointer hover:bg-ink-50"
-                onClick={() => navigate(`/projects/${projectSlug}/runs/${run.slug}`)}
+                onClick={() => navigate(`/${projectSlug}/${run.slug}`)}
               >
                 <DataTableCell>
                   <div className="font-semibold text-ink-900">#{run.run_number}</div>

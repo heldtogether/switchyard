@@ -10,6 +10,7 @@ import {
 import { Artefact, Job, Project, Promotion, Run } from "../models/types";
 
 const WORKSPACE = import.meta.env.VITE_WORKSPACE_SLUG ?? "default";
+const AGGREGATE_LIMIT = Number(import.meta.env.VITE_AGGREGATE_LIMIT ?? 5);
 
 function mapRun(run: any, index: number): Run {
   const metadata = run.metadata ?? {};
@@ -153,7 +154,12 @@ export async function getJobLogs(projectSlug: string, runSlug: string, jobId: st
         ...(import.meta.env.VITE_API_KEY ? { "X-API-Key": import.meta.env.VITE_API_KEY } : {})
       }
     });
-    if (!res.ok) throw new Error(res.statusText);
+    if (!res.ok) {
+      if (res.status === 404 || res.status === 501) {
+        return mockLogs(jobId);
+      }
+      throw new ApiError(res.statusText, res.status);
+    }
     return res.text();
   } catch (error) {
     if (shouldUseMocks(error)) return mockLogs(jobId);
@@ -195,4 +201,78 @@ export function savePromotion(promo: Promotion) {
   const list = raw ? (JSON.parse(raw) as Promotion[]) : mockPromotions;
   const next = [promo, ...list.filter((p) => !(p.project_id === promo.project_id && p.channel === promo.channel))];
   localStorage.setItem(PROMO_KEY, JSON.stringify(next));
+}
+
+export async function listAllRuns() {
+  const projects = await listProjects();
+  const limited = projects.slice(0, AGGREGATE_LIMIT);
+  const entries = await Promise.all(
+    limited.map(async (project) => ({
+      project,
+      runs: await listRuns(project.slug)
+    }))
+  );
+  return entries.flatMap(({ project, runs }) =>
+    runs.map((run) => ({ ...run, project_slug: project.slug, project_name: project.name }))
+  );
+}
+
+export async function listAllJobs() {
+  const projects = await listProjects();
+  const limited = projects.slice(0, AGGREGATE_LIMIT);
+  const entries = await Promise.all(
+    limited.map(async (project) => {
+      const runs = await listRuns(project.slug);
+      const runEntries = await Promise.all(
+        runs.slice(0, AGGREGATE_LIMIT).map(async (run) => ({
+          run,
+          jobs: await listJobs(project.slug, run.slug)
+        }))
+      );
+      return runEntries.flatMap(({ run, jobs }) =>
+        jobs.map((job) => ({
+          ...job,
+          project_slug: project.slug,
+          project_name: project.name,
+          run_slug: run.slug,
+          run_number: run.run_number
+        }))
+      );
+    })
+  );
+  return entries.flat();
+}
+
+export async function listAllArtefacts() {
+  const projects = await listProjects();
+  const limited = projects.slice(0, AGGREGATE_LIMIT);
+  const entries = await Promise.all(
+    limited.map(async (project) => {
+      const runs = await listRuns(project.slug);
+      const jobEntries = await Promise.all(
+        runs.slice(0, AGGREGATE_LIMIT).map(async (run) => {
+          const jobs = await listJobs(project.slug, run.slug);
+          const artefactEntries = await Promise.all(
+            jobs.slice(0, AGGREGATE_LIMIT).map(async (job) => ({
+              job,
+              run,
+              artefacts: await listArtefacts(project.slug, run.slug, job.id)
+            }))
+          );
+          return artefactEntries.flatMap(({ job, run, artefacts }) =>
+            artefacts.map((art) => ({
+              ...art,
+              project_slug: project.slug,
+              project_name: project.name,
+              run_slug: run.slug,
+              run_number: run.run_number,
+              job_name: job.name
+            }))
+          );
+        })
+      );
+      return jobEntries.flat();
+    })
+  );
+  return entries.flat();
 }
