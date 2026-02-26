@@ -12,6 +12,11 @@ import (
 func AuthMiddleware(apiKey string, logger *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/healthz" || r.URL.Path == "/readyz" {
+				next.ServeHTTP(w, r)
+				return
+			}
+
 			// Check API key in header
 			providedKey := r.Header.Get("X-API-Key")
 			if providedKey == "" {
