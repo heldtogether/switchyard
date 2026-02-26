@@ -16,4 +16,5 @@ WORKDIR /usr/share/nginx/html
 COPY build/nginx.conf /etc/nginx/conf.d/default.conf
 COPY build/ui-entrypoint.sh /usr/local/bin/ui-entrypoint.sh
 COPY --from=build /app/dist ./
-ENTRYPOINT [\"/usr/local/bin/ui-entrypoint.sh\"]
+RUN chmod +x /usr/local/bin/ui-entrypoint.sh
+ENTRYPOINT ["/usr/local/bin/ui-entrypoint.sh"]
