@@ -1,7 +1,8 @@
 import React, { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Modal } from "../components/Modal";
 import { slugify } from "../utils/slug";
-import { createJob, createRun } from "../api";
+import { createJob, createRun, listRegistrySecrets } from "../api";
 
 interface JobDraft {
   name: string;
@@ -12,6 +13,7 @@ interface JobDraft {
   cpu: string;
   memory: string;
   timeout: string;
+  registrySecretId?: string;
 }
 
 interface NewRunModalProps {
@@ -41,6 +43,14 @@ export function NewRunModal({ open, projectSlug, onClose, onSuccess }: NewRunMod
   const [slugTouched, setSlugTouched] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const registrySecretsQuery = useQuery({
+    queryKey: ["registry-secrets"],
+    queryFn: listRegistrySecrets,
+    enabled: open
+  });
+
+  const registrySecrets = registrySecretsQuery.data ?? [];
 
   const derivedSlug = useMemo(() => (slugTouched ? slug : slugify(name)), [slugTouched, slug, name]);
 
@@ -112,6 +122,9 @@ export function NewRunModal({ open, projectSlug, onClose, onSuccess }: NewRunMod
           resources: job.cpu || job.memory ? { cpu: job.cpu || undefined, memory: job.memory || undefined } : undefined,
           timeout_seconds: job.timeout ? Number(job.timeout) : undefined
         };
+        if (job.registrySecretId) {
+          payload.registry_secret_id = job.registrySecretId;
+        }
         try {
           await createJob(projectSlug, derivedSlug, payload);
         } catch (jobErr) {
@@ -235,6 +248,30 @@ export function NewRunModal({ open, projectSlug, onClose, onSuccess }: NewRunMod
                   onChange={(event) => updateJob(index, { image: event.target.value })}
                   placeholder="Image (required)"
                 />
+                <div>
+                  <label className="text-xs uppercase tracking-[0.2em] text-ink-400">Registry Secret</label>
+                  <select
+                    className="mt-2 w-full rounded-lg border border-ink-200 px-3 py-2 text-sm"
+                    value={job.registrySecretId ?? ""}
+                    onChange={(event) => updateJob(index, { registrySecretId: event.target.value || undefined })}
+                    disabled={registrySecretsQuery.isLoading || registrySecrets.length === 0}
+                  >
+                    <option value="">None</option>
+                    {registrySecrets.map((secret) => (
+                      <option key={secret.id} value={secret.id}>
+                        {secret.host} / {secret.username}
+                      </option>
+                    ))}
+                  </select>
+                  {registrySecretsQuery.isError && (
+                    <div className="mt-1 text-xs text-danger">Failed to load registry secrets.</div>
+                  )}
+                  {!registrySecretsQuery.isLoading && registrySecrets.length === 0 && (
+                    <div className="mt-1 text-xs text-ink-400">
+                      No registry secrets available. Add one via the API to pull private images.
+                    </div>
+                  )}
+                </div>
               </div>
               <div className="mt-3">
                 <input

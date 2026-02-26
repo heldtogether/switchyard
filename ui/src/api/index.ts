@@ -280,6 +280,20 @@ export async function listAllArtefacts() {
   return entries.flat();
 }
 
+export type RegistrySecret = {
+  id: string;
+  created_at: string;
+  created_by: string;
+  host: string;
+  username: string;
+  active: boolean;
+};
+
+export async function listRegistrySecrets(): Promise<RegistrySecret[]> {
+  const data = await fetchJson<{ registry_secrets: RegistrySecret[] }>(`/v1/workspaces/${WORKSPACE}/registry-secrets`);
+  return data.registry_secrets ?? [];
+}
+
 export async function createRun(projectSlug: string, payload: { slug: string; name: string; description?: string; metadata?: Record<string, any> }) {
   try {
     return await fetchJson<any>(
