@@ -193,7 +193,7 @@ func TestProcessor_Process_Success(t *testing.T) {
 	mockStorage := new(MockStorage)
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	processor := NewProcessor(mockStore, mockExecutor, mockStorage, logger, "http://localhost:8080", "test-bucket")
+	processor := NewProcessor(mockStore, mockExecutor, mockStorage, logger, "http://localhost:8080", "test-bucket", "")
 
 	// Setup expectations
 	mockStore.On("GetJob", ctx, job.ID).Return(job, nil)
@@ -254,7 +254,7 @@ func TestProcessor_Process_FailedExitCode(t *testing.T) {
 	mockStorage := new(MockStorage)
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	processor := NewProcessor(mockStore, mockExecutor, mockStorage, logger, "http://localhost:8080", "test-bucket")
+	processor := NewProcessor(mockStore, mockExecutor, mockStorage, logger, "http://localhost:8080", "test-bucket", "")
 
 	// Setup expectations
 	mockStore.On("GetJob", ctx, job.ID).Return(job, nil)
@@ -309,7 +309,7 @@ func TestProcessor_Process_Timeout(t *testing.T) {
 	mockStorage := new(MockStorage)
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	processor := NewProcessor(mockStore, mockExecutor, mockStorage, logger, "http://localhost:8080", "test-bucket")
+	processor := NewProcessor(mockStore, mockExecutor, mockStorage, logger, "http://localhost:8080", "test-bucket", "")
 
 	// Setup expectations
 	mockStore.On("GetJob", ctx, job.ID).Return(job, nil)
@@ -357,7 +357,7 @@ func TestProcessor_Process_ExecutorCreateFailure(t *testing.T) {
 	mockStorage := new(MockStorage)
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	processor := NewProcessor(mockStore, mockExecutor, mockStorage, logger, "http://localhost:8080", "test-bucket")
+	processor := NewProcessor(mockStore, mockExecutor, mockStorage, logger, "http://localhost:8080", "test-bucket", "")
 
 	// Setup expectations
 	mockStore.On("GetJob", ctx, job.ID).Return(job, nil)
@@ -397,7 +397,7 @@ func TestProcessor_Process_GetJobFailure(t *testing.T) {
 	mockStorage := new(MockStorage)
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	processor := NewProcessor(mockStore, mockExecutor, mockStorage, logger, "http://localhost:8080", "test-bucket")
+	processor := NewProcessor(mockStore, mockExecutor, mockStorage, logger, "http://localhost:8080", "test-bucket", "")
 
 	// Job not found
 	mockStore.On("GetJob", ctx, jobID).Return(nil, errors.New("job not found"))
@@ -421,7 +421,7 @@ func TestProcessor_Process_LogUploadFailure_NonFatal(t *testing.T) {
 	mockStorage := new(MockStorage)
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	processor := NewProcessor(mockStore, mockExecutor, mockStorage, logger, "http://localhost:8080", "test-bucket")
+	processor := NewProcessor(mockStore, mockExecutor, mockStorage, logger, "http://localhost:8080", "test-bucket", "")
 
 	// Setup expectations
 	mockStore.On("GetJob", ctx, job.ID).Return(job, nil)
@@ -478,7 +478,7 @@ func TestProcessor_Process_ArtefactCollectionFailure_NonFatal(t *testing.T) {
 	mockStorage := new(MockStorage)
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	processor := NewProcessor(mockStore, mockExecutor, mockStorage, logger, "http://localhost:8080", "test-bucket")
+	processor := NewProcessor(mockStore, mockExecutor, mockStorage, logger, "http://localhost:8080", "test-bucket", "")
 
 	// Setup expectations
 	mockStore.On("GetJob", ctx, job.ID).Return(job, nil)
@@ -531,7 +531,7 @@ func TestProcessor_Process_NoArtefactsOnFailedJob(t *testing.T) {
 	mockStorage := new(MockStorage)
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	processor := NewProcessor(mockStore, mockExecutor, mockStorage, logger, "http://localhost:8080", "test-bucket")
+	processor := NewProcessor(mockStore, mockExecutor, mockStorage, logger, "http://localhost:8080", "test-bucket", "")
 
 	// Setup expectations
 	mockStore.On("GetJob", ctx, job.ID).Return(job, nil)

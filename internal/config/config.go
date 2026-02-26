@@ -10,14 +10,15 @@ import (
 
 // Config represents the complete application configuration
 type Config struct {
-	API      APIConfig      `yaml:"api"`
-	Worker   WorkerConfig   `yaml:"worker"`
-	Database DatabaseConfig `yaml:"database"`
-	Queue    QueueConfig    `yaml:"queue"`
-	Storage  StorageConfig  `yaml:"storage"`
-	Executor ExecutorConfig `yaml:"executor"`
-	Logging  LoggingConfig  `yaml:"logging"`
-	Metrics  MetricsConfig  `yaml:"metrics"`
+	API       APIConfig       `yaml:"api"`
+	Worker    WorkerConfig    `yaml:"worker"`
+	Database  DatabaseConfig  `yaml:"database"`
+	Queue     QueueConfig     `yaml:"queue"`
+	Storage   StorageConfig   `yaml:"storage"`
+	Executor  ExecutorConfig  `yaml:"executor"`
+	Scheduler SchedulerConfig `yaml:"scheduler"`
+	Logging   LoggingConfig   `yaml:"logging"`
+	Metrics   MetricsConfig   `yaml:"metrics"`
 }
 
 // APIConfig holds API server configuration
@@ -38,9 +39,15 @@ type AuthConfig struct {
 
 // WorkerConfig holds worker configuration
 type WorkerConfig struct {
-	Concurrency      int           `yaml:"concurrency"`
-	PollInterval     time.Duration `yaml:"poll_interval"`
-	GracefulShutdown time.Duration `yaml:"graceful_shutdown"`
+	Concurrency       int           `yaml:"concurrency"`
+	PollInterval      time.Duration `yaml:"poll_interval"`
+	GracefulShutdown  time.Duration `yaml:"graceful_shutdown"`
+	HeartbeatInterval time.Duration `yaml:"heartbeat_interval"`
+	NodeID            string        `yaml:"node_id"`
+	GPUCount          int           `yaml:"gpu_count"`
+	RetryBaseDelay    time.Duration `yaml:"retry_base_delay"`
+	RetryMaxDelay     time.Duration `yaml:"retry_max_delay"`
+	RetryJitter       float64       `yaml:"retry_jitter"`
 }
 
 // DatabaseConfig holds database configuration
@@ -53,9 +60,21 @@ type DatabaseConfig struct {
 
 // QueueConfig holds queue configuration
 type QueueConfig struct {
-	Type      string `yaml:"type"` // redis
-	URL       string `yaml:"url"`
-	QueueName string `yaml:"queue_name"`
+	Type            string        `yaml:"type"` // redis, rabbitmq
+	URL             string        `yaml:"url"`
+	QueueName       string        `yaml:"queue_name"`
+	Exchange        string        `yaml:"exchange"`
+	DelayExchange   string        `yaml:"delay_exchange"`
+	TaskTimeout     time.Duration `yaml:"task_timeout"`
+	MaxPriority     int           `yaml:"max_priority"`
+	RequeueInterval time.Duration `yaml:"requeue_interval"`
+	RequeueBatch    int           `yaml:"requeue_batch"`
+}
+
+// SchedulerConfig holds scheduler/reaper configuration
+type SchedulerConfig struct {
+	ReaperInterval   time.Duration `yaml:"reaper_interval"`
+	HeartbeatTimeout time.Duration `yaml:"heartbeat_timeout"`
 }
 
 // StorageConfig holds object storage configuration
@@ -178,6 +197,48 @@ func applyEnvOverrides(cfg *Config) {
 	if v := os.Getenv("REDIS_URL"); v != "" {
 		cfg.Queue.URL = v
 	}
+	if v := os.Getenv("QUEUE_URL"); v != "" {
+		cfg.Queue.URL = v
+	}
+	if v := os.Getenv("QUEUE_TYPE"); v != "" {
+		cfg.Queue.Type = v
+	}
+	if v := os.Getenv("QUEUE_EXCHANGE"); v != "" {
+		cfg.Queue.Exchange = v
+	}
+	if v := os.Getenv("QUEUE_DELAY_EXCHANGE"); v != "" {
+		cfg.Queue.DelayExchange = v
+	}
+	if v := os.Getenv("QUEUE_NAME"); v != "" {
+		cfg.Queue.QueueName = v
+	}
+	if v := os.Getenv("QUEUE_TASK_TIMEOUT"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			cfg.Queue.TaskTimeout = d
+		}
+	}
+	if v := os.Getenv("QUEUE_MAX_PRIORITY"); v != "" {
+		fmt.Sscanf(v, "%d", &cfg.Queue.MaxPriority)
+	}
+	if v := os.Getenv("QUEUE_REQUEUE_INTERVAL"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			cfg.Queue.RequeueInterval = d
+		}
+	}
+	if v := os.Getenv("QUEUE_REQUEUE_BATCH"); v != "" {
+		fmt.Sscanf(v, "%d", &cfg.Queue.RequeueBatch)
+	}
+
+	if v := os.Getenv("SCHEDULER_REAPER_INTERVAL"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			cfg.Scheduler.ReaperInterval = d
+		}
+	}
+	if v := os.Getenv("SCHEDULER_HEARTBEAT_TIMEOUT"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			cfg.Scheduler.HeartbeatTimeout = d
+		}
+	}
 
 	// S3
 	if v := os.Getenv("S3_ENDPOINT"); v != "" {
@@ -216,6 +277,30 @@ func applyEnvOverrides(cfg *Config) {
 	// Worker
 	if v := os.Getenv("WORKER_CONCURRENCY"); v != "" {
 		fmt.Sscanf(v, "%d", &cfg.Worker.Concurrency)
+	}
+	if v := os.Getenv("WORKER_HEARTBEAT_INTERVAL"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			cfg.Worker.HeartbeatInterval = d
+		}
+	}
+	if v := os.Getenv("WORKER_NODE_ID"); v != "" {
+		cfg.Worker.NodeID = v
+	}
+	if v := os.Getenv("WORKER_GPU_COUNT"); v != "" {
+		fmt.Sscanf(v, "%d", &cfg.Worker.GPUCount)
+	}
+	if v := os.Getenv("WORKER_RETRY_BASE_DELAY"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			cfg.Worker.RetryBaseDelay = d
+		}
+	}
+	if v := os.Getenv("WORKER_RETRY_MAX_DELAY"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			cfg.Worker.RetryMaxDelay = d
+		}
+	}
+	if v := os.Getenv("WORKER_RETRY_JITTER"); v != "" {
+		fmt.Sscanf(v, "%f", &cfg.Worker.RetryJitter)
 	}
 
 	// Logging
@@ -263,6 +348,32 @@ func (c *Config) Validate() error {
 	if c.Queue.URL == "" {
 		return fmt.Errorf("queue URL is required")
 	}
+	if c.Queue.Type == "" {
+		c.Queue.Type = "redis"
+	}
+	if c.Queue.Type != "redis" && c.Queue.Type != "rabbitmq" {
+		return fmt.Errorf("invalid queue type: %s (must be 'redis' or 'rabbitmq')", c.Queue.Type)
+	}
+	if c.Queue.Type == "rabbitmq" {
+		if c.Queue.Exchange == "" {
+			return fmt.Errorf("queue exchange is required for rabbitmq")
+		}
+		if c.Queue.DelayExchange == "" {
+			return fmt.Errorf("queue delay_exchange is required for rabbitmq")
+		}
+		if c.Queue.QueueName == "" {
+			return fmt.Errorf("queue_name is required for rabbitmq")
+		}
+		if c.Queue.TaskTimeout == 0 {
+			return fmt.Errorf("queue task_timeout is required for rabbitmq")
+		}
+	}
+	if c.Queue.RequeueInterval == 0 {
+		c.Queue.RequeueInterval = 2 * time.Second
+	}
+	if c.Queue.RequeueBatch == 0 {
+		c.Queue.RequeueBatch = 100
+	}
 
 	// Storage validation
 	if c.Storage.Endpoint == "" {
@@ -292,6 +403,25 @@ func (c *Config) Validate() error {
 	// Worker validation
 	if c.Worker.Concurrency < 1 {
 		return fmt.Errorf("worker concurrency must be at least 1")
+	}
+	if c.Worker.HeartbeatInterval == 0 {
+		c.Worker.HeartbeatInterval = 10 * time.Second
+	}
+	if c.Worker.RetryBaseDelay == 0 {
+		c.Worker.RetryBaseDelay = 1 * time.Second
+	}
+	if c.Worker.RetryMaxDelay == 0 {
+		c.Worker.RetryMaxDelay = 30 * time.Second
+	}
+	if c.Worker.RetryJitter == 0 {
+		c.Worker.RetryJitter = 0.2
+	}
+
+	if c.Scheduler.ReaperInterval == 0 {
+		c.Scheduler.ReaperInterval = 30 * time.Second
+	}
+	if c.Scheduler.HeartbeatTimeout == 0 {
+		c.Scheduler.HeartbeatTimeout = 3 * c.Worker.HeartbeatInterval
 	}
 
 	return nil

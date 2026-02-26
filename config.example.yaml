@@ -24,6 +24,12 @@ worker:
   concurrency: 5              # Number of parallel jobs
   poll_interval: 1s           # How often to check for new jobs
   graceful_shutdown: 30s      # Wait time for jobs to finish on shutdown
+  heartbeat_interval: 10s     # Worker heartbeat interval
+  node_id: ""                 # Optional override (otherwise autodetect)
+  gpu_count: 0                # Optional override (otherwise autodetect)
+  retry_base_delay: 1s        # Base delay for Redis backoff
+  retry_max_delay: 30s        # Max delay for Redis backoff
+  retry_jitter: 0.2           # Jitter fraction (0.2 = ±20%)
 
 # ================================================================================
 # Database Configuration (Postgres)
@@ -35,12 +41,25 @@ database:
   conn_max_lifetime: 5m
 
 # ================================================================================
-# Queue Configuration (Redis)
+# Queue Configuration (Redis or RabbitMQ)
 # ================================================================================
 queue:
-  type: redis
-  url: "redis://redis:6379/0"
-  queue_name: "jobrunner:jobs"
+  type: rabbitmq
+  url: "amqp://rabbitmq:5672/"
+  queue_name: "switchyard.jobs"
+  exchange: "jobs"
+  delay_exchange: "jobs.delay"
+  task_timeout: 10s
+  max_priority: 10
+  requeue_interval: 2s        # Redis only: delay queue poll interval
+  requeue_batch: 100          # Redis only: max items to requeue per tick
+
+# ================================================================================
+# Scheduler / Reaper Configuration
+# ================================================================================
+scheduler:
+  reaper_interval: 30s        # How often to check for stale nodes
+  heartbeat_timeout: 30s      # If 0, defaults to 3x worker.heartbeat_interval
 
 # ================================================================================
 # Object Storage Configuration (S3-compatible)

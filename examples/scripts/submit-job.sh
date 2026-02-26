@@ -5,6 +5,9 @@ set -e
 
 API_URL="${API_URL:-http://localhost:8080}"
 API_KEY="${API_KEY:-your-api-key}"
+WORKSPACE_SLUG="${WORKSPACE_SLUG:-default}"
+PROJECT_SLUG="${PROJECT_SLUG:-test-project}"
+RUN_SLUG="${RUN_SLUG:-test-run}"
 
 echo "Submitting example job to $API_URL..."
 
@@ -12,7 +15,7 @@ echo "Submitting example job to $API_URL..."
 # and include: SWITCHYARD_JOB_ID, SWITCHYARD_JOB_CREATED_AT, SWITCHYARD_JOB_TIMEOUT,
 # SWITCHYARD_EXECUTOR_TYPE, SWITCHYARD_IMAGE, SWITCHYARD_OUTPUTS_DIR, SWITCHYARD_BUCKET,
 # SWITCHYARD_VERSION, SWITCHYARD_API_URL, and resource limits
-RESPONSE=$(curl -s -X POST "$API_URL/v1/jobs" \
+RESPONSE=$(curl -s -X POST "$API_URL/v1/workspaces/$WORKSPACE_SLUG/projects/$PROJECT_SLUG/runs/$RUN_SLUG/jobs" \
   -H "X-API-Key: $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -24,7 +27,8 @@ RESPONSE=$(curl -s -X POST "$API_URL/v1/jobs" \
     "outputs": ["/outputs"],
     "resources": {
       "cpu": "0.5",
-      "memory": "512m"
+      "memory": "512m",
+      "gpu": 2
     },
     "timeout_seconds": 300,
     "metadata": {

@@ -41,9 +41,9 @@ func (s *Store) CreateJob(ctx context.Context, job *domain.Job) error {
 	query := `
 		INSERT INTO jobs (
 			id, run_id, name, created_by, status, image, image_digest, command, env,
-			cpu_limit, memory_limit, timeout_seconds, outputs,
-			executor, metadata, registry_secret_id
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+			cpu_limit, memory_limit, gpu_count, timeout_seconds, outputs,
+			executor, metadata, registry_secret_id, assigned_node_id
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
 		RETURNING created_at, updated_at
 	`
 
@@ -54,8 +54,8 @@ func (s *Store) CreateJob(ctx context.Context, job *domain.Job) error {
 
 	err := s.db.QueryRowContext(ctx, query,
 		job.ID, job.RunID, job.Name, job.CreatedBy, job.Status, job.Image, job.ImageDigest,
-		commandJSON, envJSON, job.CPULimit, job.MemoryLimit, job.TimeoutSecs,
-		outputsJSON, job.Executor, metadataJSON, job.RegistrySecretID,
+		commandJSON, envJSON, job.CPULimit, job.MemoryLimit, job.GPUCount, job.TimeoutSecs,
+		outputsJSON, job.Executor, metadataJSON, job.RegistrySecretID, job.AssignedNodeID,
 	).Scan(&job.CreatedAt, &job.UpdatedAt)
 
 	return err
@@ -65,9 +65,9 @@ func (s *Store) CreateJob(ctx context.Context, job *domain.Job) error {
 func (s *Store) GetJob(ctx context.Context, id uuid.UUID) (*domain.Job, error) {
 	query := `
 		SELECT id, run_id, name, created_at, updated_at, created_by, status, status_message,
-		       image, image_digest, command, env, cpu_limit, memory_limit, timeout_seconds,
+		       image, image_digest, command, env, cpu_limit, memory_limit, gpu_count, timeout_seconds,
 		       outputs, started_at, finished_at, exit_code, artefact_prefix, log_object_key,
-		       executor, executor_ref, executor_metadata, registry_secret_id, metadata
+		       executor, executor_ref, executor_metadata, registry_secret_id, metadata, assigned_node_id
 		FROM jobs WHERE id = $1
 	`
 
@@ -77,10 +77,10 @@ func (s *Store) GetJob(ctx context.Context, id uuid.UUID) (*domain.Job, error) {
 	err := s.db.QueryRowContext(ctx, query, id).Scan(
 		&job.ID, &job.RunID, &job.Name, &job.CreatedAt, &job.UpdatedAt, &job.CreatedBy,
 		&job.Status, &job.StatusMessage, &job.Image, &job.ImageDigest,
-		&commandJSON, &envJSON, &job.CPULimit, &job.MemoryLimit, &job.TimeoutSecs,
+		&commandJSON, &envJSON, &job.CPULimit, &job.MemoryLimit, &job.GPUCount, &job.TimeoutSecs,
 		&outputsJSON, &job.StartedAt, &job.FinishedAt, &job.ExitCode,
 		&job.ArtefactPrefix, &job.LogObjectKey, &job.Executor, &job.ExecutorRef,
-		&execMetadataJSON, &job.RegistrySecretID, &metadataJSON,
+		&execMetadataJSON, &job.RegistrySecretID, &metadataJSON, &job.AssignedNodeID,
 	)
 
 	if err == sql.ErrNoRows {
@@ -139,9 +139,9 @@ func (s *Store) UpdateJob(ctx context.Context, job *domain.Job) error {
 func (s *Store) ListJobs(ctx context.Context, runID *uuid.UUID, status *domain.JobStatus, createdBy *string, limit, offset int) ([]*domain.Job, error) {
 	query := `
 		SELECT id, run_id, name, created_at, updated_at, created_by, status, status_message,
-		       image, image_digest, command, env, cpu_limit, memory_limit, timeout_seconds,
+		       image, image_digest, command, env, cpu_limit, memory_limit, gpu_count, timeout_seconds,
 		       outputs, started_at, finished_at, exit_code, artefact_prefix, log_object_key,
-		       executor, executor_ref, executor_metadata, registry_secret_id, metadata
+		       executor, executor_ref, executor_metadata, registry_secret_id, metadata, assigned_node_id
 		FROM jobs
 		WHERE ($1::UUID IS NULL OR run_id = $1)
 		  AND ($2::job_status IS NULL OR status = $2)
@@ -164,10 +164,10 @@ func (s *Store) ListJobs(ctx context.Context, runID *uuid.UUID, status *domain.J
 		err := rows.Scan(
 			&job.ID, &job.RunID, &job.Name, &job.CreatedAt, &job.UpdatedAt, &job.CreatedBy,
 			&job.Status, &job.StatusMessage, &job.Image, &job.ImageDigest,
-			&commandJSON, &envJSON, &job.CPULimit, &job.MemoryLimit, &job.TimeoutSecs,
+			&commandJSON, &envJSON, &job.CPULimit, &job.MemoryLimit, &job.GPUCount, &job.TimeoutSecs,
 			&outputsJSON, &job.StartedAt, &job.FinishedAt, &job.ExitCode,
 			&job.ArtefactPrefix, &job.LogObjectKey, &job.Executor, &job.ExecutorRef,
-			&execMetadataJSON, &job.RegistrySecretID, &metadataJSON,
+			&execMetadataJSON, &job.RegistrySecretID, &metadataJSON, &job.AssignedNodeID,
 		)
 		if err != nil {
 			return nil, err

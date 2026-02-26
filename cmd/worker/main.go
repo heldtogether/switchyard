@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
 	"log/slog"
 	"os"
@@ -67,15 +68,53 @@ func main() {
 	)
 	logger.Info("database connected")
 
-	// Initialize Redis queue
-	logger.Info("connecting to redis")
-	redisQueue, err := queue.NewRedis(cfg.Queue.URL, cfg.Queue.QueueName)
-	if err != nil {
-		logger.Error("failed to connect to redis", "error", err)
+	// Detect node info and GPU count
+	nodeID := cfg.Worker.NodeID
+	hostname := ""
+	if nodeID == "" {
+		detectedNodeID, detectedHostname, detectErr := worker.DetectNodeInfo(context.Background(), cfg.Executor.Swarm.DockerHost)
+		if detectErr != nil {
+			logger.Warn("failed to detect node id, using hostname fallback", "error", detectErr)
+			hostname = detectedHostname
+		} else {
+			nodeID = detectedNodeID
+			hostname = detectedHostname
+		}
+	}
+	if hostname == "" {
+		hostname, _ = os.Hostname()
+	}
+	if nodeID == "" {
+		nodeID = hostname
+	}
+
+	gpuTotal := cfg.Worker.GPUCount
+	if gpuTotal <= 0 {
+		gpuTotal = worker.DetectGPUCount(context.Background())
+	}
+
+	// Initialize queue
+	logger.Info("connecting to queue", "type", cfg.Queue.Type)
+	var consumer queue.Consumer
+	switch cfg.Queue.Type {
+	case "rabbitmq":
+		queueName := cfg.Queue.QueueName
+		if nodeID != "" {
+			queueName = fmt.Sprintf("%s.%s", cfg.Queue.QueueName, nodeID)
+		}
+		consumer, err = queue.NewRabbitConsumer(cfg.Queue.URL, cfg.Queue.Exchange, cfg.Queue.DelayExchange, queueName, gpuTotal, cfg.Worker.Concurrency, cfg.Queue.TaskTimeout, cfg.Queue.MaxPriority)
+	case "redis":
+		consumer, err = queue.NewRedis(cfg.Queue.URL, cfg.Queue.QueueName)
+	default:
+		logger.Error("unsupported queue type", "type", cfg.Queue.Type)
 		os.Exit(1)
 	}
-	defer redisQueue.Close()
-	logger.Info("redis connected")
+	if err != nil {
+		logger.Error("failed to connect to queue", "error", err)
+		os.Exit(1)
+	}
+	defer consumer.Close()
+	logger.Info("queue connected")
 
 	// Initialize S3 storage
 	logger.Info("connecting to s3 storage")
@@ -132,8 +171,15 @@ func main() {
 	}
 	logger.Info("executor initialized")
 
+	// Create API client for worker callbacks
+	apiBaseURL := cfg.API.BaseURL
+	if apiBaseURL == "" {
+		apiBaseURL = fmt.Sprintf("http://%s:%d", cfg.API.Host, cfg.API.Port)
+	}
+	apiClient := worker.NewAPIClient(apiBaseURL, cfg.API.Auth.APIKey)
+
 	// Create worker
-	w := worker.New(cfg, redisQueue, store, exec, s3Store, logger)
+	w := worker.New(cfg, consumer, store, exec, s3Store, logger, apiClient, nodeID, hostname, gpuTotal)
 
 	// Start worker
 	if err := w.Start(); err != nil {

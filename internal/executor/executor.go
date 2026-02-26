@@ -42,6 +42,7 @@ type RunSpec struct {
 	Outputs      []string
 	CPU          string
 	Memory       string
+	GPUCount     int
 	Timeout      time.Duration
 	RegistryAuth *domain.RegistryAuth
 
@@ -52,6 +53,7 @@ type RunSpec struct {
 	APIBaseURL        string
 	SwitchyardVersion string
 	ExecutorType      string
+	NodeID            string
 }
 
 // Output Spec defines output collection

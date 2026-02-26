@@ -105,6 +105,7 @@ type CreateJobRequest struct {
 type ResourcesRequest struct {
 	CPU    string `json:"cpu,omitempty"`
 	Memory string `json:"memory,omitempty"`
+	GPU    int    `json:"gpu,omitempty"`
 }
 
 // RegistryAuthRequest contains registry credentials
@@ -128,6 +129,7 @@ type JobResponse struct {
 	Env           map[string]string `json:"env,omitempty"`
 	CPULimit      *string           `json:"cpu_limit,omitempty"`
 	MemoryLimit   *string           `json:"memory_limit,omitempty"`
+	GPUCount      int               `json:"gpu_count,omitempty"`
 	TimeoutSecs   int               `json:"timeout_seconds"`
 	Outputs       []string          `json:"outputs"`
 	StartedAt     *time.Time        `json:"started_at,omitempty"`
@@ -136,6 +138,7 @@ type JobResponse struct {
 	LogURL        *string           `json:"log_url,omitempty"`
 	Executor      string            `json:"executor"`
 	ExecutorRef   *string           `json:"executor_ref,omitempty"`
+	AssignedNodeID *string          `json:"assigned_node_id,omitempty"`
 	Metadata      map[string]any    `json:"metadata,omitempty"`
 }
 
@@ -166,6 +169,48 @@ type ErrorResponse struct {
 	Error   string `json:"error"`
 	Message string `json:"message"`
 	Code    int    `json:"code"`
+}
+
+// ========== Worker & Allocation DTOs ==========
+
+// RegisterWorkerRequest registers a worker node
+type RegisterWorkerRequest struct {
+	NodeID   string            `json:"node_id"`
+	Hostname string            `json:"hostname"`
+	Executor string            `json:"executor"`
+	GPUTotal int               `json:"gpu_total"`
+	Labels   map[string]string `json:"labels,omitempty"`
+}
+
+// RegisterWorkerResponse is returned on successful registration
+type RegisterWorkerResponse struct {
+	NodeID       string    `json:"node_id"`
+	RegisteredAt time.Time `json:"registered_at"`
+}
+
+// WorkerHeartbeatRequest updates worker heartbeat
+type WorkerHeartbeatRequest struct {
+	NodeID   string `json:"node_id"`
+	GPUTotal int    `json:"gpu_total"`
+}
+
+// AllocationClaimRequest claims GPU allocation for a job on a node
+type AllocationClaimRequest struct {
+	JobID  uuid.UUID `json:"job_id"`
+	NodeID string    `json:"node_id"`
+}
+
+// AllocationClaimResponse represents an allocation claim
+type AllocationClaimResponse struct {
+	AllocationID uuid.UUID `json:"allocation_id"`
+	NodeID       string    `json:"node_id"`
+	GPUCount     int       `json:"gpu_count"`
+}
+
+// AllocationReleaseRequest releases an allocation
+type AllocationReleaseRequest struct {
+	JobID  uuid.UUID `json:"job_id"`
+	NodeID string    `json:"node_id"`
 }
 
 // toWorkspaceResponse converts a domain.Workspace to WorkspaceResponse
@@ -231,6 +276,7 @@ func toJobResponse(job *domain.Job, baseURL string, workspaceSlug string, projec
 		Env:           job.Env,
 		CPULimit:      job.CPULimit,
 		MemoryLimit:   job.MemoryLimit,
+		GPUCount:      job.GPUCount,
 		TimeoutSecs:   job.TimeoutSecs,
 		Outputs:       job.Outputs,
 		StartedAt:     job.StartedAt,
@@ -238,6 +284,7 @@ func toJobResponse(job *domain.Job, baseURL string, workspaceSlug string, projec
 		ExitCode:      job.ExitCode,
 		Executor:      string(job.Executor),
 		ExecutorRef:   job.ExecutorRef,
+		AssignedNodeID: job.AssignedNodeID,
 		Metadata:      job.Metadata,
 	}
 

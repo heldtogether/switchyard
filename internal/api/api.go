@@ -18,7 +18,7 @@ import (
 type API struct {
 	cfg      *config.Config
 	store    *postgres.Store
-	queue    *queue.RedisQueue
+	queue    queue.Producer
 	storage  *objectstore.S3Store
 	executor executor.Executor
 	logger   *slog.Logger
@@ -26,7 +26,7 @@ type API struct {
 }
 
 // New creates a new API instance
-func New(cfg *config.Config, store *postgres.Store, q *queue.RedisQueue, storage *objectstore.S3Store, exec executor.Executor, logger *slog.Logger, baseURL string) *API {
+func New(cfg *config.Config, store *postgres.Store, q queue.Producer, storage *objectstore.S3Store, exec executor.Executor, logger *slog.Logger, baseURL string) *API {
 	return &API{
 		cfg:      cfg,
 		store:    store,

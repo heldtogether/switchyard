@@ -8,9 +8,10 @@ Switchyard accepts container jobs over an HTTP API, executes them on a Swarm clu
 ## Key Features
 - Hierarchical job organization (workspace/project/run/job)
 - Swarm and Docker executors with shared utilities
-- Resource limits and timeouts per job
-- Redis-backed queue and Postgres metadata store
-- S3-compatible log and artefact storage
+- Per-job resource limits (CPU, memory, GPU) and timeouts
+- GPU-aware scheduling with per-job allocations and node capacity tracking
+- RabbitMQ or Redis queueing (RabbitMQ recommended for GPU routing)
+- Postgres metadata store + S3-compatible log and artefact storage
 - API key authentication
 
 ## Quick Start (Local Dev)
@@ -54,6 +55,8 @@ examples/       # Example jobs and helper scripts
 
 ## Configuration
 - `config.example.yaml` documents available settings.
+- GPU-aware scheduling requires workers to register and heartbeat (automatic on startup).
+- RabbitMQ is the recommended queue for GPU routing via `gpu.N` topic keys.
 - Avoid committing secrets; use env vars or Docker secrets for credentials.
 
 ## Documentation Map

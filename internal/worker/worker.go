@@ -19,18 +19,25 @@ import (
 // Worker polls for jobs and executes them
 type Worker struct {
 	cfg      *config.Config
-	queue    *queue.RedisQueue
+	queue    queue.Consumer
 	store    *postgres.Store
 	executor executor.Executor
 	storage  *objectstore.S3Store
 	logger   *slog.Logger
+	api      *APIClient
+	nodeID   string
+	hostname string
+	gpuTotal int
 	wg       sync.WaitGroup
 	ctx      context.Context
 	cancel   context.CancelFunc
+
+	attempts   map[string]int
+	attemptsMu sync.Mutex
 }
 
 // New creates a new Worker
-func New(cfg *config.Config, q *queue.RedisQueue, store *postgres.Store, exec executor.Executor, storage *objectstore.S3Store, logger *slog.Logger) *Worker {
+func New(cfg *config.Config, q queue.Consumer, store *postgres.Store, exec executor.Executor, storage *objectstore.S3Store, logger *slog.Logger, api *APIClient, nodeID, hostname string, gpuTotal int) *Worker {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &Worker{
@@ -40,14 +47,37 @@ func New(cfg *config.Config, q *queue.RedisQueue, store *postgres.Store, exec ex
 		executor: exec,
 		storage:  storage,
 		logger:   logger,
+		api:      api,
+		nodeID:   nodeID,
+		hostname: hostname,
+		gpuTotal: gpuTotal,
 		ctx:      ctx,
 		cancel:   cancel,
+		attempts: make(map[string]int),
 	}
 }
 
 // Start begins polling for jobs
 func (w *Worker) Start() error {
 	w.logger.Info("worker starting", "concurrency", w.cfg.Worker.Concurrency)
+
+	if w.api != nil {
+		if err := w.api.RegisterWorker(w.ctx, RegisterWorkerRequest{
+			NodeID:   w.nodeID,
+			Hostname: w.hostname,
+			Executor: w.cfg.Executor.Type,
+			GPUTotal: w.gpuTotal,
+		}); err != nil {
+			w.logger.Error("failed to register worker", "error", err)
+		}
+
+		w.wg.Add(1)
+		go w.heartbeatLoop()
+	}
+
+	// Start Redis delay requeue loop (no-op for RabbitMQ)
+	w.wg.Add(1)
+	go w.requeueLoop()
 
 	// Recover any orphaned running jobs on startup
 	if err := w.recoverOrphanedJobs(); err != nil {
@@ -99,23 +129,61 @@ func (w *Worker) workerLoop(workerID int) {
 			logger.Info("worker loop stopped")
 			return
 		default:
-			// Pop job from queue (blocking with timeout)
-			jobID, err := w.queue.Pop(w.ctx, w.cfg.Worker.PollInterval)
+			msg, err := w.queue.Pop(w.ctx, w.cfg.Worker.PollInterval)
 			if err != nil {
 				logger.Error("failed to pop from queue", "error", err)
 				time.Sleep(5 * time.Second)
 				continue
 			}
 
-			if jobID == "" {
-				// Timeout, no jobs available
+			if msg == nil {
 				continue
 			}
 
+			jobIDStr := msg.JobID()
+			jobID, err := uuid.Parse(jobIDStr)
+			if err != nil {
+				logger.Error("invalid job id", "job_id", jobIDStr, "error", err)
+				_ = msg.Nack(false)
+				continue
+			}
+
+			if w.api != nil {
+				_, err = w.api.ClaimAllocation(w.ctx, AllocationClaimRequest{JobID: jobID, NodeID: w.nodeID})
+				if err != nil {
+					if err == ErrInsufficientGPU {
+						retryAt := time.Now().Add(w.nextRetryDelay(jobIDStr))
+						if delayErr := w.queue.Delay(w.ctx, jobIDStr, retryAt); delayErr != nil {
+							logger.Error("failed to delay job", "job_id", jobIDStr, "error", delayErr)
+						} else {
+							logger.Info("delayed job due to insufficient GPU", "job_id", jobIDStr, "retry_at", retryAt)
+						}
+						_ = msg.Nack(false)
+						continue
+					}
+					logger.Error("failed to claim allocation", "job_id", jobIDStr, "error", err)
+					_ = msg.Nack(false)
+					continue
+				}
+			}
+
+			if err := msg.Ack(); err != nil {
+				logger.Error("failed to ack message", "job_id", jobIDStr, "error", err)
+				continue
+			}
+
+			w.resetRetry(jobIDStr)
+
 			// Process the job
-			logger.Info("processing job", "job_id", jobID)
-			if err := w.processJob(w.ctx, jobID); err != nil {
-				logger.Error("failed to process job", "job_id", jobID, "error", err)
+			logger.Info("processing job", "job_id", jobIDStr)
+			if err := w.processJob(w.ctx, jobIDStr); err != nil {
+				logger.Error("failed to process job", "job_id", jobIDStr, "error", err)
+			}
+
+			if w.api != nil {
+				if err := w.api.ReleaseAllocation(w.ctx, AllocationReleaseRequest{JobID: jobID, NodeID: w.nodeID}); err != nil {
+					logger.Error("failed to release allocation", "job_id", jobIDStr, "error", err)
+				}
 			}
 		}
 	}
@@ -130,8 +198,74 @@ func (w *Worker) processJob(ctx context.Context, jobIDStr string) error {
 
 	// Wrap S3Store to match ObjectStorage interface
 	storageAdapter := &s3StorageAdapter{store: w.storage}
-	processor := NewProcessor(w.store, w.executor, storageAdapter, w.logger, w.cfg.API.BaseURL, w.cfg.Storage.Bucket)
+	processor := NewProcessor(w.store, w.executor, storageAdapter, w.logger, w.cfg.API.BaseURL, w.cfg.Storage.Bucket, w.nodeID)
 	return processor.Process(ctx, jobID)
+}
+
+func (w *Worker) heartbeatLoop() {
+	defer w.wg.Done()
+
+	ticker := time.NewTicker(w.cfg.Worker.HeartbeatInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-w.ctx.Done():
+			return
+		case <-ticker.C:
+			if err := w.api.Heartbeat(w.ctx, WorkerHeartbeatRequest{NodeID: w.nodeID, GPUTotal: w.gpuTotal}); err != nil {
+				w.logger.Error("failed to send heartbeat", "error", err)
+			}
+		}
+	}
+}
+
+func (w *Worker) requeueLoop() {
+	defer w.wg.Done()
+
+	interval := w.cfg.Queue.RequeueInterval
+	batch := w.cfg.Queue.RequeueBatch
+	if interval <= 0 {
+		interval = 2 * time.Second
+	}
+	if batch <= 0 {
+		batch = 100
+	}
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-w.ctx.Done():
+			return
+		case <-ticker.C:
+			count, err := w.queue.RequeueReady(w.ctx, batch)
+			if err != nil {
+				w.logger.Error("requeue loop error", "error", err)
+				continue
+			}
+			if count > 0 {
+				w.logger.Info("requeued delayed jobs", "count", count)
+			}
+		}
+	}
+}
+
+func (w *Worker) nextRetryDelay(jobID string) time.Duration {
+	w.attemptsMu.Lock()
+	defer w.attemptsMu.Unlock()
+
+	attempt := w.attempts[jobID]
+	w.attempts[jobID] = attempt + 1
+
+	return retryDelay(attempt, w.cfg.Worker.RetryBaseDelay, w.cfg.Worker.RetryMaxDelay, w.cfg.Worker.RetryJitter)
+}
+
+func (w *Worker) resetRetry(jobID string) {
+	w.attemptsMu.Lock()
+	defer w.attemptsMu.Unlock()
+	delete(w.attempts, jobID)
 }
 
 // s3StorageAdapter adapts *objectstore.S3Store to ObjectStorage interface
@@ -221,12 +355,12 @@ func (w *Worker) recoverOrphanedJobs() error {
 			job.Status = "SUCCEEDED"
 			finishedAt := time.Now()
 			job.FinishedAt = &finishedAt
-		case executor.StatusFailed:
+		case executor.StatusFailed, executor.StatusCancelled, executor.StatusTimeout:
 			logger.Info("job failed (recovery)")
 			job.Status = "FAILED"
 			finishedAt := time.Now()
 			job.FinishedAt = &finishedAt
-			msg := "executor reported failure"
+			msg := "job failed during worker downtime"
 			job.StatusMessage = &msg
 		case executor.StatusUnknown:
 			logger.Info("job executor not found (recovery)")
@@ -236,7 +370,6 @@ func (w *Worker) recoverOrphanedJobs() error {
 			msg := "executor service not found after worker restart"
 			job.StatusMessage = &msg
 		default:
-			// Still running, leave it
 			logger.Info("job still running (recovery)", "status", status)
 			continue
 		}
@@ -246,11 +379,17 @@ func (w *Worker) recoverOrphanedJobs() error {
 		} else {
 			updatedRuns[job.RunID] = struct{}{}
 		}
+
+		if w.api != nil {
+			if err := w.api.ReleaseAllocation(w.ctx, AllocationReleaseRequest{JobID: job.ID, NodeID: w.nodeID}); err != nil {
+				logger.Error("failed to release allocation (recovery)", "error", err)
+			}
+		}
 	}
 
 	for runID := range updatedRuns {
 		if err := w.store.RecomputeRunStatus(w.ctx, runID); err != nil {
-			w.logger.Error("failed to recompute run status after recovery", "run_id", runID, "error", err)
+			w.logger.Error("failed to recompute run status", "run_id", runID, "error", err)
 		}
 	}
 

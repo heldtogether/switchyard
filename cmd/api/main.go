@@ -64,15 +64,24 @@ func main() {
 	)
 	logger.Info("database connected")
 
-	// Initialize Redis queue
-	logger.Info("connecting to redis")
-	redisQueue, err := queue.NewRedis(cfg.Queue.URL, cfg.Queue.QueueName)
-	if err != nil {
-		logger.Error("failed to connect to redis", "error", err)
+	// Initialize queue
+	logger.Info("connecting to queue", "type", cfg.Queue.Type)
+	var producer queue.Producer
+	switch cfg.Queue.Type {
+	case "rabbitmq":
+		producer, err = queue.NewRabbitPublisher(cfg.Queue.URL, cfg.Queue.Exchange)
+	case "redis":
+		producer, err = queue.NewRedis(cfg.Queue.URL, cfg.Queue.QueueName)
+	default:
+		logger.Error("unsupported queue type", "type", cfg.Queue.Type)
 		os.Exit(1)
 	}
-	defer redisQueue.Close()
-	logger.Info("redis connected")
+	if err != nil {
+		logger.Error("failed to connect to queue", "error", err)
+		os.Exit(1)
+	}
+	defer producer.Close()
+	logger.Info("queue connected")
 
 	// Initialize S3 storage
 	logger.Info("connecting to s3 storage")
@@ -132,7 +141,7 @@ func main() {
 	baseURL := fmt.Sprintf("http://%s:%d", cfg.API.Host, cfg.API.Port)
 
 	// Create API
-	apiInstance := api.New(cfg, store, redisQueue, s3Store, exec, logger, baseURL)
+	apiInstance := api.New(cfg, store, producer, s3Store, exec, logger, baseURL)
 
 	// Create and start server
 	server := api.NewServer(cfg, apiInstance, logger)
@@ -141,12 +150,19 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Start node reaper
+	reaperCtx, reaperCancel := context.WithCancel(context.Background())
+	defer reaperCancel()
+	apiInstance.StartNodeReaper(reaperCtx)
+
 	// Wait for shutdown signal
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 
 	logger.Info("api server running", "addr", fmt.Sprintf("%s:%d", cfg.API.Host, cfg.API.Port))
 	<-sigChan
+
+	reaperCancel()
 
 	logger.Info("received shutdown signal")
 

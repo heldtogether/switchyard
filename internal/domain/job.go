@@ -27,8 +27,9 @@ func (s JobStatus) IsTerminal() bool {
 type ExecutorType string
 
 const (
-	ExecutorTypeSwarm ExecutorType = "swarm"
-	ExecutorTypeKube  ExecutorType = "kube"
+	ExecutorTypeDocker ExecutorType = "docker"
+	ExecutorTypeSwarm  ExecutorType = "swarm"
+	ExecutorTypeKube   ExecutorType = "kube"
 )
 
 // Job represents a container execution job
@@ -53,6 +54,7 @@ type Job struct {
 	// Resources
 	CPULimit    *string `json:"cpu_limit,omitempty"`
 	MemoryLimit *string `json:"memory_limit,omitempty"`
+	GPUCount    int     `json:"gpu_count,omitempty"`
 	TimeoutSecs int     `json:"timeout_seconds"`
 
 	// Outputs
@@ -71,6 +73,9 @@ type Job struct {
 	Executor         ExecutorType   `json:"executor"`
 	ExecutorRef      *string        `json:"executor_ref,omitempty"`
 	ExecutorMetadata map[string]any `json:"executor_metadata,omitempty"`
+
+	// Scheduling
+	AssignedNodeID *string `json:"assigned_node_id,omitempty"`
 
 	// Registry auth
 	RegistrySecretID *uuid.UUID `json:"registry_secret_id,omitempty"`
@@ -92,6 +97,7 @@ func (j *Job) Duration() *time.Duration {
 type ResourceSpec struct {
 	CPU    string `json:"cpu,omitempty"`
 	Memory string `json:"memory,omitempty"`
+	GPU    int    `json:"gpu,omitempty"`
 }
 
 // RegistryAuth holds authentication for private registries

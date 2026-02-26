@@ -54,6 +54,9 @@ func BuildSystemEnv(spec RunSpec) []string {
 	if spec.Memory != "" {
 		env = append(env, fmt.Sprintf("SWITCHYARD_MEMORY_LIMIT=%s", spec.Memory))
 	}
+	if spec.GPUCount > 0 {
+		env = append(env, fmt.Sprintf("SWITCHYARD_GPU_COUNT=%d", spec.GPUCount))
+	}
 
 	// Add user environment variables after system ones
 	// This ensures system variables cannot be overridden

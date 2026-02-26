@@ -21,10 +21,11 @@ type Processor struct {
 	logger     *slog.Logger
 	apiBaseURL string
 	bucket     string
+	nodeID     string
 }
 
 // NewProcessor creates a new job processor
-func NewProcessor(store JobStore, exec executor.Executor, storage ObjectStorage, logger *slog.Logger, apiBaseURL string, bucket string) *Processor {
+func NewProcessor(store JobStore, exec executor.Executor, storage ObjectStorage, logger *slog.Logger, apiBaseURL string, bucket string, nodeID string) *Processor {
 	return &Processor{
 		store:      store,
 		executor:   exec,
@@ -32,6 +33,7 @@ func NewProcessor(store JobStore, exec executor.Executor, storage ObjectStorage,
 		logger:     logger,
 		apiBaseURL: apiBaseURL,
 		bucket:     bucket,
+		nodeID:     nodeID,
 	}
 }
 
@@ -97,6 +99,7 @@ func (p *Processor) Process(ctx context.Context, jobID uuid.UUID) error {
 		Outputs:           job.Outputs,
 		CPU:               stringPtrValue(job.CPULimit),
 		Memory:            stringPtrValue(job.MemoryLimit),
+		GPUCount:          job.GPUCount,
 		Timeout:           time.Duration(job.TimeoutSecs) * time.Second,
 		CreatedAt:         job.CreatedAt,
 		ArtefactPrefix:    stringPtrValue(job.ArtefactPrefix),
@@ -104,6 +107,7 @@ func (p *Processor) Process(ctx context.Context, jobID uuid.UUID) error {
 		APIBaseURL:        p.apiBaseURL,
 		SwitchyardVersion: version.Version,
 		ExecutorType:      string(job.Executor),
+		NodeID:            p.nodeID,
 	}
 
 	// 7. Create executor run

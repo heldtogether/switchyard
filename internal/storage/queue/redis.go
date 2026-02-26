@@ -12,6 +12,7 @@ import (
 type RedisQueue struct {
 	client    *redis.Client
 	queueName string
+	delayKey  string
 }
 
 // NewRedis creates a new Redis queue
@@ -34,30 +35,70 @@ func NewRedis(url, queueName string) (*RedisQueue, error) {
 	return &RedisQueue{
 		client:    client,
 		queueName: queueName,
+		delayKey:  queueName + ":delay",
 	}, nil
 }
 
-// Push adds a job ID to the queue
-func (q *RedisQueue) Push(ctx context.Context, jobID string) error {
+// Publish adds a job ID to the queue
+func (q *RedisQueue) Publish(ctx context.Context, jobID string, _ int) error {
 	return q.client.LPush(ctx, q.queueName, jobID).Err()
 }
 
-// Pop removes and returns a job ID from the queue (blocking)
-func (q *RedisQueue) Pop(ctx context.Context, timeout time.Duration) (string, error) {
+// Pop removes and returns a job message from the queue (blocking)
+func (q *RedisQueue) Pop(ctx context.Context, timeout time.Duration) (Message, error) {
 	result, err := q.client.BRPop(ctx, timeout, q.queueName).Result()
 	if err == redis.Nil {
-		return "", nil // Timeout, no items
+		return nil, nil // Timeout, no items
 	}
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	// BRPop returns [key, value]
 	if len(result) < 2 {
-		return "", fmt.Errorf("unexpected BRPOP result")
+		return nil, fmt.Errorf("unexpected BRPOP result")
 	}
 
-	return result[1], nil
+	return &redisMessage{queue: q, jobID: result[1]}, nil
+}
+
+// Delay schedules a job for requeue at a future time.
+func (q *RedisQueue) Delay(ctx context.Context, jobID string, retryAt time.Time) error {
+	return q.client.ZAdd(ctx, q.delayKey, redis.Z{
+		Score:  float64(retryAt.UnixMilli()),
+		Member: jobID,
+	}).Err()
+}
+
+// RequeueReady moves ready delayed jobs back into the main queue.
+func (q *RedisQueue) RequeueReady(ctx context.Context, batch int) (int, error) {
+	if batch <= 0 {
+		batch = 100
+	}
+
+	now := time.Now().UnixMilli()
+	jobIDs, err := q.client.ZRangeByScore(ctx, q.delayKey, &redis.ZRangeBy{
+		Min:    "-inf",
+		Max:    fmt.Sprintf("%d", now),
+		Offset: 0,
+		Count:  int64(batch),
+	}).Result()
+	if err != nil {
+		return 0, err
+	}
+	if len(jobIDs) == 0 {
+		return 0, nil
+	}
+
+	pipe := q.client.Pipeline()
+	for _, id := range jobIDs {
+		pipe.LPush(ctx, q.queueName, id)
+		pipe.ZRem(ctx, q.delayKey, id)
+	}
+	if _, err := pipe.Exec(ctx); err != nil {
+		return 0, err
+	}
+	return len(jobIDs), nil
 }
 
 // Length returns the queue length
@@ -73,4 +114,24 @@ func (q *RedisQueue) Close() error {
 // Ping checks if Redis is responsive
 func (q *RedisQueue) Ping(ctx context.Context) error {
 	return q.client.Ping(ctx).Err()
+}
+
+type redisMessage struct {
+	queue *RedisQueue
+	jobID string
+}
+
+func (m *redisMessage) JobID() string {
+	return m.jobID
+}
+
+func (m *redisMessage) Ack() error {
+	return nil
+}
+
+func (m *redisMessage) Nack(requeue bool) error {
+	if !requeue {
+		return nil
+	}
+	return nil
 }

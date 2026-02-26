@@ -71,13 +71,25 @@ func (e *SwarmExecutor) CreateRun(ctx context.Context, spec executor.RunSpec) (e
 func (e *SwarmExecutor) buildServiceSpec(spec executor.RunSpec, serviceName, outputPath, networkID string) swarm.ServiceSpec {
 	// Parse resource limits using shared utilities
 	resources := &swarm.ResourceRequirements{}
-	if spec.CPU != "" || spec.Memory != "" {
+	if spec.CPU != "" || spec.Memory != "" || spec.GPUCount > 0 {
 		resources.Limits = &swarm.Limit{}
 		if spec.CPU != "" {
 			resources.Limits.NanoCPUs = executor.ParseCPU(spec.CPU)
 		}
 		if spec.Memory != "" {
 			resources.Limits.MemoryBytes = executor.ParseMemory(spec.Memory)
+		}
+	}
+	if spec.GPUCount > 0 {
+		resources.Reservations = &swarm.Resources{
+			GenericResources: []swarm.GenericResource{
+				{
+					DiscreteResourceSpec: &swarm.DiscreteGenericResource{
+						Kind:  "gpu",
+						Value: int64(spec.GPUCount),
+					},
+				},
+			},
 		}
 	}
 
@@ -115,6 +127,11 @@ func (e *SwarmExecutor) buildServiceSpec(spec executor.RunSpec, serviceName, out
 		Networks: []swarm.NetworkAttachmentConfig{
 			{Target: networkID},
 		},
+	}
+	if spec.NodeID != "" {
+		taskTemplate.Placement = &swarm.Placement{
+			Constraints: []string{fmt.Sprintf("node.id==%s", spec.NodeID)},
+		}
 	}
 
 	// Service spec

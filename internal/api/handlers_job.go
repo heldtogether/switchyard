@@ -113,13 +113,23 @@ func (a *API) HandleCreateJob(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Set resources if provided
+	gpuCount := 0
 	if req.Resources != nil {
+		if req.Resources.GPU < 0 {
+			writeJSON(w, http.StatusBadRequest, ErrorResponse{
+				Error:   "validation_error",
+				Message: "gpu must be >= 0",
+				Code:    http.StatusBadRequest,
+			})
+			return
+		}
 		if req.Resources.CPU != "" {
 			job.CPULimit = &req.Resources.CPU
 		}
 		if req.Resources.Memory != "" {
 			job.MemoryLimit = &req.Resources.Memory
 		}
+		gpuCount = req.Resources.GPU
 	} else {
 		// Use defaults from config
 		cpu := a.cfg.Executor.Swarm.Defaults.Resources.CPU
@@ -127,6 +137,37 @@ func (a *API) HandleCreateJob(w http.ResponseWriter, r *http.Request) {
 		job.CPULimit = &cpu
 		job.MemoryLimit = &mem
 	}
+
+	if gpuCount > 0 {
+		maxGPU, err := a.store.MaxGPUPerNode(r.Context())
+		if err != nil {
+			a.logger.Error("failed to fetch max gpu per node", "error", err)
+			writeJSON(w, http.StatusInternalServerError, ErrorResponse{
+				Error:   "internal_error",
+				Message: "Failed to validate GPU capacity",
+				Code:    http.StatusInternalServerError,
+			})
+			return
+		}
+		if maxGPU == 0 {
+			writeJSON(w, http.StatusUnprocessableEntity, ErrorResponse{
+				Error:   "validation_error",
+				Message: "No GPU-capable nodes registered",
+				Code:    http.StatusUnprocessableEntity,
+			})
+			return
+		}
+		if gpuCount > maxGPU {
+			writeJSON(w, http.StatusUnprocessableEntity, ErrorResponse{
+				Error:   "validation_error",
+				Message: fmt.Sprintf("gpu request exceeds max GPUs on a single node (%d)", maxGPU),
+				Code:    http.StatusUnprocessableEntity,
+			})
+			return
+		}
+	}
+
+	job.GPUCount = gpuCount
 
 	// Insert job into database
 	if err := a.store.CreateJob(r.Context(), job); err != nil {
@@ -140,7 +181,7 @@ func (a *API) HandleCreateJob(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Push to queue
-	if err := a.queue.Push(r.Context(), job.ID.String()); err != nil {
+	if err := a.queue.Publish(r.Context(), job.ID.String(), job.GPUCount); err != nil {
 		a.logger.Error("failed to push job to queue", "job_id", job.ID, "error", err)
 		writeJSON(w, http.StatusInternalServerError, ErrorResponse{
 			Error:   "internal_error",

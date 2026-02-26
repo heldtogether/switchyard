@@ -5,6 +5,9 @@ set -e
 
 API_URL="${API_URL:-http://localhost:8080}"
 API_KEY="${API_KEY:-your-api-key}"
+WORKSPACE_SLUG="${WORKSPACE_SLUG:-default}"
+PROJECT_SLUG="${PROJECT_SLUG:-test-project}"
+RUN_SLUG="${RUN_SLUG:-test-run}"
 
 if [ -z "$1" ]; then
     echo "Usage: $0 <job-id>"
@@ -16,7 +19,7 @@ JOB_ID="$1"
 echo "Checking status of job $JOB_ID..."
 echo ""
 
-curl -s "$API_URL/v1/jobs/$JOB_ID" \
+curl -s "$API_URL/v1/workspaces/$WORKSPACE_SLUG/projects/$PROJECT_SLUG/runs/$RUN_SLUG/jobs/$JOB_ID" \
   -H "X-API-Key: $API_KEY" \
   | jq .
 

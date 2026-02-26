@@ -64,6 +64,15 @@ func (e *DockerExecutor) CreateRun(ctx context.Context, spec executor.RunSpec) (
 	if spec.Memory != "" {
 		resources.Memory = executor.ParseMemory(spec.Memory)
 	}
+	if spec.GPUCount > 0 {
+		resources.DeviceRequests = []container.DeviceRequest{
+			{
+				Driver:       "nvidia",
+				Count:        spec.GPUCount,
+				Capabilities: [][]string{{"gpu"}},
+			},
+		}
+	}
 
 	hostCfg := &container.HostConfig{
 		RestartPolicy: container.RestartPolicy{Name: "no"},

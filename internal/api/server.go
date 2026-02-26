@@ -58,6 +58,14 @@ func (s *Server) Start() error {
 	mux.HandleFunc("GET /v1/workspaces/{workspace_slug}/projects/{project_slug}/runs/{run_slug}/jobs/{job_id}/logs", s.api.HandleGetJobLogs)
 	mux.HandleFunc("POST /v1/workspaces/{workspace_slug}/projects/{project_slug}/runs/{run_slug}/jobs/{job_id}/cancel", s.api.HandleCancelJob)
 
+	// Worker routes
+	mux.HandleFunc("POST /v1/workers/register", s.api.HandleRegisterWorker)
+	mux.HandleFunc("POST /v1/workers/heartbeat", s.api.HandleWorkerHeartbeat)
+
+	// Allocation routes
+	mux.HandleFunc("POST /v1/allocations/claim", s.api.HandleClaimAllocation)
+	mux.HandleFunc("POST /v1/allocations/release", s.api.HandleReleaseAllocation)
+
 	// Artefact routes
 	mux.HandleFunc("GET /v1/workspaces/{workspace_slug}/projects/{project_slug}/runs/{run_slug}/jobs/{job_id}/artefacts", s.api.HandleListArtefacts)
 	mux.HandleFunc("GET /v1/workspaces/{workspace_slug}/projects/{project_slug}/runs/{run_slug}/jobs/{job_id}/artefacts/{path...}", s.api.HandleDownloadArtefact)
