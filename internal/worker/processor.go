@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/heldtogether/switchyard/internal/config"
 	"github.com/heldtogether/switchyard/internal/domain"
 	"github.com/heldtogether/switchyard/internal/executor"
 	"github.com/heldtogether/switchyard/internal/version"
@@ -22,10 +23,11 @@ type Processor struct {
 	apiBaseURL string
 	bucket     string
 	nodeID     string
+	cleanup    config.CleanupConfig
 }
 
 // NewProcessor creates a new job processor
-func NewProcessor(store JobStore, exec executor.Executor, storage ObjectStorage, logger *slog.Logger, apiBaseURL string, bucket string, nodeID string) *Processor {
+func NewProcessor(store JobStore, exec executor.Executor, storage ObjectStorage, logger *slog.Logger, apiBaseURL string, bucket string, nodeID string, cleanup config.CleanupConfig) *Processor {
 	return &Processor{
 		store:      store,
 		executor:   exec,
@@ -34,6 +36,7 @@ func NewProcessor(store JobStore, exec executor.Executor, storage ObjectStorage,
 		apiBaseURL: apiBaseURL,
 		bucket:     bucket,
 		nodeID:     nodeID,
+		cleanup:    cleanup,
 	}
 }
 
@@ -222,8 +225,12 @@ func (p *Processor) Process(ctx context.Context, jobID uuid.UUID) error {
 	logger.Info("job processing complete", "status", job.Status, "duration", job.FinishedAt.Sub(*job.StartedAt))
 
 	// 13. Cleanup executor resources
-	if cleanupErr := p.executor.Cleanup(ctx, ref); cleanupErr != nil {
-		logger.Error("failed to cleanup executor resources", "error", cleanupErr)
+	if shouldCleanup(p.cleanup, job.Status) {
+		if cleanupErr := p.executor.Cleanup(ctx, ref); cleanupErr != nil {
+			logger.Error("failed to cleanup executor resources", "error", cleanupErr)
+		}
+	} else {
+		logger.Info("skipping executor cleanup", "status", job.Status)
 	}
 
 	return nil
@@ -258,4 +265,15 @@ func stringPtrValue(s *string) string {
 		return ""
 	}
 	return *s
+}
+
+func shouldCleanup(cfg config.CleanupConfig, status domain.JobStatus) bool {
+	switch status {
+	case domain.JobStatusSucceeded:
+		return cfg.RemoveOnComplete
+	case domain.JobStatusFailed, domain.JobStatusCancelled, domain.JobStatusTimeout:
+		return !cfg.KeepFailedServices
+	default:
+		return true
+	}
 }

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/heldtogether/switchyard/internal/config"
 	"github.com/heldtogether/switchyard/internal/domain"
 	"github.com/heldtogether/switchyard/internal/executor"
 	"github.com/stretchr/testify/assert"
@@ -193,7 +194,8 @@ func TestProcessor_Process_Success(t *testing.T) {
 	mockStorage := new(MockStorage)
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	processor := NewProcessor(mockStore, mockExecutor, mockStorage, logger, "http://localhost:8080", "test-bucket", "")
+	cleanupCfg := config.CleanupConfig{RemoveOnComplete: true}
+	processor := NewProcessor(mockStore, mockExecutor, mockStorage, logger, "http://localhost:8080", "test-bucket", "", cleanupCfg)
 
 	// Setup expectations
 	mockStore.On("GetJob", ctx, job.ID).Return(job, nil)
@@ -254,7 +256,8 @@ func TestProcessor_Process_FailedExitCode(t *testing.T) {
 	mockStorage := new(MockStorage)
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	processor := NewProcessor(mockStore, mockExecutor, mockStorage, logger, "http://localhost:8080", "test-bucket", "")
+	cleanupCfg := config.CleanupConfig{RemoveOnComplete: true}
+	processor := NewProcessor(mockStore, mockExecutor, mockStorage, logger, "http://localhost:8080", "test-bucket", "", cleanupCfg)
 
 	// Setup expectations
 	mockStore.On("GetJob", ctx, job.ID).Return(job, nil)
@@ -309,7 +312,8 @@ func TestProcessor_Process_Timeout(t *testing.T) {
 	mockStorage := new(MockStorage)
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	processor := NewProcessor(mockStore, mockExecutor, mockStorage, logger, "http://localhost:8080", "test-bucket", "")
+	cleanupCfg := config.CleanupConfig{RemoveOnComplete: true}
+	processor := NewProcessor(mockStore, mockExecutor, mockStorage, logger, "http://localhost:8080", "test-bucket", "", cleanupCfg)
 
 	// Setup expectations
 	mockStore.On("GetJob", ctx, job.ID).Return(job, nil)
@@ -357,7 +361,8 @@ func TestProcessor_Process_ExecutorCreateFailure(t *testing.T) {
 	mockStorage := new(MockStorage)
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	processor := NewProcessor(mockStore, mockExecutor, mockStorage, logger, "http://localhost:8080", "test-bucket", "")
+	cleanupCfg := config.CleanupConfig{RemoveOnComplete: true}
+	processor := NewProcessor(mockStore, mockExecutor, mockStorage, logger, "http://localhost:8080", "test-bucket", "", cleanupCfg)
 
 	// Setup expectations
 	mockStore.On("GetJob", ctx, job.ID).Return(job, nil)
@@ -397,7 +402,8 @@ func TestProcessor_Process_GetJobFailure(t *testing.T) {
 	mockStorage := new(MockStorage)
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	processor := NewProcessor(mockStore, mockExecutor, mockStorage, logger, "http://localhost:8080", "test-bucket", "")
+	cleanupCfg := config.CleanupConfig{RemoveOnComplete: true}
+	processor := NewProcessor(mockStore, mockExecutor, mockStorage, logger, "http://localhost:8080", "test-bucket", "", cleanupCfg)
 
 	// Job not found
 	mockStore.On("GetJob", ctx, jobID).Return(nil, errors.New("job not found"))
@@ -421,7 +427,8 @@ func TestProcessor_Process_LogUploadFailure_NonFatal(t *testing.T) {
 	mockStorage := new(MockStorage)
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	processor := NewProcessor(mockStore, mockExecutor, mockStorage, logger, "http://localhost:8080", "test-bucket", "")
+	cleanupCfg := config.CleanupConfig{RemoveOnComplete: true}
+	processor := NewProcessor(mockStore, mockExecutor, mockStorage, logger, "http://localhost:8080", "test-bucket", "", cleanupCfg)
 
 	// Setup expectations
 	mockStore.On("GetJob", ctx, job.ID).Return(job, nil)
@@ -478,7 +485,8 @@ func TestProcessor_Process_ArtefactCollectionFailure_NonFatal(t *testing.T) {
 	mockStorage := new(MockStorage)
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	processor := NewProcessor(mockStore, mockExecutor, mockStorage, logger, "http://localhost:8080", "test-bucket", "")
+	cleanupCfg := config.CleanupConfig{RemoveOnComplete: true}
+	processor := NewProcessor(mockStore, mockExecutor, mockStorage, logger, "http://localhost:8080", "test-bucket", "", cleanupCfg)
 
 	// Setup expectations
 	mockStore.On("GetJob", ctx, job.ID).Return(job, nil)
@@ -531,7 +539,8 @@ func TestProcessor_Process_NoArtefactsOnFailedJob(t *testing.T) {
 	mockStorage := new(MockStorage)
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	processor := NewProcessor(mockStore, mockExecutor, mockStorage, logger, "http://localhost:8080", "test-bucket", "")
+	cleanupCfg := config.CleanupConfig{RemoveOnComplete: true}
+	processor := NewProcessor(mockStore, mockExecutor, mockStorage, logger, "http://localhost:8080", "test-bucket", "", cleanupCfg)
 
 	// Setup expectations
 	mockStore.On("GetJob", ctx, job.ID).Return(job, nil)

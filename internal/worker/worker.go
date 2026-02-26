@@ -198,7 +198,7 @@ func (w *Worker) processJob(ctx context.Context, jobIDStr string) error {
 
 	// Wrap S3Store to match ObjectStorage interface
 	storageAdapter := &s3StorageAdapter{store: w.storage}
-	processor := NewProcessor(w.store, w.executor, storageAdapter, w.logger, w.cfg.API.BaseURL, w.cfg.Storage.Bucket, w.nodeID)
+	processor := NewProcessor(w.store, w.executor, storageAdapter, w.logger, w.cfg.API.BaseURL, w.cfg.Storage.Bucket, w.nodeID, w.cfg.Executor.Swarm.Cleanup)
 	return processor.Process(ctx, jobID)
 }
 
