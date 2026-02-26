@@ -16,7 +16,9 @@ wait_for_rabbitmq() {
     return 0
   fi
 
-  hostport="$(echo "${queue_url}" | sed -E 's,^[a-zA-Z]+://,,; s,/.*$,,'; s,^[^@]*@,,')"
+  hostport="${queue_url#*://}"
+  hostport="${hostport#*@}"
+  hostport="${hostport%%/*}"
   host="$(echo "${hostport}" | cut -d: -f1)"
   port="$(echo "${hostport}" | cut -s -d: -f2)"
   if [ -z "${port}" ]; then
