@@ -109,6 +109,14 @@ func (m *MockStore) RecomputeRunStatus(ctx context.Context, id uuid.UUID) error 
 	return args.Error(0)
 }
 
+func (m *MockStore) GetRegistrySecret(ctx context.Context, id uuid.UUID) (*domain.RegistrySecret, error) {
+	args := m.Called(ctx, id)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.RegistrySecret), args.Error(1)
+}
+
 // Mock Storage
 type MockStorage struct {
 	mock.Mock

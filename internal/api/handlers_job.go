@@ -39,6 +39,15 @@ func (a *API) HandleCreateJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if req.RegistryAuth != nil {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{
+			Error:   "validation_error",
+			Message: "registry_auth is not supported; use registry_secret_id",
+			Code:    http.StatusBadRequest,
+		})
+		return
+	}
+
 	if len(req.Outputs) == 0 {
 		writeJSON(w, http.StatusBadRequest, ErrorResponse{
 			Error:   "validation_error",
@@ -168,6 +177,18 @@ func (a *API) HandleCreateJob(w http.ResponseWriter, r *http.Request) {
 	}
 
 	job.GPUCount = gpuCount
+
+	if req.RegistrySecretID != nil {
+		if _, err := a.store.GetRegistrySecretForWorkspace(r.Context(), workspace.ID, *req.RegistrySecretID); err != nil {
+			writeJSON(w, http.StatusNotFound, ErrorResponse{
+				Error:   "not_found",
+				Message: "Registry secret not found",
+				Code:    http.StatusNotFound,
+			})
+			return
+		}
+		job.RegistrySecretID = req.RegistrySecretID
+	}
 
 	// Insert job into database
 	if err := a.store.CreateJob(r.Context(), job); err != nil {

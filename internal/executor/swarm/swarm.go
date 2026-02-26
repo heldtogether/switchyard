@@ -2,8 +2,6 @@ package swarm
 
 import (
 	"context"
-	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"io"
 	"path/filepath"
@@ -53,8 +51,18 @@ func (e *SwarmExecutor) CreateRun(ctx context.Context, spec executor.RunSpec) (e
 	// Build service spec
 	serviceSpec := e.buildServiceSpec(spec, serviceName, jobOutputPath, networkID)
 
+	createOpts := types.ServiceCreateOptions{}
+	if spec.RegistryAuth != nil {
+		encoded, err := executor.BuildRegistryAuthString(spec.RegistryAuth)
+		if err != nil {
+			e.Client.NetworkRemove(ctx, networkID)
+			return executor.RunRef{}, fmt.Errorf("failed to build registry auth: %w", err)
+		}
+		createOpts.EncodedRegistryAuth = encoded
+	}
+
 	// Create service
-	resp, err := e.Client.ServiceCreate(ctx, serviceSpec, types.ServiceCreateOptions{})
+	resp, err := e.Client.ServiceCreate(ctx, serviceSpec, createOpts)
 	if err != nil {
 		// Cleanup network on failure
 		e.Client.NetworkRemove(ctx, networkID)
@@ -108,13 +116,6 @@ func (e *SwarmExecutor) buildServiceSpec(spec executor.RunSpec, serviceName, out
 				Target: "/outputs",
 			},
 		},
-	}
-
-	// Add registry auth if provided
-	if spec.RegistryAuth != nil {
-		containerSpec.Privileges = &swarm.Privileges{
-			CredentialSpec: buildSwarmRegistryAuth(spec.RegistryAuth),
-		}
 	}
 
 	// Task template
@@ -281,22 +282,6 @@ func (e *SwarmExecutor) Cleanup(ctx context.Context, ref executor.RunRef) error 
 	}
 
 	return nil
-}
-
-// Helper functions
-
-func buildSwarmRegistryAuth(auth *domain.RegistryAuth) *swarm.CredentialSpec {
-	authConfig := struct {
-		Username string `json:"username"`
-		Password string `json:"password"`
-	}{
-		Username: auth.Username,
-		Password: auth.Password,
-	}
-	encoded, _ := json.Marshal(authConfig)
-	return &swarm.CredentialSpec{
-		Registry: base64.URLEncoding.EncodeToString(encoded),
-	}
 }
 
 func uint64Ptr(v uint64) *uint64 {

@@ -93,6 +93,19 @@ func (p *Processor) Process(ctx context.Context, jobID uuid.UUID) error {
 	logger.Info("job status updated to RUNNING")
 
 	// 6. Build executor run spec
+	var registryAuth *domain.RegistryAuth
+	if job.RegistrySecretID != nil {
+		secret, err := p.store.GetRegistrySecret(ctx, *job.RegistrySecretID)
+		if err != nil {
+			return p.failJob(ctx, job, fmt.Errorf("failed to load registry secret: %w", err))
+		}
+		registryAuth = &domain.RegistryAuth{
+			Host:     secret.Host,
+			Username: secret.Username,
+			Password: secret.PasswordEncrypted,
+		}
+	}
+
 	spec := executor.RunSpec{
 		JobID:             job.ID.String(),
 		Image:             job.Image,
@@ -104,6 +117,7 @@ func (p *Processor) Process(ctx context.Context, jobID uuid.UUID) error {
 		Memory:            stringPtrValue(job.MemoryLimit),
 		GPUCount:          job.GPUCount,
 		Timeout:           time.Duration(job.TimeoutSecs) * time.Second,
+		RegistryAuth:      registryAuth,
 		CreatedAt:         job.CreatedAt,
 		ArtefactPrefix:    stringPtrValue(job.ArtefactPrefix),
 		Bucket:            p.bucket,

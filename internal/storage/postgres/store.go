@@ -254,6 +254,97 @@ func (s *Store) GetRunningJobs(ctx context.Context) ([]*domain.Job, error) {
 	return s.ListJobs(ctx, nil, &status, nil, 1000, 0)
 }
 
+// CreateRegistrySecret inserts a new registry secret
+func (s *Store) CreateRegistrySecret(ctx context.Context, secret *domain.RegistrySecret) error {
+	query := `
+		INSERT INTO registry_secrets (
+			id, created_by, workspace_id, host, username, password_encrypted, active
+		) VALUES ($1, $2, $3, $4, $5, $6, $7)
+		RETURNING created_at
+	`
+
+	return s.db.QueryRowContext(ctx, query,
+		secret.ID, secret.CreatedBy, secret.WorkspaceID, secret.Host,
+		secret.Username, secret.PasswordEncrypted, secret.Active,
+	).Scan(&secret.CreatedAt)
+}
+
+// ListRegistrySecrets returns all registry secrets for a workspace
+func (s *Store) ListRegistrySecrets(ctx context.Context, workspaceID uuid.UUID) ([]domain.RegistrySecret, error) {
+	query := `
+		SELECT id, created_at, created_by, workspace_id, host, username, password_encrypted, active
+		FROM registry_secrets
+		WHERE workspace_id = $1
+		ORDER BY created_at DESC
+	`
+
+	rows, err := s.db.QueryContext(ctx, query, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var secrets []domain.RegistrySecret
+	for rows.Next() {
+		var sct domain.RegistrySecret
+		if err := rows.Scan(
+			&sct.ID, &sct.CreatedAt, &sct.CreatedBy, &sct.WorkspaceID,
+			&sct.Host, &sct.Username, &sct.PasswordEncrypted, &sct.Active,
+		); err != nil {
+			return nil, err
+		}
+		secrets = append(secrets, sct)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return secrets, nil
+}
+
+// GetRegistrySecret retrieves a registry secret by ID
+func (s *Store) GetRegistrySecret(ctx context.Context, id uuid.UUID) (*domain.RegistrySecret, error) {
+	query := `
+		SELECT id, created_at, created_by, workspace_id, host, username, password_encrypted, active
+		FROM registry_secrets
+		WHERE id = $1
+	`
+
+	secret := &domain.RegistrySecret{}
+	err := s.db.QueryRowContext(ctx, query, id).Scan(
+		&secret.ID, &secret.CreatedAt, &secret.CreatedBy, &secret.WorkspaceID,
+		&secret.Host, &secret.Username, &secret.PasswordEncrypted, &secret.Active,
+	)
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("registry secret not found")
+	}
+	if err != nil {
+		return nil, err
+	}
+	return secret, nil
+}
+
+// GetRegistrySecretForWorkspace retrieves a registry secret by ID scoped to a workspace
+func (s *Store) GetRegistrySecretForWorkspace(ctx context.Context, workspaceID, secretID uuid.UUID) (*domain.RegistrySecret, error) {
+	query := `
+		SELECT id, created_at, created_by, workspace_id, host, username, password_encrypted, active
+		FROM registry_secrets
+		WHERE id = $1 AND workspace_id = $2
+	`
+
+	secret := &domain.RegistrySecret{}
+	err := s.db.QueryRowContext(ctx, query, secretID, workspaceID).Scan(
+		&secret.ID, &secret.CreatedAt, &secret.CreatedBy, &secret.WorkspaceID,
+		&secret.Host, &secret.Username, &secret.PasswordEncrypted, &secret.Active,
+	)
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("registry secret not found")
+	}
+	if err != nil {
+		return nil, err
+	}
+	return secret, nil
+}
+
 // SetConnPoolLimits configures connection pool
 func (s *Store) SetConnPoolLimits(maxOpen, maxIdle int, maxLifetime time.Duration) {
 	s.db.SetMaxOpenConns(maxOpen)

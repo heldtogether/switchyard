@@ -18,6 +18,7 @@ type JobStore interface {
 	GetProject(ctx context.Context, id uuid.UUID) (*domain.Project, error)
 	GetWorkspace(ctx context.Context, id uuid.UUID) (*domain.Workspace, error)
 	RecomputeRunStatus(ctx context.Context, id uuid.UUID) error
+	GetRegistrySecret(ctx context.Context, id uuid.UUID) (*domain.RegistrySecret, error)
 }
 
 // ObjectStorage interface for S3/object storage operations

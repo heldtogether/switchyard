@@ -69,8 +69,9 @@ func BuildRegistryAuthString(auth *domain.RegistryAuth) (string, error) {
 	}
 
 	ac := registry.AuthConfig{
-		Username: auth.Username,
-		Password: auth.Password,
+		Username:      auth.Username,
+		Password:      auth.Password,
+		ServerAddress: auth.Host,
 	}
 	b, err := json.Marshal(ac)
 	if err != nil {

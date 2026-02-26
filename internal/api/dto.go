@@ -90,15 +90,16 @@ type RunResponse struct {
 
 // CreateJobRequest is the request to create a new job
 type CreateJobRequest struct {
-	Name         *string              `json:"name,omitempty"`
-	Image        string               `json:"image"`
-	Command      []string             `json:"command,omitempty"`
-	Env          map[string]string    `json:"env,omitempty"`
-	Outputs      []string             `json:"outputs"`
-	Resources    *ResourcesRequest    `json:"resources,omitempty"`
-	TimeoutSecs  *int                 `json:"timeout_seconds,omitempty"`
-	RegistryAuth *RegistryAuthRequest `json:"registry_auth,omitempty"`
-	Metadata     map[string]any       `json:"metadata,omitempty"`
+	Name             *string              `json:"name,omitempty"`
+	Image            string               `json:"image"`
+	Command          []string             `json:"command,omitempty"`
+	Env              map[string]string    `json:"env,omitempty"`
+	Outputs          []string             `json:"outputs"`
+	Resources        *ResourcesRequest    `json:"resources,omitempty"`
+	TimeoutSecs      *int                 `json:"timeout_seconds,omitempty"`
+	RegistryAuth     *RegistryAuthRequest `json:"registry_auth,omitempty"`
+	RegistrySecretID *uuid.UUID           `json:"registry_secret_id,omitempty"`
+	Metadata         map[string]any       `json:"metadata,omitempty"`
 }
 
 // ResourcesRequest specifies resource limits
@@ -114,32 +115,49 @@ type RegistryAuthRequest struct {
 	Password string `json:"password"`
 }
 
+// CreateRegistrySecretRequest contains registry secret details
+type CreateRegistrySecretRequest struct {
+	Host     string `json:"host"`
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+// RegistrySecretResponse represents a registry secret (without password)
+type RegistrySecretResponse struct {
+	ID        uuid.UUID `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	CreatedBy string    `json:"created_by"`
+	Host      string    `json:"host"`
+	Username  string    `json:"username"`
+	Active    bool      `json:"active"`
+}
+
 // JobResponse is the response for a job
 type JobResponse struct {
-	ID            uuid.UUID         `json:"id"`
-	Name          *string           `json:"name,omitempty"`
-	CreatedAt     time.Time         `json:"created_at"`
-	UpdatedAt     time.Time         `json:"updated_at"`
-	CreatedBy     string            `json:"created_by"`
-	Status        string            `json:"status"`
-	StatusMessage *string           `json:"status_message,omitempty"`
-	Image         string            `json:"image"`
-	ImageDigest   *string           `json:"image_digest,omitempty"`
-	Command       []string          `json:"command,omitempty"`
-	Env           map[string]string `json:"env,omitempty"`
-	CPULimit      *string           `json:"cpu_limit,omitempty"`
-	MemoryLimit   *string           `json:"memory_limit,omitempty"`
-	GPUCount      int               `json:"gpu_count,omitempty"`
-	TimeoutSecs   int               `json:"timeout_seconds"`
-	Outputs       []string          `json:"outputs"`
-	StartedAt     *time.Time        `json:"started_at,omitempty"`
-	FinishedAt    *time.Time        `json:"finished_at,omitempty"`
-	ExitCode      *int              `json:"exit_code,omitempty"`
-	LogURL        *string           `json:"log_url,omitempty"`
-	Executor      string            `json:"executor"`
-	ExecutorRef   *string           `json:"executor_ref,omitempty"`
-	AssignedNodeID *string          `json:"assigned_node_id,omitempty"`
-	Metadata      map[string]any    `json:"metadata,omitempty"`
+	ID             uuid.UUID         `json:"id"`
+	Name           *string           `json:"name,omitempty"`
+	CreatedAt      time.Time         `json:"created_at"`
+	UpdatedAt      time.Time         `json:"updated_at"`
+	CreatedBy      string            `json:"created_by"`
+	Status         string            `json:"status"`
+	StatusMessage  *string           `json:"status_message,omitempty"`
+	Image          string            `json:"image"`
+	ImageDigest    *string           `json:"image_digest,omitempty"`
+	Command        []string          `json:"command,omitempty"`
+	Env            map[string]string `json:"env,omitempty"`
+	CPULimit       *string           `json:"cpu_limit,omitempty"`
+	MemoryLimit    *string           `json:"memory_limit,omitempty"`
+	GPUCount       int               `json:"gpu_count,omitempty"`
+	TimeoutSecs    int               `json:"timeout_seconds"`
+	Outputs        []string          `json:"outputs"`
+	StartedAt      *time.Time        `json:"started_at,omitempty"`
+	FinishedAt     *time.Time        `json:"finished_at,omitempty"`
+	ExitCode       *int              `json:"exit_code,omitempty"`
+	LogURL         *string           `json:"log_url,omitempty"`
+	Executor       string            `json:"executor"`
+	ExecutorRef    *string           `json:"executor_ref,omitempty"`
+	AssignedNodeID *string           `json:"assigned_node_id,omitempty"`
+	Metadata       map[string]any    `json:"metadata,omitempty"`
 }
 
 // ListJobsResponse is the response for listing jobs
@@ -263,29 +281,29 @@ func toRunResponse(run *domain.Run) RunResponse {
 // toJobResponse converts a domain.Job to JobResponse
 func toJobResponse(job *domain.Job, baseURL string, workspaceSlug string, projectSlug string, runSlug string) JobResponse {
 	resp := JobResponse{
-		ID:            job.ID,
-		Name:          job.Name,
-		CreatedAt:     job.CreatedAt,
-		UpdatedAt:     job.UpdatedAt,
-		CreatedBy:     job.CreatedBy,
-		Status:        string(job.Status),
-		StatusMessage: job.StatusMessage,
-		Image:         job.Image,
-		ImageDigest:   job.ImageDigest,
-		Command:       job.Command,
-		Env:           job.Env,
-		CPULimit:      job.CPULimit,
-		MemoryLimit:   job.MemoryLimit,
-		GPUCount:      job.GPUCount,
-		TimeoutSecs:   job.TimeoutSecs,
-		Outputs:       job.Outputs,
-		StartedAt:     job.StartedAt,
-		FinishedAt:    job.FinishedAt,
-		ExitCode:      job.ExitCode,
-		Executor:      string(job.Executor),
-		ExecutorRef:   job.ExecutorRef,
+		ID:             job.ID,
+		Name:           job.Name,
+		CreatedAt:      job.CreatedAt,
+		UpdatedAt:      job.UpdatedAt,
+		CreatedBy:      job.CreatedBy,
+		Status:         string(job.Status),
+		StatusMessage:  job.StatusMessage,
+		Image:          job.Image,
+		ImageDigest:    job.ImageDigest,
+		Command:        job.Command,
+		Env:            job.Env,
+		CPULimit:       job.CPULimit,
+		MemoryLimit:    job.MemoryLimit,
+		GPUCount:       job.GPUCount,
+		TimeoutSecs:    job.TimeoutSecs,
+		Outputs:        job.Outputs,
+		StartedAt:      job.StartedAt,
+		FinishedAt:     job.FinishedAt,
+		ExitCode:       job.ExitCode,
+		Executor:       string(job.Executor),
+		ExecutorRef:    job.ExecutorRef,
 		AssignedNodeID: job.AssignedNodeID,
-		Metadata:      job.Metadata,
+		Metadata:       job.Metadata,
 	}
 
 	// Add log URL if available

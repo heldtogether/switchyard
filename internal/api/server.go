@@ -38,6 +38,8 @@ func (s *Server) Start() error {
 	mux.HandleFunc("POST /v1/workspaces", s.api.HandleCreateWorkspace)
 	mux.HandleFunc("GET /v1/workspaces", s.api.HandleListWorkspaces)
 	mux.HandleFunc("GET /v1/workspaces/{slug}", s.api.HandleGetWorkspace)
+	mux.HandleFunc("POST /v1/workspaces/{workspace_slug}/registry-secrets", s.api.HandleCreateRegistrySecret)
+	mux.HandleFunc("GET /v1/workspaces/{workspace_slug}/registry-secrets", s.api.HandleListRegistrySecrets)
 
 	// Project routes
 	mux.HandleFunc("POST /v1/workspaces/{workspace_slug}/projects", s.api.HandleCreateProject)

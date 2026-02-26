@@ -102,6 +102,7 @@ type ResourceSpec struct {
 
 // RegistryAuth holds authentication for private registries
 type RegistryAuth struct {
+	Host     string `json:"host,omitempty"`
 	Username string `json:"username"`
 	Password string `json:"password"`
 }
