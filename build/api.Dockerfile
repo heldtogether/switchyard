@@ -32,7 +32,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
 FROM alpine:3.19
 
 # Install runtime dependencies
-RUN apk add --no-cache ca-certificates tzdata netcat-openbsd
+RUN apk add --no-cache ca-certificates tzdata
 
 # Create non-root user
 RUN addgroup -g 1000 switchyard && \
@@ -50,14 +50,8 @@ COPY --from=builder /build/migrations /app/migrations
 # Copy example config (can be overridden with volume mount)
 COPY --from=builder /build/config.example.yaml /app/config.example.yaml
 
-# Copy entrypoint
-COPY --from=builder /build/build/api-entrypoint.sh /app/entrypoint.sh
-
 # Change ownership
 RUN chown -R switchyard:switchyard /app
-
-# Ensure entrypoint is executable
-RUN chmod +x /app/entrypoint.sh
 
 # Switch to non-root user
 USER switchyard
@@ -69,6 +63,6 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD wget --no-verbose --tries=1 --spider http://localhost:8080/healthz || exit 1
 
-# Run migrations and start the API server
-ENTRYPOINT ["/app/entrypoint.sh"]
+# Run the API server
+ENTRYPOINT ["/app/api"]
 CMD ["-config", "/app/config.yaml"]

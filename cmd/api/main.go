@@ -2,14 +2,21 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
 	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
+
+	"github.com/golang-migrate/migrate/v4"
+	_ "github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
+	amqp "github.com/rabbitmq/amqp091-go"
 
 	"github.com/heldtogether/switchyard/internal/api"
 	"github.com/heldtogether/switchyard/internal/config"
@@ -47,6 +54,18 @@ func main() {
 	// Setup logger
 	logger := setupLogger(cfg.Logging.Level, cfg.Logging.Format)
 	logger.Info("switchyard api starting", "version", Version)
+
+	if err := runMigrationsWithRetry(logger, cfg.Database.URL, "migrations"); err != nil {
+		logger.Error("migrations failed", "error", err)
+		os.Exit(1)
+	}
+
+	if cfg.Queue.Type == "rabbitmq" {
+		if err := waitForRabbitMQ(logger, cfg.Queue.URL); err != nil {
+			logger.Error("rabbitmq not ready", "error", err)
+			os.Exit(1)
+		}
+	}
 
 	// Initialize Postgres
 	logger.Info("connecting to database")
@@ -206,4 +225,83 @@ func setupLogger(level, format string) *slog.Logger {
 	}
 
 	return slog.New(handler)
+}
+
+func runMigrationsWithRetry(logger *slog.Logger, dbURL, migrationsDir string) error {
+	const maxAttempts = 30
+	const maxDelay = 10 * time.Second
+
+	var lastErr error
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		logger.Info("running migrations", "attempt", attempt, "max_attempts", maxAttempts)
+		if err := runMigrations(dbURL, migrationsDir); err == nil {
+			return nil
+		} else {
+			lastErr = err
+			logger.Warn("migration attempt failed", "error", err)
+		}
+
+		if attempt == maxAttempts {
+			break
+		}
+
+		sleep := time.Duration(attempt) * time.Second
+		if sleep > maxDelay {
+			sleep = maxDelay
+		}
+		time.Sleep(sleep)
+	}
+
+	return fmt.Errorf("migrations failed after %d attempts: %w", maxAttempts, lastErr)
+}
+
+func runMigrations(dbURL, migrationsDir string) error {
+	absDir, err := filepath.Abs(migrationsDir)
+	if err != nil {
+		return fmt.Errorf("resolve migrations dir: %w", err)
+	}
+	sourceURL := fmt.Sprintf("file://%s", absDir)
+
+	m, err := migrate.New(sourceURL, dbURL)
+	if err != nil {
+		return fmt.Errorf("failed to create migration instance: %w", err)
+	}
+	defer m.Close()
+
+	err = m.Up()
+	if err != nil && errors.Is(err, migrate.ErrNoChange) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("migration up failed: %w", err)
+	}
+	return nil
+}
+
+func waitForRabbitMQ(logger *slog.Logger, url string) error {
+	const maxAttempts = 30
+	const maxDelay = 10 * time.Second
+
+	var lastErr error
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		logger.Info("waiting for rabbitmq", "attempt", attempt, "max_attempts", maxAttempts)
+		conn, err := amqp.Dial(url)
+		if err == nil {
+			_ = conn.Close()
+			return nil
+		}
+		lastErr = err
+
+		if attempt == maxAttempts {
+			break
+		}
+
+		sleep := time.Duration(attempt) * time.Second
+		if sleep > maxDelay {
+			sleep = maxDelay
+		}
+		time.Sleep(sleep)
+	}
+
+	return fmt.Errorf("rabbitmq not reachable after %d attempts: %w", maxAttempts, lastErr)
 }
