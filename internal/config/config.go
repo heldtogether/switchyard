@@ -2,7 +2,9 @@ package config
 
 import (
 	"fmt"
+	urlpkg "net/url"
 	"os"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -319,14 +321,27 @@ func getEnvFromFile(envVar string) string {
 	if err != nil {
 		return ""
 	}
-	return string(data)
+	return strings.TrimRight(string(data), "\r\n")
 }
 
 // replacePasswordInURL replaces password in a Postgres URL
 func replacePasswordInURL(url, password string) string {
-	// Simple implementation - in production, use proper URL parsing
-	// For now, assuming format: postgres://user:oldpass@host:port/db
-	return url // TODO: Implement proper password replacement
+	parsed, err := urlpkg.Parse(url)
+	if err != nil {
+		return url
+	}
+
+	if parsed.User == nil {
+		return url
+	}
+
+	username := parsed.User.Username()
+	if username == "" {
+		return url
+	}
+
+	parsed.User = urlpkg.UserPassword(username, password)
+	return parsed.String()
 }
 
 // Validate checks if the configuration is valid
