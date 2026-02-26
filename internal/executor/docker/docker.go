@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/api/types/network"
 
@@ -41,6 +42,11 @@ func (e *DockerExecutor) CreateRun(ctx context.Context, spec executor.RunSpec) (
 	netID, err := e.CreateNetwork(ctx, networkName, spec.JobID, "bridge")
 	if err != nil {
 		return executor.RunRef{}, fmt.Errorf("create network: %w", err)
+	}
+
+	if err := e.pullImage(ctx, spec.Image, spec.RegistryAuth); err != nil {
+		_ = e.Client.NetworkRemove(ctx, netID)
+		return executor.RunRef{}, err
 	}
 
 	// Build environment variables with system-managed SWITCHYARD_* vars
@@ -110,6 +116,28 @@ func (e *DockerExecutor) CreateRun(ctx context.Context, spec executor.RunSpec) (
 		ExecutorType: "docker",
 		Reference:    createResp.ID,
 	}, nil
+}
+
+func (e *DockerExecutor) pullImage(ctx context.Context, imageRef string, auth *domain.RegistryAuth) error {
+	opts := image.PullOptions{}
+	if auth != nil {
+		encoded, err := executor.BuildRegistryAuthString(auth)
+		if err != nil {
+			return fmt.Errorf("build registry auth: %w", err)
+		}
+		opts.RegistryAuth = encoded
+	}
+
+	reader, err := e.Client.ImagePull(ctx, imageRef, opts)
+	if err != nil {
+		return fmt.Errorf("pull image: %w", err)
+	}
+	defer reader.Close()
+
+	if _, err := io.Copy(io.Discard, reader); err != nil {
+		return fmt.Errorf("pull image: %w", err)
+	}
+	return nil
 }
 
 func (e *DockerExecutor) Wait(ctx context.Context, ref executor.RunRef) (executor.Result, error) {
