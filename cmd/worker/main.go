@@ -98,7 +98,9 @@ func main() {
 		if cfg.Executor.Type == "docker" {
 			dockerHost = cfg.Executor.Docker.DockerHost
 		}
+		logger.Info("detecting number of GPUs on this node")
 		gpuTotal = worker.DetectGPUCountViaDocker(context.Background(), dockerHost, cfg.Worker.GPUDetectImage)
+		logger.Info("found GPUs on this node", "numNodes", gpuTotal)
 	}
 
 	// Initialize queue
