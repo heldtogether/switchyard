@@ -23,14 +23,17 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
     ./cmd/worker
 
 # Runtime stage
-FROM alpine:3.19
+FROM nvidia/cuda:12.4.1-runtime-ubuntu22.04
 
 # Install runtime dependencies
-RUN apk add --no-cache ca-certificates tzdata
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    tzdata \
+  && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user
-RUN addgroup -g 1000 switchyard && \
-    adduser -D -u 1000 -G switchyard switchyard
+RUN groupadd -g 1000 switchyard && \
+    useradd -u 1000 -g switchyard -m switchyard
 
 WORKDIR /app
 
