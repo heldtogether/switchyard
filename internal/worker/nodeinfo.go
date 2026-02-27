@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/containerd/errdefs"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/client"
@@ -64,7 +65,7 @@ func DetectGPUCountViaDocker(ctx context.Context, dockerHost string, detectImage
 		detectImage = defaultGPUDetectImage
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
 	cli, err := client.NewClientWithOpts(client.WithHost(dockerHost), client.WithAPIVersionNegotiation())
@@ -73,17 +74,15 @@ func DetectGPUCountViaDocker(ctx context.Context, dockerHost string, detectImage
 	}
 	defer cli.Close()
 
-	reader, err := cli.ImagePull(ctx, detectImage, image.PullOptions{})
-	if err != nil {
+	if err := ensureImagePresent(ctx, cli, detectImage); err != nil {
 		return 0
 	}
-	_, _ = io.Copy(io.Discard, reader)
-	reader.Close()
 
 	resp, err := cli.ContainerCreate(ctx, &container.Config{
-		Image: detectImage,
-		Cmd:   []string{"nvidia-smi", "-L"},
-		Tty:   false,
+		Image:      detectImage,
+		Entrypoint: []string{"nvidia-smi"},
+		Cmd:        []string{"-L"},
+		Tty:        false,
 	}, &container.HostConfig{
 		Resources: container.Resources{
 			DeviceRequests: []container.DeviceRequest{
@@ -111,6 +110,8 @@ func DetectGPUCountViaDocker(ctx context.Context, dockerHost string, detectImage
 			return 0
 		}
 	case <-statusCh:
+	case <-ctx.Done():
+		return 0
 	}
 
 	logs, err := cli.ContainerLogs(ctx, resp.ID, container.LogsOptions{
@@ -140,4 +141,28 @@ func countGPULines(output string) int {
 		}
 	}
 	return count
+}
+
+func ensureImagePresent(ctx context.Context, cli *client.Client, imageRef string) error {
+	// Check if image exists locally
+	_, err := cli.ImageInspect(ctx, imageRef)
+	if err == nil {
+		return nil
+	}
+
+	// If it's not a "not found" error, return it
+	if !errdefs.IsNotFound(err) {
+		return err
+	}
+
+	// Pull image if missing
+	reader, err := cli.ImagePull(ctx, imageRef, image.PullOptions{})
+	if err != nil {
+		return err
+	}
+	defer reader.Close()
+
+	// Drain response to complete pull
+	_, err = io.Copy(io.Discard, reader)
+	return err
 }
