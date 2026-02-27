@@ -20,7 +20,6 @@ type Config struct {
 	Executor  ExecutorConfig  `yaml:"executor"`
 	Scheduler SchedulerConfig `yaml:"scheduler"`
 	Logging   LoggingConfig   `yaml:"logging"`
-	Metrics   MetricsConfig   `yaml:"metrics"`
 }
 
 // APIConfig holds API server configuration
@@ -93,9 +92,22 @@ type StorageConfig struct {
 
 // ExecutorConfig holds executor configuration
 type ExecutorConfig struct {
-	Type  string      `yaml:"type"` // swarm, kube
-	Swarm SwarmConfig `yaml:"swarm"`
-	Kube  KubeConfig  `yaml:"kube"`
+	Type   string       `yaml:"type"` // swarm, docker, kube
+	Docker DockerConfig `yaml:"docker"`
+	Swarm  SwarmConfig  `yaml:"swarm"`
+	Kube   KubeConfig   `yaml:"kube"`
+}
+
+// DockerConfig holds Docker executor configuration
+type DockerConfig struct {
+	// ⚠️ CRITICAL: NFS mount base path
+	// Must be accessible on all nodes
+	NFSBasePath string `yaml:"nfs_base_path"`
+
+	DockerHost      string                 `yaml:"docker_host"`
+	NetworkIsolated bool                   `yaml:"network_isolated"`
+	Defaults        ExecutorDefaultsConfig `yaml:"defaults"`
+	Cleanup         CleanupConfig          `yaml:"cleanup"`
 }
 
 // SwarmConfig holds Docker Swarm executor configuration
@@ -104,33 +116,29 @@ type SwarmConfig struct {
 	// Must be accessible on all Swarm nodes
 	NFSBasePath string `yaml:"nfs_base_path"`
 
-	DockerHost      string              `yaml:"docker_host"`
-	NetworkDriver   string              `yaml:"network_driver"`
-	NetworkIsolated bool                `yaml:"network_isolated"`
-	Defaults        SwarmDefaultsConfig `yaml:"defaults"`
-	Cleanup         CleanupConfig       `yaml:"cleanup"`
+	DockerHost      string                 `yaml:"docker_host"`
+	NetworkIsolated bool                   `yaml:"network_isolated"`
+	Defaults        ExecutorDefaultsConfig `yaml:"defaults"`
+	Cleanup         CleanupConfig          `yaml:"cleanup"`
 }
 
-// SwarmDefaultsConfig holds default settings for Swarm jobs
-type SwarmDefaultsConfig struct {
-	Resources     ResourcesConfig `yaml:"resources"`
-	Timeout       time.Duration   `yaml:"timeout"`
-	RestartPolicy string          `yaml:"restart_policy"`
-	Constraints   []string        `yaml:"constraints"`
+// ExecutorDefaultsConfig holds default settings for executor jobs
+type ExecutorDefaultsConfig struct {
+	Resources   ResourcesConfig `yaml:"resources"`
+	Timeout     time.Duration   `yaml:"timeout"`
+	Constraints []string        `yaml:"constraints"`
 }
 
 // ResourcesConfig holds resource limits
 type ResourcesConfig struct {
-	CPU               string `yaml:"cpu"`
-	Memory            string `yaml:"memory"`
-	MemoryReservation string `yaml:"memory_reservation"`
+	CPU    string `yaml:"cpu"`
+	Memory string `yaml:"memory"`
 }
 
 // CleanupConfig holds cleanup policy configuration
 type CleanupConfig struct {
 	RemoveOnComplete   bool `yaml:"remove_on_complete"`
 	KeepFailedServices bool `yaml:"keep_failed_services"`
-	RetentionHours     int  `yaml:"retention_hours"`
 }
 
 // KubeConfig holds Kubernetes executor configuration (future)
@@ -143,14 +151,6 @@ type KubeConfig struct {
 type LoggingConfig struct {
 	Level  string `yaml:"level"`  // debug, info, warn, error
 	Format string `yaml:"format"` // json, console
-	Output string `yaml:"output"` // stdout, stderr, file path
-}
-
-// MetricsConfig holds metrics configuration
-type MetricsConfig struct {
-	Enabled bool   `yaml:"enabled"`
-	Port    int    `yaml:"port"`
-	Path    string `yaml:"path"`
 }
 
 // Load reads configuration from a YAML file and applies environment overrides
@@ -270,9 +270,11 @@ func applyEnvOverrides(cfg *Config) {
 		cfg.Executor.Type = v
 	}
 	if v := os.Getenv("EXECUTOR_NFS_BASE"); v != "" {
+		cfg.Executor.Docker.NFSBasePath = v
 		cfg.Executor.Swarm.NFSBasePath = v
 	}
 	if v := os.Getenv("DOCKER_HOST"); v != "" {
+		cfg.Executor.Docker.DockerHost = v
 		cfg.Executor.Swarm.DockerHost = v
 	}
 
@@ -391,6 +393,9 @@ func (c *Config) Validate() error {
 	}
 
 	// Storage validation
+	if c.Storage.Type != "s3" {
+		return fmt.Errorf("invalid storage type: %s (must be 's3')", c.Storage.Type)
+	}
 	if c.Storage.Endpoint == "" {
 		return fmt.Errorf("storage endpoint is required")
 	}
@@ -406,7 +411,15 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("invalid executor type: %s (must be 'swarm' or 'kube' or 'docker')", c.Executor.Type)
 	}
 
-	if c.Executor.Type == "swarm" || c.Executor.Type == "docker" {
+	if c.Executor.Type == "docker" {
+		if c.Executor.Docker.NFSBasePath == "" {
+			return fmt.Errorf("docker executor: nfs_base_path is required")
+		}
+		if c.Executor.Docker.DockerHost == "" {
+			return fmt.Errorf("docker executor: docker_host is required")
+		}
+	}
+	if c.Executor.Type == "swarm" {
 		if c.Executor.Swarm.NFSBasePath == "" {
 			return fmt.Errorf("swarm executor: nfs_base_path is required")
 		}
@@ -444,11 +457,14 @@ func (c *Config) Validate() error {
 
 // CheckNFSMount verifies that the NFS base path exists and is writable
 func (c *Config) CheckNFSMount() error {
-	if c.Executor.Type != "swarm" {
+	if c.Executor.Type != "swarm" && c.Executor.Type != "docker" {
 		return nil
 	}
 
 	path := c.Executor.Swarm.NFSBasePath
+	if c.Executor.Type == "docker" {
+		path = c.Executor.Docker.NFSBasePath
+	}
 
 	// Check if directory exists
 	info, err := os.Stat(path)

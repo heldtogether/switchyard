@@ -132,9 +132,9 @@ func main() {
 	switch cfg.Executor.Type {
 	case "docker":
 		exec, err = dockerexec.New(
-			cfg.Executor.Swarm.DockerHost,
-			cfg.Executor.Swarm.NFSBasePath,
-			cfg.Executor.Swarm.NetworkIsolated,
+			cfg.Executor.Docker.DockerHost,
+			cfg.Executor.Docker.NFSBasePath,
+			cfg.Executor.Docker.NetworkIsolated,
 		)
 		if err != nil {
 			logger.Error("failed to create docker executor", "error", err)
@@ -150,6 +150,9 @@ func main() {
 			logger.Error("failed to create swarm executor", "error", err)
 			os.Exit(1)
 		}
+	case "kube":
+		logger.Error("executor type kube is not implemented yet")
+		os.Exit(1)
 	default:
 		logger.Error("unsupported executor type", "type", cfg.Executor.Type)
 		os.Exit(1)

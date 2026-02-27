@@ -28,6 +28,7 @@ type Worker struct {
 	nodeID   string
 	hostname string
 	gpuTotal int
+	cleanup  config.CleanupConfig
 	wg       sync.WaitGroup
 	ctx      context.Context
 	cancel   context.CancelFunc
@@ -40,6 +41,11 @@ type Worker struct {
 func New(cfg *config.Config, q queue.Consumer, store *postgres.Store, exec executor.Executor, storage *objectstore.S3Store, logger *slog.Logger, api *APIClient, nodeID, hostname string, gpuTotal int) *Worker {
 	ctx, cancel := context.WithCancel(context.Background())
 
+	cleanup := cfg.Executor.Swarm.Cleanup
+	if cfg.Executor.Type == "docker" {
+		cleanup = cfg.Executor.Docker.Cleanup
+	}
+
 	return &Worker{
 		cfg:      cfg,
 		queue:    q,
@@ -51,6 +57,7 @@ func New(cfg *config.Config, q queue.Consumer, store *postgres.Store, exec execu
 		nodeID:   nodeID,
 		hostname: hostname,
 		gpuTotal: gpuTotal,
+		cleanup:  cleanup,
 		ctx:      ctx,
 		cancel:   cancel,
 		attempts: make(map[string]int),
@@ -198,7 +205,7 @@ func (w *Worker) processJob(ctx context.Context, jobIDStr string) error {
 
 	// Wrap S3Store to match ObjectStorage interface
 	storageAdapter := &s3StorageAdapter{store: w.storage}
-	processor := NewProcessor(w.store, w.executor, storageAdapter, w.logger, w.cfg.API.BaseURL, w.cfg.Storage.Bucket, w.nodeID, w.cfg.Executor.Swarm.Cleanup)
+	processor := NewProcessor(w.store, w.executor, storageAdapter, w.logger, w.cfg.API.BaseURL, w.cfg.Storage.Bucket, w.nodeID, w.cleanup)
 	return processor.Process(ctx, jobID)
 }
 

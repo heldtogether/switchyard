@@ -101,6 +101,20 @@ func (a *API) HandleCreateJob(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create job
+	defaults := a.cfg.Executor.Swarm.Defaults
+	executorType := domain.ExecutorTypeSwarm
+	switch a.cfg.Executor.Type {
+	case "docker":
+		defaults = a.cfg.Executor.Docker.Defaults
+		executorType = domain.ExecutorTypeDocker
+	case "swarm":
+		defaults = a.cfg.Executor.Swarm.Defaults
+		executorType = domain.ExecutorTypeSwarm
+	case "kube":
+		defaults = a.cfg.Executor.Swarm.Defaults
+		executorType = domain.ExecutorTypeKube
+	}
+
 	job := &domain.Job{
 		ID:          uuid.New(),
 		RunID:       run.ID,
@@ -111,8 +125,8 @@ func (a *API) HandleCreateJob(w http.ResponseWriter, r *http.Request) {
 		Command:     req.Command,
 		Env:         req.Env,
 		Outputs:     req.Outputs,
-		TimeoutSecs: int(a.cfg.Executor.Swarm.Defaults.Timeout.Seconds()),
-		Executor:    domain.ExecutorTypeSwarm,
+		TimeoutSecs: int(defaults.Timeout.Seconds()),
+		Executor:    executorType,
 		Metadata:    req.Metadata,
 	}
 
@@ -141,8 +155,8 @@ func (a *API) HandleCreateJob(w http.ResponseWriter, r *http.Request) {
 		gpuCount = req.Resources.GPU
 	} else {
 		// Use defaults from config
-		cpu := a.cfg.Executor.Swarm.Defaults.Resources.CPU
-		mem := a.cfg.Executor.Swarm.Defaults.Resources.Memory
+		cpu := defaults.Resources.CPU
+		mem := defaults.Resources.Memory
 		job.CPULimit = &cpu
 		job.MemoryLimit = &mem
 	}

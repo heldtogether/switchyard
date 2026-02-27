@@ -1,155 +1,247 @@
 # Switchyard Job Runner Configuration
-# Copy this file to config.yaml and customize for your environment
-# Environment variables can override any setting (see README for details)
+# Copy this file to config.yaml and customize for your environment.
+# Environment variables can override any setting (see README for details).
+#
+# Reading guide:
+# - The API service reads api, database, queue, storage, executor, scheduler, logging.
+# - The worker service reads worker, database, queue, storage, executor, logging.
+# - Values shown here are safe defaults for local/dev. Production sizing varies.
 
-# ================================================================================
+# ==============================================================================
 # API Server Configuration
-# ================================================================================
+# ==============================================================================
 api:
-  port: 8080
+  # Listen address and port for the HTTP API.
   host: "0.0.0.0"
-  base_url: "http://localhost:8080"  # Base URL for API (injected as SWITCHYARD_API_URL in jobs)
+  port: 8080
+
+  # Public base URL for the API. This is injected into job containers as
+  # SWITCHYARD_API_URL so jobs can call back to the API.
+  # Example: "https://switchyard.example.com"
+  base_url: "http://localhost:8080"
+
+  # HTTP timeouts for incoming requests. Increase if you expect large payloads
+  # or slow clients; keep reasonable in prod to avoid stuck connections.
   read_timeout: 30s
   write_timeout: 30s
-  
+
   # Authentication (MVP: simple API key)
   auth:
+    # If enabled, all API requests must provide the API key.
     enabled: true
-    api_key: "${API_KEY}"  # Set via API_KEY env var or API_KEY_FILE
+    # Set via API_KEY env var or API_KEY_FILE.
+    api_key: "${API_KEY}"
 
-# ================================================================================
+# ==============================================================================
 # Worker Configuration
-# ================================================================================
+# ==============================================================================
 worker:
-  concurrency: 5              # Number of parallel jobs
-  poll_interval: 1s           # How often to check for new jobs
-  graceful_shutdown: 30s      # Wait time for jobs to finish on shutdown
-  heartbeat_interval: 10s     # Worker heartbeat interval
-  node_id: ""                 # Optional override (otherwise autodetect)
-  gpu_count: 0                # Optional override (otherwise autodetect)
-  retry_base_delay: 1s        # Base delay for Redis backoff
-  retry_max_delay: 30s        # Max delay for Redis backoff
-  retry_jitter: 0.2           # Jitter fraction (0.2 = ±20%)
+  # Number of parallel jobs a worker will execute.
+  # Higher values increase throughput but also increase CPU/memory/DB load.
+  concurrency: 5
 
-# ================================================================================
+  # How often to check for new jobs when the queue is idle.
+  # Lower = lower latency, higher = less idle CPU/DB usage.
+  poll_interval: 1s
+
+  # Grace period for in-flight jobs to finish during worker shutdown.
+  graceful_shutdown: 30s
+
+  # Heartbeats tell the API that this worker is alive. The scheduler uses this
+  # to detect stale nodes.
+  heartbeat_interval: 10s
+
+  # Optional override for node identity. If empty, Switchyard autodetects.
+  node_id: ""
+
+  # Optional override for total GPUs on this node. If 0, autodetect.
+  gpu_count: 0
+
+  # Redis-only backoff settings for delayed requeue when GPUs are unavailable.
+  # These control how quickly the worker retries jobs that need GPUs.
+  retry_base_delay: 1s
+  retry_max_delay: 30s
+  retry_jitter: 0.2
+
+# ==============================================================================
 # Database Configuration (Postgres)
-# ================================================================================
+# ==============================================================================
 database:
   url: "postgres://jobrunner:password@postgres:5432/jobrunner?sslmode=disable"
+
+  # Connection pool sizing. Tune based on DB capacity and worker concurrency.
   max_open_conns: 25
   max_idle_conns: 5
   conn_max_lifetime: 5m
 
-# ================================================================================
+# ==============================================================================
 # Queue Configuration (Redis or RabbitMQ)
-# ================================================================================
+# ==============================================================================
 queue:
+  # Queue backend:
+  # - redis: simple setup, good for dev and moderate throughput
+  # - rabbitmq: better for priorities, delayed jobs, and higher throughput
   type: rabbitmq
+
+  # Connection URL. Use amqp:// for RabbitMQ or redis:// for Redis.
   url: "amqp://rabbitmq:5672/"
+
+  # Queue name used by both Redis and RabbitMQ.
   queue_name: "switchyard.jobs"
+
+  # RabbitMQ-only settings:
+  # - exchange: main exchange for publishing jobs
+  # - delay_exchange: used for delayed retries
   exchange: "jobs"
   delay_exchange: "jobs.delay"
+
+  # RabbitMQ-only: visibility timeout for task execution.
+  # If a worker does not acknowledge within this time, the job can be redelivered.
   task_timeout: 10s
+
+  # RabbitMQ-only: max priority for queued jobs (0 disables priority).
   max_priority: 10
-  requeue_interval: 2s        # Redis only: delay queue poll interval
-  requeue_batch: 100          # Redis only: max items to requeue per tick
 
-# ================================================================================
+  # Redis-only: delay queue poll interval and batch size for requeue.
+  requeue_interval: 2s
+  requeue_batch: 100
+
+# ==============================================================================
 # Scheduler / Reaper Configuration
-# ================================================================================
+# ==============================================================================
 scheduler:
-  reaper_interval: 30s        # How often to check for stale nodes
-  heartbeat_timeout: 30s      # If 0, defaults to 3x worker.heartbeat_interval
+  # How often to scan for stale nodes and orphaned jobs.
+  reaper_interval: 30s
 
-# ================================================================================
+  # If a worker has not sent a heartbeat within this window, it is considered
+  # stale. If 0, defaults to 3x worker.heartbeat_interval.
+  heartbeat_timeout: 30s
+
+# ==============================================================================
 # Object Storage Configuration (S3-compatible)
-# ⚠️  MinIO is NOT included in stack.yml - configure your existing S3 storage here
-# ================================================================================
+# ==============================================================================
 storage:
+  # Storage backend. Only s3 is supported today.
   type: s3
-  endpoint: "https://s3.amazonaws.com"       # Or your S3-compatible endpoint
-  access_key: "${S3_ACCESS_KEY}"             # Set via env var or S3_ACCESS_KEY_FILE
-  secret_key: "${S3_SECRET_KEY}"             # Set via env var or S3_SECRET_KEY_FILE
+
+  # S3-compatible endpoint. Examples:
+  # - AWS: https://s3.amazonaws.com
+  # - MinIO: http://minio:9000
+  endpoint: "https://s3.amazonaws.com"
+
+  # Credentials (use env vars or *_FILE to keep secrets out of config).
+  access_key: "${S3_ACCESS_KEY}"
+  secret_key: "${S3_SECRET_KEY}"
+
   bucket: "jobrunner"
   region: "us-east-1"
-  use_ssl: true
-  create_bucket: false                       # Set true to auto-create bucket
 
-# ================================================================================
+  # Use SSL for the S3 endpoint. Disable only for local/dev endpoints.
+  use_ssl: true
+
+  # If true, Switchyard will attempt to create the bucket on startup.
+  # Recommended for dev; in production you may prefer pre-provisioning.
+  create_bucket: false
+
+# ==============================================================================
 # Executor Configuration
-# ================================================================================
+# ==============================================================================
 executor:
-  type: swarm                                # swarm or kube (kube not yet implemented)
-  
-  # Docker Swarm Executor
-  swarm:
-    # ⚠️  CRITICAL: NFS mount base path
+  # Execution backend:
+  # - docker: single-host Docker (simple, good for dev or small deployments)
+  # - swarm: Docker Swarm (multi-node scheduling and placement constraints)
+  # - kube: Kubernetes (not implemented yet)
+  type: swarm
+
+  # ---------------------------------------------------------------------------
+  # Docker Executor
+  # ---------------------------------------------------------------------------
+  docker:
+    # NFS mount base path for job outputs.
     # This path MUST be:
-    #   1. An NFS share mounted on ALL Swarm nodes at the same path
-    #   2. Readable and writable by the worker containers
-    #   3. Accessible by job containers for writing outputs
-    #
-    # Example NFS mount command (run on all nodes):
-    #   sudo mount -t nfs nfs-server.local:/export/jobrunner /mnt/jobrunner
-    #
-    # To change this path:
-    #   1. Update this value in config.yaml
-    #   2. Update the volume mount in stack.yml (worker service)
-    #   3. Ensure all Swarm nodes mount NFS at the new path
+    # 1) An NFS share mounted on all nodes at the same path
+    # 2) Readable and writable by the worker containers
+    # 3) Accessible by job containers for writing outputs
     nfs_base_path: "/mnt/jobrunner"
-    
-    # Docker connection
+
+    # Docker API connection string. For local socket:
+    # "unix:///var/run/docker.sock"
     docker_host: "unix:///var/run/docker.sock"
-    
-    # Network configuration
-    network_driver: overlay
-    network_isolated: true                   # Jobs run in isolated networks (no internet)
-    
+
+    # If true, jobs run in isolated networks (no outbound internet).
+    # Use true for tighter isolation; false for jobs that need external access.
+    network_isolated: true
+
     # Job Defaults (can be overridden per-job via API)
     defaults:
-      # Resource limits
       resources:
-        cpu: "1.0"                           # CPU limit (1.0 = 1 core)
-        memory: "2g"                         # Memory limit (units: b, k, m, g)
-        memory_reservation: "512m"           # Soft memory reservation
-      
-      # Timeout (jobs exceeding this will be killed)
-      timeout: "1h"                          # Duration: 30s, 5m, 1h, etc.
-      
-      # Restart policy
-      restart_policy: "never"                # never, on-failure, always
-      
-      # Node constraints (where jobs can run)
-      # Common options:
-      #   - node.role==worker      (only on worker nodes)
-      #   - node.role==manager     (only on manager nodes)  
-      #   - node.labels.gpu==true  (only on nodes with GPU label)
+        # CPU limit (1.0 = 1 core). Empty means no explicit limit.
+        cpu: "1.0"
+
+        # Memory limit (units: b, k, m, g). Empty means no explicit limit.
+        memory: "2g"
+
+      # Default timeout for jobs (jobs exceeding this will be killed).
+      timeout: "1h"
+
+      # Node constraints (reserved for future use; enforced by swarm executor).
+      constraints: []
+
+  # ---------------------------------------------------------------------------
+  # Docker Swarm Executor
+  # ---------------------------------------------------------------------------
+  swarm:
+    # NFS mount base path for job outputs.
+    # This path MUST be:
+    # 1) An NFS share mounted on all Swarm nodes at the same path
+    # 2) Readable and writable by the worker containers
+    # 3) Accessible by job containers for writing outputs
+    nfs_base_path: "/mnt/jobrunner"
+
+    # Docker API connection string.
+    docker_host: "unix:///var/run/docker.sock"
+
+    # If true, jobs run in isolated networks (no outbound internet).
+    network_isolated: true
+
+    # Job Defaults (can be overridden per-job via API)
+    defaults:
+      resources:
+        cpu: "1.0"
+        memory: "2g"
+
+      # Default timeout for jobs.
+      timeout: "1h"
+
+      # Node constraints determine where jobs can run.
+      # Examples:
+      # - node.role==worker      (only on worker nodes)
+      # - node.role==manager     (only on manager nodes)
+      # - node.labels.gpu==true  (only on nodes with GPU label)
       constraints:
         - "node.role==worker"
-    
-    # Cleanup policy
-    cleanup:
-      remove_on_complete: true               # Remove services after job completes
-      keep_failed_services: false            # Set true to keep failed services for debugging
-      retention_hours: 24                    # How long to keep completed job data on NFS
 
+    # Cleanup policy after job completion
+    cleanup:
+      # Remove services after job completes.
+      remove_on_complete: true
+
+      # Keep failed services for debugging.
+      keep_failed_services: false
+
+  # ---------------------------------------------------------------------------
   # Kubernetes Executor (not yet implemented)
+  # ---------------------------------------------------------------------------
   # kube:
   #   kubeconfig: "/path/to/kubeconfig"
   #   namespace: "jobrunner"
 
-# ================================================================================
+# ==============================================================================
 # Logging Configuration
-# ================================================================================
+# ==============================================================================
 logging:
-  level: info                                # debug, info, warn, error
-  format: json                               # json or console
-  output: stdout                             # stdout, stderr, or file path
+  # debug, info, warn, error
+  level: info
 
-# ================================================================================
-# Metrics Configuration (optional, not yet implemented)
-# ================================================================================
-metrics:
-  enabled: false
-  port: 9090
-  path: /metrics
+  # json (recommended for production log aggregation) or console (readable dev).
+  format: json

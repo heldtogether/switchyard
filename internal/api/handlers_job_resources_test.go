@@ -36,7 +36,10 @@ func TestCreateJob_GPUValidation(t *testing.T) {
 
 	cfg := &config.Config{
 		API:      config.APIConfig{BaseURL: "http://localhost:8080"},
-		Executor: config.ExecutorConfig{Swarm: config.SwarmConfig{Defaults: config.SwarmDefaultsConfig{Resources: config.ResourcesConfig{CPU: "1.0", Memory: "1g"}}}},
+		Executor: config.ExecutorConfig{
+			Type:  "swarm",
+			Swarm: config.SwarmConfig{Defaults: config.ExecutorDefaultsConfig{Resources: config.ResourcesConfig{CPU: "1.0", Memory: "1g"}}},
+		},
 	}
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelError}))
