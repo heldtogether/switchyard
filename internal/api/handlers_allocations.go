@@ -104,3 +104,21 @@ func (a *API) HandleReleaseAllocation(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
+
+// HandleGetAllocationCapacity handles GET /v1/allocations/capacity
+func (a *API) HandleGetAllocationCapacity(w http.ResponseWriter, r *http.Request) {
+	maxGPU, err := a.store.MaxGPUPerNode(r.Context())
+	if err != nil {
+		a.logger.Error("failed to fetch max gpu per node", "error", err)
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{
+			Error:   "internal_error",
+			Message: "Failed to fetch allocation capacity",
+			Code:    http.StatusInternalServerError,
+		})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, AllocationCapacityResponse{
+		MaxGPUPerNode: maxGPU,
+	})
+}

@@ -2,7 +2,7 @@ import React, { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Modal } from "../components/Modal";
 import { slugify } from "../utils/slug";
-import { createJob, createRun, listRegistrySecrets } from "../api";
+import { createJob, createRun, getAllocationCapacity, listRegistrySecrets } from "../api";
 
 interface JobDraft {
   name: string;
@@ -13,6 +13,7 @@ interface JobDraft {
   cpu: string;
   memory: string;
   timeout: string;
+  gpu: number;
   registrySecretId?: string;
 }
 
@@ -37,7 +38,8 @@ export function NewRunModal({ open, projectSlug, onClose, onSuccess }: NewRunMod
       outputs: "/outputs",
       cpu: "",
       memory: "",
-      timeout: ""
+      timeout: "",
+      gpu: 0
     }
   ]);
   const [slugTouched, setSlugTouched] = useState(false);
@@ -51,6 +53,14 @@ export function NewRunModal({ open, projectSlug, onClose, onSuccess }: NewRunMod
   });
 
   const registrySecrets = registrySecretsQuery.data ?? [];
+
+  const allocationCapacityQuery = useQuery({
+    queryKey: ["allocation-capacity"],
+    queryFn: getAllocationCapacity,
+    enabled: open
+  });
+
+  const maxGPUPerNode = allocationCapacityQuery.data?.max_gpu_per_node ?? 0;
 
   const derivedSlug = useMemo(() => (slugTouched ? slug : slugify(name)), [slugTouched, slug, name]);
 
@@ -113,13 +123,18 @@ export function NewRunModal({ open, projectSlug, onClose, onSuccess }: NewRunMod
 
       const failures: { job: JobDraft; error: string }[] = [];
       for (const job of jobs) {
+        const resources = {
+          ...(job.cpu ? { cpu: job.cpu } : {}),
+          ...(job.memory ? { memory: job.memory } : {}),
+          ...(job.gpu > 0 ? { gpu: job.gpu } : {})
+        };
         const payload: any = {
           name: job.name || undefined,
           image: job.image,
           command: parseCommand(job.command),
           env: parseEnv(job.env),
           outputs: job.outputs.split(",").map((item) => item.trim()).filter(Boolean),
-          resources: job.cpu || job.memory ? { cpu: job.cpu || undefined, memory: job.memory || undefined } : undefined,
+          resources: Object.keys(resources).length > 0 ? resources : undefined,
           timeout_seconds: job.timeout ? Number(job.timeout) : undefined
         };
         if (job.registrySecretId) {
@@ -311,6 +326,27 @@ export function NewRunModal({ open, projectSlug, onClose, onSuccess }: NewRunMod
                 />
               </div>
               <div className="mt-3">
+                <label className="text-xs uppercase tracking-[0.2em] text-ink-400">GPUs</label>
+                <select
+                  className="mt-2 w-full rounded-lg border border-ink-200 px-3 py-2 text-sm"
+                  value={job.gpu}
+                  onChange={(event) => updateJob(index, { gpu: Number(event.target.value) })}
+                  disabled={allocationCapacityQuery.isLoading || allocationCapacityQuery.isError || maxGPUPerNode === 0}
+                >
+                  {Array.from({ length: maxGPUPerNode + 1 }, (_, value) => (
+                    <option key={value} value={value}>
+                      {value}
+                    </option>
+                  ))}
+                </select>
+                {allocationCapacityQuery.isError && (
+                  <div className="mt-1 text-xs text-danger">Failed to load GPU capacity.</div>
+                )}
+                {!allocationCapacityQuery.isLoading && !allocationCapacityQuery.isError && maxGPUPerNode === 0 && (
+                  <div className="mt-1 text-xs text-ink-400">No GPU-capable nodes registered.</div>
+                )}
+              </div>
+              <div className="mt-3">
                 <input
                   className="w-full rounded-lg border border-ink-200 px-3 py-2"
                   value={job.timeout}
@@ -325,7 +361,17 @@ export function NewRunModal({ open, projectSlug, onClose, onSuccess }: NewRunMod
             onClick={() =>
               setJobs((prev) => [
                 ...prev,
-                { name: "", image: "", command: "", env: "", outputs: "/outputs", cpu: "", memory: "", timeout: "" }
+                {
+                  name: "",
+                  image: "",
+                  command: "",
+                  env: "",
+                  outputs: "/outputs",
+                  cpu: "",
+                  memory: "",
+                  timeout: "",
+                  gpu: 0
+                }
               ])
             }
             className="rounded-full border border-ink-200 px-3 py-1 text-xs text-ink-500"

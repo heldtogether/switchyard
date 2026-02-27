@@ -153,6 +153,14 @@ func (a *API) HandleCreateJob(w http.ResponseWriter, r *http.Request) {
 			job.MemoryLimit = &req.Resources.Memory
 		}
 		gpuCount = req.Resources.GPU
+
+		// If GPU is requested without CPU/Memory, apply defaults.
+		if gpuCount > 0 && req.Resources.CPU == "" && req.Resources.Memory == "" {
+			cpu := defaults.Resources.CPU
+			mem := defaults.Resources.Memory
+			job.CPULimit = &cpu
+			job.MemoryLimit = &mem
+		}
 	} else {
 		// Use defaults from config
 		cpu := defaults.Resources.CPU

@@ -231,6 +231,11 @@ type AllocationReleaseRequest struct {
 	NodeID string    `json:"node_id"`
 }
 
+// AllocationCapacityResponse reports max GPU capacity per node.
+type AllocationCapacityResponse struct {
+	MaxGPUPerNode int `json:"max_gpu_per_node"`
+}
+
 // toWorkspaceResponse converts a domain.Workspace to WorkspaceResponse
 func toWorkspaceResponse(workspace *domain.Workspace) WorkspaceResponse {
 	return WorkspaceResponse{

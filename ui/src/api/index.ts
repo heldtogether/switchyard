@@ -294,6 +294,15 @@ export async function listRegistrySecrets(): Promise<RegistrySecret[]> {
   return data.registry_secrets ?? [];
 }
 
+export async function getAllocationCapacity(): Promise<{ max_gpu_per_node: number }> {
+  try {
+    return await fetchJson<{ max_gpu_per_node: number }>(`/v1/allocations/capacity`);
+  } catch (error) {
+    if (shouldUseMocks(error)) return { max_gpu_per_node: 2 };
+    throw error;
+  }
+}
+
 export async function createRun(projectSlug: string, payload: { slug: string; name: string; description?: string; metadata?: Record<string, any> }) {
   try {
     return await fetchJson<any>(

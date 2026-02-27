@@ -67,6 +67,7 @@ func (s *Server) Start() error {
 	// Allocation routes
 	mux.HandleFunc("POST /v1/allocations/claim", s.api.HandleClaimAllocation)
 	mux.HandleFunc("POST /v1/allocations/release", s.api.HandleReleaseAllocation)
+	mux.HandleFunc("GET /v1/allocations/capacity", s.api.HandleGetAllocationCapacity)
 
 	// Artefact routes
 	mux.HandleFunc("GET /v1/workspaces/{workspace_slug}/projects/{project_slug}/runs/{run_slug}/jobs/{job_id}/artefacts", s.api.HandleListArtefacts)
