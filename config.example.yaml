@@ -57,6 +57,9 @@ worker:
   # Optional override for total GPUs on this node. If 0, autodetect.
   gpu_count: 0
 
+  # Docker image used for GPU autodetection via nvidia-smi.
+  gpu_detect_image: "nvidia/cuda:12.4.1-runtime-ubuntu22.04"
+
   # Redis-only backoff settings for delayed requeue when GPUs are unavailable.
   # These control how quickly the worker retries jobs that need GPUs.
   retry_base_delay: 1s

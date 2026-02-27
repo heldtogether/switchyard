@@ -94,7 +94,11 @@ func main() {
 
 	gpuTotal := cfg.Worker.GPUCount
 	if gpuTotal <= 0 {
-		gpuTotal = worker.DetectGPUCount(context.Background())
+		dockerHost := cfg.Executor.Swarm.DockerHost
+		if cfg.Executor.Type == "docker" {
+			dockerHost = cfg.Executor.Docker.DockerHost
+		}
+		gpuTotal = worker.DetectGPUCountViaDocker(context.Background(), dockerHost, cfg.Worker.GPUDetectImage)
 	}
 
 	// Initialize queue

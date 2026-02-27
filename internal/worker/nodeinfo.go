@@ -1,13 +1,21 @@
 package worker
 
 import (
+	"bytes"
 	"context"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
+	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/client"
+	"github.com/docker/docker/pkg/stdcopy"
 )
+
+const defaultGPUDetectImage = "nvidia/cuda:12.4.1-runtime-ubuntu22.04"
 
 // DetectNodeInfo attempts to discover node ID and hostname.
 func DetectNodeInfo(ctx context.Context, dockerHost string) (string, string, error) {
@@ -40,6 +48,91 @@ func DetectGPUCount(ctx context.Context) int {
 		return 0
 	}
 	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	count := 0
+	for _, line := range lines {
+		if strings.TrimSpace(line) != "" {
+			count++
+		}
+	}
+	return count
+}
+
+// DetectGPUCountViaDocker runs nvidia-smi in a short-lived container and counts GPUs.
+// Returns 0 on failure.
+func DetectGPUCountViaDocker(ctx context.Context, dockerHost string, detectImage string) int {
+	if detectImage == "" {
+		detectImage = defaultGPUDetectImage
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	cli, err := client.NewClientWithOpts(client.WithHost(dockerHost), client.WithAPIVersionNegotiation())
+	if err != nil {
+		return 0
+	}
+	defer cli.Close()
+
+	reader, err := cli.ImagePull(ctx, detectImage, image.PullOptions{})
+	if err != nil {
+		return 0
+	}
+	_, _ = io.Copy(io.Discard, reader)
+	reader.Close()
+
+	resp, err := cli.ContainerCreate(ctx, &container.Config{
+		Image: detectImage,
+		Cmd:   []string{"nvidia-smi", "-L"},
+		Tty:   false,
+	}, &container.HostConfig{
+		Resources: container.Resources{
+			DeviceRequests: []container.DeviceRequest{
+				{
+					Driver:       "nvidia",
+					Count:        -1,
+					Capabilities: [][]string{{"gpu"}},
+				},
+			},
+		},
+	}, nil, nil, "")
+	if err != nil {
+		return 0
+	}
+	defer cli.ContainerRemove(context.Background(), resp.ID, container.RemoveOptions{Force: true})
+
+	if err := cli.ContainerStart(ctx, resp.ID, container.StartOptions{}); err != nil {
+		return 0
+	}
+
+	statusCh, errCh := cli.ContainerWait(ctx, resp.ID, container.WaitConditionNotRunning)
+	select {
+	case err := <-errCh:
+		if err != nil {
+			return 0
+		}
+	case <-statusCh:
+	}
+
+	logs, err := cli.ContainerLogs(ctx, resp.ID, container.LogsOptions{
+		ShowStdout: true,
+		ShowStderr: true,
+	})
+	if err != nil {
+		return 0
+	}
+	defer logs.Close()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	if _, err := stdcopy.StdCopy(&stdout, &stderr, logs); err != nil {
+		return 0
+	}
+
+	return countGPULines(stdout.String())
+}
+
+func countGPULines(output string) int {
+	lines := strings.Split(strings.TrimSpace(output), "\n")
 	count := 0
 	for _, line := range lines {
 		if strings.TrimSpace(line) != "" {

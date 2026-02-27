@@ -46,6 +46,7 @@ type WorkerConfig struct {
 	HeartbeatInterval time.Duration `yaml:"heartbeat_interval"`
 	NodeID            string        `yaml:"node_id"`
 	GPUCount          int           `yaml:"gpu_count"`
+	GPUDetectImage    string        `yaml:"gpu_detect_image"`
 	RetryBaseDelay    time.Duration `yaml:"retry_base_delay"`
 	RetryMaxDelay     time.Duration `yaml:"retry_max_delay"`
 	RetryJitter       float64       `yaml:"retry_jitter"`
@@ -292,6 +293,9 @@ func applyEnvOverrides(cfg *Config) {
 	}
 	if v := os.Getenv("WORKER_GPU_COUNT"); v != "" {
 		fmt.Sscanf(v, "%d", &cfg.Worker.GPUCount)
+	}
+	if v := os.Getenv("WORKER_GPU_DETECT_IMAGE"); v != "" {
+		cfg.Worker.GPUDetectImage = v
 	}
 	if v := os.Getenv("WORKER_RETRY_BASE_DELAY"); v != "" {
 		if d, err := time.ParseDuration(v); err == nil {
