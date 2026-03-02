@@ -62,7 +62,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             </div>
           </nav>
         </aside>
-        <main className="flex-1 space-y-8">{children}</main>
+        <main className="flex-1 min-w-0 space-y-8">{children}</main>
       </div>
     </div>
   );
