@@ -34,6 +34,29 @@ export async function fetchJson<T>(path: string, init?: RequestInit): Promise<T>
   return res.json() as Promise<T>;
 }
 
+export async function fetchText(path: string, init?: RequestInit): Promise<string> {
+  const res = await fetch(`${API_BASE_URL}${path}`, {
+    ...init,
+    headers: {
+      ...(API_KEY ? { "X-API-Key": API_KEY } : {}),
+      ...(init?.headers ?? {})
+    }
+  });
+
+  if (!res.ok) {
+    let message = res.statusText;
+    try {
+      const data = await res.json();
+      message = data?.message ?? data?.error ?? message;
+    } catch {
+      // ignore
+    }
+    throw new ApiError(message, res.status);
+  }
+
+  return res.text();
+}
+
 export function shouldUseMocks(error: unknown) {
   return (
     runtimeEnv.USE_MOCKS === "true" ||

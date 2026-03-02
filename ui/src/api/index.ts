@@ -1,4 +1,4 @@
-import { fetchJson, shouldUseMocks } from "./client";
+import { fetchJson, fetchText, shouldUseMocks } from "./client";
 import {
   mockArtefacts,
   mockJobs,
@@ -151,18 +151,9 @@ export async function getJob(projectSlug: string, runSlug: string, jobId: string
 
 export async function getJobLogs(projectSlug: string, runSlug: string, jobId: string): Promise<string> {
   try {
-    const res = await fetch(`${import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8080"}/v1/workspaces/${WORKSPACE}/projects/${projectSlug}/runs/${runSlug}/jobs/${jobId}/logs`, {
-      headers: {
-        ...(import.meta.env.VITE_API_KEY ? { "X-API-Key": import.meta.env.VITE_API_KEY } : {})
-      }
-    });
-    if (!res.ok) {
-      if (res.status === 404 || res.status === 501) {
-        return mockLogs(jobId);
-      }
-      throw new ApiError(res.statusText, res.status);
-    }
-    return res.text();
+    return await fetchText(
+      `/v1/workspaces/${WORKSPACE}/projects/${projectSlug}/runs/${runSlug}/jobs/${jobId}/logs`
+    );
   } catch (error) {
     if (shouldUseMocks(error)) return mockLogs(jobId);
     throw error;
