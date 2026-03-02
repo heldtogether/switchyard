@@ -65,7 +65,7 @@ func DetectGPUCountViaDocker(ctx context.Context, dockerHost string, detectImage
 		detectImage = defaultGPUDetectImage
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 
 	cli, err := client.NewClientWithOpts(client.WithHost(dockerHost), client.WithAPIVersionNegotiation())
