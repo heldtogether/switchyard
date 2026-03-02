@@ -127,10 +127,79 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+  cleanup-packages:
+    name: Cleanup Old Package Versions
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: github.ref == 'refs/heads/main'
+
+    strategy:
+      matrix:
+        image:
+          - name: api
+          - name: worker
+          - name: example-job
+          - name: ui
+
+    steps:
+      - name: Delete old non-versioned package builds
+        uses: actions/github-script@v7
+        env:
+          PACKAGE_NAME: switchyard-${{ matrix.image.name }}
+          RETAIN_COUNT: "10"
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const packageName = process.env.PACKAGE_NAME;
+            const retainCount = parseInt(process.env.RETAIN_COUNT, 10);
+
+            const isSemverTag = (tag) =>
+              /^\d+\.\d+\.\d+$/.test(tag) ||
+              /^\d+\.\d+$/.test(tag) ||
+              /^\d+$/.test(tag);
+
+            const keepVersion = (tags) =>
+              tags.some((tag) => tag === 'latest' || isSemverTag(tag));
+
+            const versions = await github.paginate(
+              github.rest.packages.getAllPackageVersionsForPackageOwnedByOrg,
+              {
+                org: owner,
+                package_type: 'container',
+                package_name: packageName,
+                per_page: 100,
+              }
+            );
+
+            const deletable = versions
+              .map((version) => {
+                const tags = (version.metadata && version.metadata.container && version.metadata.container.tags) || [];
+                return {
+                  id: version.id,
+                  updatedAt: new Date(version.updated_at),
+                  tags,
+                };
+              })
+              .filter((version) => !keepVersion(version.tags))
+              .sort((a, b) => b.updatedAt - a.updatedAt);
+
+            const toDelete = deletable.slice(retainCount);
+            core.info(`Found ${deletable.length} deletable versions for ${packageName}. Keeping ${retainCount}, deleting ${toDelete.length}.`);
+
+            for (const version of toDelete) {
+              core.info(`Deleting version ${version.id} (tags: ${version.tags.join(', ') || 'none'})`);
+              await github.rest.packages.deletePackageVersionForOrg({
+                org: owner,
+                package_type: 'container',
+                package_name: packageName,
+                package_version_id: version.id,
+              });
+            }
+
   summary:
     name: Build Summary
     runs-on: ubuntu-latest
-    needs: build-and-push
+    needs: [build-and-push, cleanup-packages]
     if: always()
     
     steps:
