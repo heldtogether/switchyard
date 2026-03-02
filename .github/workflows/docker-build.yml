@@ -161,15 +161,32 @@ jobs:
             const keepVersion = (tags) =>
               tags.some((tag) => tag === 'latest' || isSemverTag(tag));
 
-            const versions = await github.paginate(
-              github.rest.packages.getAllPackageVersionsForPackageOwnedByOrg,
-              {
-                org: owner,
-                package_type: 'container',
-                package_name: packageName,
-                per_page: 100,
-              }
-            );
+            const ownerInfo = await github.rest.users.getByUsername({ username: owner });
+            const isOrg = ownerInfo.data.type === 'Organization';
+
+            const listVersions = isOrg
+              ? github.rest.packages.getAllPackageVersionsForPackageOwnedByOrg
+              : github.rest.packages.getAllPackageVersionsForPackageOwnedByUser;
+
+            const listParams = isOrg
+              ? {
+                  org: owner,
+                  package_type: 'container',
+                  package_name: packageName,
+                  per_page: 100,
+                }
+              : {
+                  username: owner,
+                  package_type: 'container',
+                  package_name: packageName,
+                  per_page: 100,
+                };
+
+            const deleteVersion = isOrg
+              ? github.rest.packages.deletePackageVersionForOrg
+              : github.rest.packages.deletePackageVersionForUser;
+
+            const versions = await github.paginate(listVersions, listParams);
 
             const deletable = versions
               .map((version) => {
@@ -188,12 +205,20 @@ jobs:
 
             for (const version of toDelete) {
               core.info(`Deleting version ${version.id} (tags: ${version.tags.join(', ') || 'none'})`);
-              await github.rest.packages.deletePackageVersionForOrg({
-                org: owner,
-                package_type: 'container',
-                package_name: packageName,
-                package_version_id: version.id,
-              });
+              const deleteParams = isOrg
+                ? {
+                    org: owner,
+                    package_type: 'container',
+                    package_name: packageName,
+                    package_version_id: version.id,
+                  }
+                : {
+                    username: owner,
+                    package_type: 'container',
+                    package_name: packageName,
+                    package_version_id: version.id,
+                  };
+              await deleteVersion(deleteParams);
             }
 
   summary:
