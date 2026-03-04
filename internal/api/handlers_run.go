@@ -56,6 +56,9 @@ func (a *API) HandleCreateRun(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	if _, ok := a.requireWorkspaceAccess(w, r, workspace, false); !ok {
+		return
+	}
 
 	// Get project
 	project, err := a.store.GetProjectBySlug(r.Context(), workspace.ID, projectSlug)
@@ -65,6 +68,9 @@ func (a *API) HandleCreateRun(w http.ResponseWriter, r *http.Request) {
 			Message: "Project not found",
 			Code:    http.StatusNotFound,
 		})
+		return
+	}
+	if _, ok := a.requireProjectAccess(w, r, workspace, project); !ok {
 		return
 	}
 
@@ -111,6 +117,9 @@ func (a *API) HandleGetRun(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	if _, ok := a.requireWorkspaceAccess(w, r, workspace, false); !ok {
+		return
+	}
 
 	// Get project
 	project, err := a.store.GetProjectBySlug(r.Context(), workspace.ID, projectSlug)
@@ -120,6 +129,9 @@ func (a *API) HandleGetRun(w http.ResponseWriter, r *http.Request) {
 			Message: "Project not found",
 			Code:    http.StatusNotFound,
 		})
+		return
+	}
+	if _, ok := a.requireProjectAccess(w, r, workspace, project); !ok {
 		return
 	}
 
@@ -169,6 +181,9 @@ func (a *API) HandleListRuns(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	if _, ok := a.requireWorkspaceAccess(w, r, workspace, false); !ok {
+		return
+	}
 
 	// Get project
 	project, err := a.store.GetProjectBySlug(r.Context(), workspace.ID, projectSlug)
@@ -178,6 +193,9 @@ func (a *API) HandleListRuns(w http.ResponseWriter, r *http.Request) {
 			Message: "Project not found",
 			Code:    http.StatusNotFound,
 		})
+		return
+	}
+	if _, ok := a.requireProjectAccess(w, r, workspace, project); !ok {
 		return
 	}
 
@@ -239,6 +257,9 @@ func (a *API) HandleRerunRun(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	if _, ok := a.requireWorkspaceAccess(w, r, workspace, false); !ok {
+		return
+	}
 
 	project, err := a.store.GetProjectBySlug(r.Context(), workspace.ID, projectSlug)
 	if err != nil {
@@ -247,6 +268,9 @@ func (a *API) HandleRerunRun(w http.ResponseWriter, r *http.Request) {
 			Message: "Project not found",
 			Code:    http.StatusNotFound,
 		})
+		return
+	}
+	if _, ok := a.requireProjectAccess(w, r, workspace, project); !ok {
 		return
 	}
 

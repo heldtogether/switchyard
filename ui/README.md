@@ -38,13 +38,13 @@ UI_AGGREGATE_LIMIT=5
 
 ## Routes
 - `/login` Login page (unauthenticated)
-- `/` Projects list
-- `/:projectSlug` Project runs list
-- `/runs` Runs list (all projects)
-- `/jobs` Jobs list (all projects)
-- `/artefacts` Artefacts list (all projects)
-- `/:projectSlug/:runSlug` Run detail
-- `/:projectSlug/:runSlug/:jobId` Job detail
+- `/:workspace` Projects list
+- `/:workspace/:projectSlug` Project runs list
+- `/:workspace/runs` Runs list (all projects)
+- `/:workspace/jobs` Jobs list (all projects)
+- `/:workspace/artefacts` Artefacts list (all projects)
+- `/:workspace/:projectSlug/:runSlug` Run detail
+- `/:workspace/:projectSlug/:runSlug/:jobId` Job detail
 
 ## Endpoints used
 **Real endpoints (available in API):**

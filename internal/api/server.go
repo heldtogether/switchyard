@@ -42,6 +42,9 @@ func (s *Server) Start() error {
 	mux.HandleFunc("POST /v1/workspaces", s.api.HandleCreateWorkspace)
 	mux.HandleFunc("GET /v1/workspaces", s.api.HandleListWorkspaces)
 	mux.HandleFunc("GET /v1/workspaces/{slug}", s.api.HandleGetWorkspace)
+	mux.HandleFunc("POST /v1/workspaces/{workspace_slug}/invites", s.api.HandleCreateWorkspaceInvite)
+	mux.HandleFunc("POST /v1/workspace-invites/accept", s.api.HandleAcceptWorkspaceInvite)
+	mux.HandleFunc("GET /v1/workspaces/{workspace_slug}/members", s.api.HandleListWorkspaceMembers)
 	mux.HandleFunc("POST /v1/workspaces/{workspace_slug}/registry-secrets", s.api.HandleCreateRegistrySecret)
 	mux.HandleFunc("GET /v1/workspaces/{workspace_slug}/registry-secrets", s.api.HandleListRegistrySecrets)
 
@@ -51,6 +54,9 @@ func (s *Server) Start() error {
 	mux.HandleFunc("GET /v1/workspaces/{workspace_slug}/projects/{project_slug}", s.api.HandleGetProject)
 	mux.HandleFunc("PUT /v1/workspaces/{workspace_slug}/projects/{project_slug}", s.api.HandleUpdateProject)
 	mux.HandleFunc("POST /v1/workspaces/{workspace_slug}/projects/{project_slug}/archive", s.api.HandleArchiveProject)
+	mux.HandleFunc("POST /v1/workspaces/{workspace_slug}/projects/{project_slug}/invites", s.api.HandleCreateProjectInvite)
+	mux.HandleFunc("POST /v1/project-invites/accept", s.api.HandleAcceptProjectInvite)
+	mux.HandleFunc("GET /v1/workspaces/{workspace_slug}/projects/{project_slug}/members", s.api.HandleListProjectMembers)
 
 	// Run routes
 	mux.HandleFunc("POST /v1/workspaces/{workspace_slug}/projects/{project_slug}/runs", s.api.HandleCreateRun)

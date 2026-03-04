@@ -40,6 +40,9 @@ func (a *API) HandleCreateRegistrySecret(w http.ResponseWriter, r *http.Request)
 		})
 		return
 	}
+	if _, ok := a.requireWorkspaceAccess(w, r, workspace, false); !ok {
+		return
+	}
 
 	secret := &domain.RegistrySecret{
 		ID:                uuid.New(),
@@ -81,6 +84,9 @@ func (a *API) HandleListRegistrySecrets(w http.ResponseWriter, r *http.Request) 
 			Message: "Workspace not found",
 			Code:    http.StatusNotFound,
 		})
+		return
+	}
+	if _, ok := a.requireWorkspaceAccess(w, r, workspace, false); !ok {
 		return
 	}
 

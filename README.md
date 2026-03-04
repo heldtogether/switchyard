@@ -61,6 +61,7 @@ examples/       # Example jobs and helper scripts
 - Avoid committing secrets; use env vars or Docker secrets for credentials.
 - For OIDC with separate UI/API origins, set `api.auth.oidc.post_login_redirect` and `post_logout_redirect` to absolute UI URLs (for example `http://localhost:5173/` and `http://localhost:5173/login`).
 - `api.auth.oidc.logout_url` is optional. When set, `GET /v1/auth/logout` clears the local session and redirects to that IdP logout URL.
+- RBAC is configurable under `api.rbac` (workspace + project memberships, token invites, and service-account allowlists for API key auth).
 
 ## Documentation Map
 - `AGENTS.md`: contributor guide and repo conventions

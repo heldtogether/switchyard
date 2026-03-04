@@ -7,10 +7,11 @@ import { StatusPill } from "../components/StatusPill";
 import { EmptyState } from "../components/EmptyState";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { RelativeTime } from "../components/RelativeTime";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 
 export function RunsListPage() {
   const navigate = useNavigate();
+  const { workspace = "" } = useParams();
   const [statusFilter, setStatusFilter] = useState("all");
   const [projectFilter, setProjectFilter] = useState("all");
   const [search, setSearch] = useState("");
@@ -100,7 +101,7 @@ export function RunsListPage() {
               <tr
                 key={run.id}
                 className="cursor-pointer hover:bg-ink-50"
-                onClick={() => navigate(`/${run.project_slug}/${run.slug}`)}
+                onClick={() => navigate(`/${workspace}/${run.project_slug}/${run.slug}`)}
               >
                 <DataTableCell>
                   <div className="flex items-center gap-2">

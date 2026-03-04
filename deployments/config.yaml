@@ -30,6 +30,16 @@ api:
         secure: true
         same_site: lax
         ttl: 24h
+  rbac:
+    enabled: false
+    single_tenant: true
+    default_workspace_slug: "default"
+    service_accounts:
+      - name: "automation"
+        auth_method: "api_key"
+        allowed_workspaces: ["default"]
+        allowed_projects:
+          default: []
 
 worker:
   concurrency: 5

@@ -251,6 +251,30 @@ type AllocationCapacityResponse struct {
 	MaxGPUPerNode int `json:"max_gpu_per_node"`
 }
 
+type CreateInviteRequest struct {
+	Email string `json:"email"`
+	Role  string `json:"role,omitempty"`
+}
+
+type CreateInviteResponse struct {
+	InviteID    uuid.UUID `json:"invite_id"`
+	InviteURL   string    `json:"invite_url"`
+	InviteToken string    `json:"invite_token"`
+	ExpiresAt   time.Time `json:"expires_at"`
+}
+
+type AcceptInviteRequest struct {
+	Token string `json:"token"`
+}
+
+type MemberResponse struct {
+	Subject     string    `json:"subject"`
+	Email       *string   `json:"email,omitempty"`
+	DisplayName *string   `json:"display_name,omitempty"`
+	Role        string    `json:"role"`
+	AddedAt     time.Time `json:"added_at"`
+}
+
 // toWorkspaceResponse converts a domain.Workspace to WorkspaceResponse
 func toWorkspaceResponse(workspace *domain.Workspace) WorkspaceResponse {
 	return WorkspaceResponse{

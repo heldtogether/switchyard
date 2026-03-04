@@ -59,6 +59,17 @@ func (a *API) HandleCreateWorkspace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if a.rbacEnabled() {
+		if principalID, ok, err := a.currentPrincipalID(r); err == nil && ok {
+			_ = a.store.CreateWorkspaceMembership(r.Context(), &domain.WorkspaceMembership{
+				WorkspaceID: workspace.ID,
+				PrincipalID: principalID,
+				Role:        domain.MemberRoleOwner,
+				CreatedBy:   ActorFromRequest(r),
+			})
+		}
+	}
+
 	a.logger.Info("workspace created", "workspace_id", workspace.ID, "slug", workspace.Slug)
 
 	writeJSON(w, http.StatusCreated, toWorkspaceResponse(workspace))
@@ -77,6 +88,9 @@ func (a *API) HandleGetWorkspace(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	if _, ok := a.requireWorkspaceAccess(w, r, workspace, false); !ok {
+		return
+	}
 
 	writeJSON(w, http.StatusOK, toWorkspaceResponse(workspace))
 }
@@ -91,6 +105,81 @@ func (a *API) HandleListWorkspaces(w http.ResponseWriter, r *http.Request) {
 	}
 	if limit > 100 {
 		limit = 100
+	}
+
+	if a.rbacEnabled() {
+		identity, err := a.resolveIdentity(r)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, ErrorResponse{
+				Error:   "internal_error",
+				Message: "Failed to resolve principal",
+				Code:    http.StatusInternalServerError,
+			})
+			return
+		}
+		if identity == nil {
+			writeJSON(w, http.StatusForbidden, ErrorResponse{
+				Error:   "forbidden",
+				Message: "Forbidden",
+				Code:    http.StatusForbidden,
+			})
+			return
+		}
+
+		var responses []WorkspaceResponse
+		if identity.isService {
+			workspaces, err := a.store.ListWorkspaces(r.Context(), 1000, 0)
+			if err != nil {
+				a.logger.Error("failed to list workspaces", "error", err)
+				writeJSON(w, http.StatusInternalServerError, ErrorResponse{
+					Error:   "internal_error",
+					Message: "Failed to list workspaces",
+					Code:    http.StatusInternalServerError,
+				})
+				return
+			}
+			allow := map[string]struct{}{}
+			if identity.serviceAccount != nil {
+				for _, slug := range identity.serviceAccount.AllowedWorkspaces {
+					allow[slug] = struct{}{}
+				}
+			}
+			for _, ws := range workspaces {
+				if _, ok := allow[ws.Slug]; ok {
+					responses = append(responses, toWorkspaceResponse(ws))
+				}
+			}
+		} else {
+			memberships, err := a.store.ListWorkspaceMembershipsForPrincipal(r.Context(), identity.principal.ID)
+			if err != nil {
+				a.logger.Error("failed to list workspace memberships", "error", err)
+				writeJSON(w, http.StatusInternalServerError, ErrorResponse{
+					Error:   "internal_error",
+					Message: "Failed to list workspaces",
+					Code:    http.StatusInternalServerError,
+				})
+				return
+			}
+			for _, m := range memberships {
+				if m.Workspace != nil {
+					responses = append(responses, toWorkspaceResponse(m.Workspace))
+				}
+			}
+		}
+
+		if offset > len(responses) {
+			offset = len(responses)
+		}
+		end := offset + limit
+		if end > len(responses) {
+			end = len(responses)
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"workspaces": responses[offset:end],
+			"limit":      limit,
+			"offset":     offset,
+		})
+		return
 	}
 
 	workspaces, err := a.store.ListWorkspaces(r.Context(), limit, offset)

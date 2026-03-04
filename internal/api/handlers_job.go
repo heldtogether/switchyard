@@ -77,6 +77,12 @@ func (a *API) HandleCreateJob(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	if _, ok := a.requireWorkspaceAccess(w, r, workspace, false); !ok {
+		return
+	}
+	if _, ok := a.requireWorkspaceAccess(w, r, workspace, false); !ok {
+		return
+	}
 
 	// Get project
 	project, err := a.store.GetProjectBySlug(r.Context(), workspace.ID, projectSlug)
@@ -86,6 +92,12 @@ func (a *API) HandleCreateJob(w http.ResponseWriter, r *http.Request) {
 			Message: "Project not found",
 			Code:    http.StatusNotFound,
 		})
+		return
+	}
+	if _, ok := a.requireProjectAccess(w, r, workspace, project); !ok {
+		return
+	}
+	if _, ok := a.requireProjectAccess(w, r, workspace, project); !ok {
 		return
 	}
 
@@ -265,6 +277,9 @@ func (a *API) HandleGetJob(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	if !a.authorizeJobPathScope(w, r, workspaceSlug, projectSlug, runSlug, job.RunID) {
+		return
+	}
 
 	writeJSON(w, http.StatusOK, toJobResponse(job, a.baseURL, workspaceSlug, projectSlug, runSlug))
 }
@@ -350,7 +365,9 @@ func (a *API) HandleListJobs(w http.ResponseWriter, r *http.Request) {
 
 // HandleGetJobLogs handles GET /v1/workspaces/{workspace_slug}/projects/{project_slug}/runs/{run_slug}/jobs/{job_id}/logs
 func (a *API) HandleGetJobLogs(w http.ResponseWriter, r *http.Request) {
-	// Note: workspace_slug, project_slug, run_slug are in path but not needed for this operation
+	workspaceSlug := r.PathValue("workspace_slug")
+	projectSlug := r.PathValue("project_slug")
+	runSlug := r.PathValue("run_slug")
 	jobID := r.PathValue("job_id")
 
 	id, err := uuid.Parse(jobID)
@@ -370,6 +387,9 @@ func (a *API) HandleGetJobLogs(w http.ResponseWriter, r *http.Request) {
 			Message: "Job not found",
 			Code:    http.StatusNotFound,
 		})
+		return
+	}
+	if !a.authorizeJobPathScope(w, r, workspaceSlug, projectSlug, runSlug, job.RunID) {
 		return
 	}
 
@@ -414,6 +434,18 @@ func (a *API) HandleListArtefacts(w http.ResponseWriter, r *http.Request) {
 			Message: "Invalid job ID",
 			Code:    http.StatusBadRequest,
 		})
+		return
+	}
+	job, err := a.store.GetJob(r.Context(), id)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, ErrorResponse{
+			Error:   "not_found",
+			Message: "Job not found",
+			Code:    http.StatusNotFound,
+		})
+		return
+	}
+	if !a.authorizeJobPathScope(w, r, workspaceSlug, projectSlug, runSlug, job.RunID) {
 		return
 	}
 
@@ -465,6 +497,18 @@ func (a *API) HandleDownloadArtefact(w http.ResponseWriter, r *http.Request) {
 			Message: "Invalid job ID",
 			Code:    http.StatusBadRequest,
 		})
+		return
+	}
+	job, err := a.store.GetJob(r.Context(), id)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, ErrorResponse{
+			Error:   "not_found",
+			Message: "Job not found",
+			Code:    http.StatusNotFound,
+		})
+		return
+	}
+	if !a.authorizeJobPathScope(w, r, workspaceSlug, projectSlug, runSlug, job.RunID) {
 		return
 	}
 
@@ -521,7 +565,9 @@ func (a *API) HandleDownloadArtefact(w http.ResponseWriter, r *http.Request) {
 
 // HandleCancelJob handles POST /v1/workspaces/{workspace_slug}/projects/{project_slug}/runs/{run_slug}/jobs/{job_id}/cancel
 func (a *API) HandleCancelJob(w http.ResponseWriter, r *http.Request) {
-	// Note: workspace_slug, project_slug, run_slug are in path but not needed for cancel operation
+	workspaceSlug := r.PathValue("workspace_slug")
+	projectSlug := r.PathValue("project_slug")
+	runSlug := r.PathValue("run_slug")
 	jobID := r.PathValue("job_id")
 
 	id, err := uuid.Parse(jobID)
@@ -541,6 +587,9 @@ func (a *API) HandleCancelJob(w http.ResponseWriter, r *http.Request) {
 			Message: "Job not found",
 			Code:    http.StatusNotFound,
 		})
+		return
+	}
+	if !a.authorizeJobPathScope(w, r, workspaceSlug, projectSlug, runSlug, job.RunID) {
 		return
 	}
 
@@ -657,4 +706,51 @@ func (a *API) HandleCancelJob(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, toJobResponse(updatedJob, a.baseURL, workspace.Slug, project.Slug, run.Slug))
+}
+
+func (a *API) authorizeJobPathScope(w http.ResponseWriter, r *http.Request, workspaceSlug, projectSlug, runSlug string, runID uuid.UUID) bool {
+	workspace, err := a.store.GetWorkspaceBySlug(r.Context(), workspaceSlug)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, ErrorResponse{
+			Error:   "not_found",
+			Message: "Workspace not found",
+			Code:    http.StatusNotFound,
+		})
+		return false
+	}
+	if _, ok := a.requireWorkspaceAccess(w, r, workspace, false); !ok {
+		return false
+	}
+
+	project, err := a.store.GetProjectBySlug(r.Context(), workspace.ID, projectSlug)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, ErrorResponse{
+			Error:   "not_found",
+			Message: "Project not found",
+			Code:    http.StatusNotFound,
+		})
+		return false
+	}
+	if _, ok := a.requireProjectAccess(w, r, workspace, project); !ok {
+		return false
+	}
+
+	run, err := a.store.GetRunBySlug(r.Context(), project.ID, runSlug)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, ErrorResponse{
+			Error:   "not_found",
+			Message: "Run not found",
+			Code:    http.StatusNotFound,
+		})
+		return false
+	}
+	if run.ID != runID {
+		writeJSON(w, http.StatusNotFound, ErrorResponse{
+			Error:   "not_found",
+			Message: "Resource not found",
+			Code:    http.StatusNotFound,
+		})
+		return false
+	}
+	return true
 }

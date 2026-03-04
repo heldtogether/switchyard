@@ -9,6 +9,15 @@ export interface Project {
   slug: string;
 }
 
+export interface Workspace {
+  id: string;
+  slug: string;
+  name: string;
+  description?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Run {
   id: string;
   project_id: string;

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { getProject, listRuns, listPromotions } from "../api";
@@ -12,7 +12,7 @@ import { Breadcrumbs } from "../components/Breadcrumbs";
 import { NewRunModal } from "./NewRunModal";
 
 export function ProjectRunsPage() {
-  const { projectSlug = "" } = useParams();
+  const { workspace = "", projectSlug = "" } = useParams();
   const navigate = useNavigate();
   const [statusFilter, setStatusFilter] = useState("all");
   const [search, setSearch] = useState("");
@@ -50,7 +50,7 @@ export function ProjectRunsPage() {
         breadcrumbs={
           <Breadcrumbs
             items={[
-              { label: "Projects", to: "/" },
+              { label: "Projects", to: `/${workspace}` },
               { label: projectQuery.data?.name ?? projectSlug }
             ]}
           />
@@ -145,7 +145,7 @@ export function ProjectRunsPage() {
               <tr
                 key={run.id}
                 className="cursor-pointer hover:bg-ink-50"
-                onClick={() => navigate(`/${projectSlug}/${run.slug}`)}
+                onClick={() => navigate(`/${workspace}/${projectSlug}/${run.slug}`)}
               >
                 <DataTableCell>
                   <div className="flex items-center gap-2">
@@ -187,7 +187,7 @@ export function ProjectRunsPage() {
         onClose={() => setNewRunOpen(false)}
         onSuccess={(runSlug) => {
           runsQuery.refetch();
-          navigate(`/${projectSlug}/${runSlug}`);
+          navigate(`/${workspace}/${projectSlug}/${runSlug}`);
         }}
       />
     </div>

@@ -7,11 +7,31 @@ import {
   mockPromotions,
   mockRuns
 } from "./mocks";
-import { Artefact, Job, Project, Promotion, Run } from "../models/types";
+import { Artefact, Job, Project, Promotion, Run, Workspace } from "../models/types";
 
 const runtimeEnv = (window as any).__ENV ?? {};
-const WORKSPACE = runtimeEnv.WORKSPACE_SLUG ?? import.meta.env.VITE_WORKSPACE_SLUG ?? "default";
+const DEFAULT_WORKSPACE = runtimeEnv.WORKSPACE_SLUG ?? import.meta.env.VITE_WORKSPACE_SLUG ?? "default";
+let activeWorkspaceSlug = DEFAULT_WORKSPACE;
 const AGGREGATE_LIMIT = Number(runtimeEnv.AGGREGATE_LIMIT ?? import.meta.env.VITE_AGGREGATE_LIMIT ?? 5);
+
+export function setWorkspaceSlug(slug?: string) {
+  activeWorkspaceSlug = slug && slug.trim() ? slug : DEFAULT_WORKSPACE;
+}
+
+export function getWorkspaceSlug() {
+  return activeWorkspaceSlug;
+}
+
+function mapWorkspace(workspace: any): Workspace {
+  return {
+    id: workspace.id,
+    slug: workspace.slug,
+    name: workspace.name,
+    description: workspace.description,
+    created_at: workspace.created_at,
+    updated_at: workspace.updated_at
+  };
+}
 
 function mapRun(run: any, index?: number): Run {
   const metadata = run.metadata ?? {};
@@ -62,13 +82,37 @@ function mapJob(job: any, runId?: string): Job {
     executor_type: job.executor,
     started_at: job.started_at ?? null,
     finished_at: job.finished_at ?? null,
-    duration: job.started_at && job.finished_at ? new Date(job.finished_at).getTime() - new Date(job.started_at).getTime() : undefined
+    duration:
+      job.started_at && job.finished_at
+        ? new Date(job.finished_at).getTime() - new Date(job.started_at).getTime()
+        : undefined
   };
+}
+
+export async function listWorkspaces(): Promise<Workspace[]> {
+  try {
+    const res = await fetchJson<{ workspaces: any[] }>(`/v1/workspaces?limit=100&offset=0`);
+    return res.workspaces.map(mapWorkspace);
+  } catch (error) {
+    if (shouldUseMocks(error)) {
+      return [
+        {
+          id: "default",
+          slug: DEFAULT_WORKSPACE,
+          name: "Default Workspace",
+          description: "",
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }
+      ];
+    }
+    throw error;
+  }
 }
 
 export async function listProjects(): Promise<Project[]> {
   try {
-    const res = await fetchJson<{ projects: any[] }>(`/v1/workspaces/${WORKSPACE}/projects?limit=50&offset=0`);
+    const res = await fetchJson<{ projects: any[] }>(`/v1/workspaces/${activeWorkspaceSlug}/projects?limit=50&offset=0`);
     return res.projects.map(mapProject);
   } catch (error) {
     if (shouldUseMocks(error)) return mockProjects;
@@ -78,7 +122,7 @@ export async function listProjects(): Promise<Project[]> {
 
 export async function getProject(slug: string): Promise<Project> {
   try {
-    const res = await fetchJson<any>(`/v1/workspaces/${WORKSPACE}/projects/${slug}`);
+    const res = await fetchJson<any>(`/v1/workspaces/${activeWorkspaceSlug}/projects/${slug}`);
     return mapProject(res);
   } catch (error) {
     if (shouldUseMocks(error)) {
@@ -93,7 +137,7 @@ export async function getProject(slug: string): Promise<Project> {
 export async function listRuns(projectSlug: string): Promise<Run[]> {
   try {
     const res = await fetchJson<{ runs: any[] }>(
-      `/v1/workspaces/${WORKSPACE}/projects/${projectSlug}/runs?limit=50&offset=0`
+      `/v1/workspaces/${activeWorkspaceSlug}/projects/${projectSlug}/runs?limit=50&offset=0`
     );
     return res.runs.map((run, index) => mapRun(run, index));
   } catch (error) {
@@ -108,7 +152,7 @@ export async function listRuns(projectSlug: string): Promise<Run[]> {
 export async function getRun(projectSlug: string, runSlug: string): Promise<Run> {
   try {
     const res = await fetchJson<any>(
-      `/v1/workspaces/${WORKSPACE}/projects/${projectSlug}/runs/${runSlug}`
+      `/v1/workspaces/${activeWorkspaceSlug}/projects/${projectSlug}/runs/${runSlug}`
     );
     return mapRun(res);
   } catch (error) {
@@ -124,7 +168,7 @@ export async function getRun(projectSlug: string, runSlug: string): Promise<Run>
 export async function listJobs(projectSlug: string, runSlug: string): Promise<Job[]> {
   try {
     const res = await fetchJson<{ jobs: any[] }>(
-      `/v1/workspaces/${WORKSPACE}/projects/${projectSlug}/runs/${runSlug}/jobs?limit=100&offset=0`
+      `/v1/workspaces/${activeWorkspaceSlug}/projects/${projectSlug}/runs/${runSlug}/jobs?limit=100&offset=0`
     );
     return res.jobs.map((job) => mapJob(job, runSlug));
   } catch (error) {
@@ -139,7 +183,7 @@ export async function listJobs(projectSlug: string, runSlug: string): Promise<Jo
 export async function getJob(projectSlug: string, runSlug: string, jobId: string): Promise<Job> {
   try {
     const res = await fetchJson<any>(
-      `/v1/workspaces/${WORKSPACE}/projects/${projectSlug}/runs/${runSlug}/jobs/${jobId}`
+      `/v1/workspaces/${activeWorkspaceSlug}/projects/${projectSlug}/runs/${runSlug}/jobs/${jobId}`
     );
     return mapJob(res, runSlug);
   } catch (error) {
@@ -155,7 +199,7 @@ export async function getJob(projectSlug: string, runSlug: string, jobId: string
 export async function getJobLogs(projectSlug: string, runSlug: string, jobId: string): Promise<string> {
   try {
     return await fetchText(
-      `/v1/workspaces/${WORKSPACE}/projects/${projectSlug}/runs/${runSlug}/jobs/${jobId}/logs`
+      `/v1/workspaces/${activeWorkspaceSlug}/projects/${projectSlug}/runs/${runSlug}/jobs/${jobId}/logs`
     );
   } catch (error) {
     if (shouldUseMocks(error)) return mockLogs(jobId);
@@ -166,7 +210,7 @@ export async function getJobLogs(projectSlug: string, runSlug: string, jobId: st
 export async function listArtefacts(projectSlug: string, runSlug: string, jobId: string): Promise<Artefact[]> {
   try {
     const res = await fetchJson<{ artefacts: any[] }>(
-      `/v1/workspaces/${WORKSPACE}/projects/${projectSlug}/runs/${runSlug}/jobs/${jobId}/artefacts`
+      `/v1/workspaces/${activeWorkspaceSlug}/projects/${projectSlug}/runs/${runSlug}/jobs/${jobId}/artefacts`
     );
     return res.artefacts.map((art) => ({
       id: `${jobId}-${art.path}`,
@@ -284,7 +328,7 @@ export type RegistrySecret = {
 };
 
 export async function listRegistrySecrets(): Promise<RegistrySecret[]> {
-  const data = await fetchJson<{ registry_secrets: RegistrySecret[] }>(`/v1/workspaces/${WORKSPACE}/registry-secrets`);
+  const data = await fetchJson<{ registry_secrets: RegistrySecret[] }>(`/v1/workspaces/${activeWorkspaceSlug}/registry-secrets`);
   return data.registry_secrets ?? [];
 }
 
@@ -298,36 +342,38 @@ export async function getAllocationCapacity(): Promise<{ max_gpu_per_node: numbe
 }
 
 export async function createRun(projectSlug: string, payload: { slug: string; name: string; description?: string; metadata?: Record<string, any> }) {
-  try {
-    return await fetchJson<any>(
-      `/v1/workspaces/${WORKSPACE}/projects/${projectSlug}/runs`,
-      {
-        method: "POST",
-        body: JSON.stringify(payload)
-      }
-    );
-  } catch (error) {
-    throw error;
-  }
+  return await fetchJson<any>(
+    `/v1/workspaces/${activeWorkspaceSlug}/projects/${projectSlug}/runs`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }
+  );
+}
+
+export async function createProject(payload: { slug: string; name: string; description?: string }) {
+  return await fetchJson<any>(
+    `/v1/workspaces/${activeWorkspaceSlug}/projects`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }
+  );
 }
 
 export async function createJob(projectSlug: string, runSlug: string, payload: any) {
-  try {
-    return await fetchJson<any>(
-      `/v1/workspaces/${WORKSPACE}/projects/${projectSlug}/runs/${runSlug}/jobs`,
-      {
-        method: "POST",
-        body: JSON.stringify(payload)
-      }
-    );
-  } catch (error) {
-    throw error;
-  }
+  return await fetchJson<any>(
+    `/v1/workspaces/${activeWorkspaceSlug}/projects/${projectSlug}/runs/${runSlug}/jobs`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }
+  );
 }
 
 export async function rerunRun(projectSlug: string, runSlug: string, payload: { mode: "all" | "failed_only" }) {
   return fetchJson<{ run: any; jobs_created: number; source_run_id: string; mode: "all" | "failed_only" }>(
-    `/v1/workspaces/${WORKSPACE}/projects/${projectSlug}/runs/${runSlug}/rerun`,
+    `/v1/workspaces/${activeWorkspaceSlug}/projects/${projectSlug}/runs/${runSlug}/rerun`,
     {
       method: "POST",
       body: JSON.stringify(payload)

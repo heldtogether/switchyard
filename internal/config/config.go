@@ -31,6 +31,7 @@ type APIConfig struct {
 	WriteTimeout       time.Duration `yaml:"write_timeout"`
 	CORSAllowedOrigins []string      `yaml:"cors_allowed_origins"`
 	Auth               AuthConfig    `yaml:"auth"`
+	RBAC               RBACConfig    `yaml:"rbac"`
 }
 
 // AuthConfig holds authentication configuration
@@ -67,6 +68,20 @@ type OIDCCookieConfig struct {
 	Secure   bool          `yaml:"secure"`
 	SameSite string        `yaml:"same_site"` // lax, strict, none
 	TTL      time.Duration `yaml:"ttl"`
+}
+
+type RBACConfig struct {
+	Enabled              bool                     `yaml:"enabled"`
+	SingleTenant         bool                     `yaml:"single_tenant"`
+	DefaultWorkspaceSlug string                   `yaml:"default_workspace_slug"`
+	ServiceAccounts      []RBACServiceAccountSpec `yaml:"service_accounts"`
+}
+
+type RBACServiceAccountSpec struct {
+	Name              string              `yaml:"name"`
+	AuthMethod        string              `yaml:"auth_method"`
+	AllowedWorkspaces []string            `yaml:"allowed_workspaces"`
+	AllowedProjects   map[string][]string `yaml:"allowed_projects"`
 }
 
 // WorkerConfig holds worker configuration
@@ -458,6 +473,7 @@ func replacePasswordInURL(url, password string) string {
 // Validate checks if the configuration is valid
 func (c *Config) Validate() error {
 	c.API.Auth.Normalize()
+	c.API.RBAC.Normalize()
 
 	// API validation
 	if c.API.Port < 1 || c.API.Port > 65535 {
@@ -581,6 +597,20 @@ func (c *Config) Validate() error {
 	}
 
 	return nil
+}
+
+func (r *RBACConfig) Normalize() {
+	if !r.SingleTenant && r.DefaultWorkspaceSlug == "" && len(r.ServiceAccounts) == 0 {
+		r.SingleTenant = true
+	}
+	if r.DefaultWorkspaceSlug == "" {
+		r.DefaultWorkspaceSlug = "default"
+	}
+	for i := range r.ServiceAccounts {
+		if r.ServiceAccounts[i].AuthMethod == "" {
+			r.ServiceAccounts[i].AuthMethod = "api_key"
+		}
+	}
 }
 
 func (a *AuthConfig) Normalize() {

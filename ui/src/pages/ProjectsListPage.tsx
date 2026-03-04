@@ -1,6 +1,6 @@
-import React, { useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { listProjects, listRuns } from "../api";
+import { createProject, listProjects, listRuns } from "../api";
 import { PageHeader } from "../components/PageHeader";
 import { DataTable, DataTableBody, DataTableCell, DataTableHeader, DataTableHeaderCell } from "../components/DataTable";
 import { StatusPill } from "../components/StatusPill";
@@ -9,11 +9,17 @@ import { ErrorBanner } from "../components/ErrorBanner";
 import { Skeleton } from "../components/Skeleton";
 import { RelativeTime } from "../components/RelativeTime";
 import { Modal } from "../components/Modal";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 
 export function ProjectsListPage() {
   const navigate = useNavigate();
+  const { workspace = "" } = useParams();
   const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [slug, setSlug] = useState("");
+  const [description, setDescription] = useState("");
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["projects"],
     queryFn: listProjects
@@ -44,6 +50,31 @@ export function ProjectsListPage() {
       return { project, lastRun, successRate };
     });
   }, [data, runsData]);
+
+  async function onCreateProject() {
+    if (!name.trim() || !slug.trim()) {
+      setCreateError("Name and slug are required.");
+      return;
+    }
+    setCreating(true);
+    setCreateError(null);
+    try {
+      await createProject({
+        name: name.trim(),
+        slug: slug.trim(),
+        description: description.trim() || undefined
+      });
+      setOpen(false);
+      setName("");
+      setSlug("");
+      setDescription("");
+      await refetch();
+    } catch (error) {
+      setCreateError((error as Error).message);
+    } finally {
+      setCreating(false);
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -101,7 +132,7 @@ export function ProjectsListPage() {
               <tr
                 key={project.id}
                 className="cursor-pointer hover:bg-ink-50"
-                onClick={() => navigate(`/${project.slug}`)}
+                onClick={() => navigate(`/${workspace}/${project.slug}`)}
               >
                 <DataTableCell>
                   <div className="font-semibold text-ink-900">{project.name}</div>
@@ -132,25 +163,48 @@ export function ProjectsListPage() {
       <Modal
         open={open}
         title="New Project"
-        description="Project creation is stubbed for v1. Use the API directly for now."
+        description="Create a project in the current workspace."
         onClose={() => setOpen(false)}
         footer={
           <div className="flex justify-end gap-2">
             <button type="button" onClick={() => setOpen(false)} className="text-sm text-ink-500">
               Close
             </button>
-            <button type="button" className="rounded-full bg-ink-900 px-4 py-2 text-sm font-semibold text-white">
+            <button
+              type="button"
+              onClick={onCreateProject}
+              disabled={creating}
+              className="rounded-full bg-ink-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+            >
               Create
             </button>
           </div>
         }
       >
         <div className="space-y-4 text-sm text-ink-600">
+          {createError && <p className="text-sm text-red-600">{createError}</p>}
           <div>
             <label className="text-xs uppercase tracking-[0.2em] text-ink-400">Name</label>
             <input
               className="mt-2 w-full rounded-lg border border-ink-200 px-3 py-2"
               placeholder="Vision Core"
+              value={name}
+              onChange={(e) => {
+                const nextName = e.target.value;
+                setName(nextName);
+                if (!slug) {
+                  setSlug(nextName.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, ""));
+                }
+              }}
+            />
+          </div>
+          <div>
+            <label className="text-xs uppercase tracking-[0.2em] text-ink-400">Slug</label>
+            <input
+              className="mt-2 w-full rounded-lg border border-ink-200 px-3 py-2"
+              placeholder="vision-core"
+              value={slug}
+              onChange={(e) => setSlug(e.target.value)}
             />
           </div>
           <div>
@@ -159,6 +213,8 @@ export function ProjectsListPage() {
               className="mt-2 w-full rounded-lg border border-ink-200 px-3 py-2"
               placeholder="Optional description"
               rows={3}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
             />
           </div>
         </div>

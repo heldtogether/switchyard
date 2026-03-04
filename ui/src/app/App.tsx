@@ -24,21 +24,24 @@ function ProtectedLayout() {
 }
 
 export default function App() {
+  const runtimeEnv = (window as any).__ENV ?? {};
+  const defaultWorkspace = runtimeEnv.WORKSPACE_SLUG ?? import.meta.env.VITE_WORKSPACE_SLUG ?? "default";
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route element={<ProtectedLayout />}>
-        <Route path="/" element={<ProjectsListPage />} />
-        <Route path="/:projectSlug" element={<ProjectRunsPage />} />
-        <Route path="/runs" element={<RunsListPage />} />
-        <Route path="/jobs" element={<JobsListPage />} />
-        <Route path="/artefacts" element={<ArtefactsListPage />} />
-        <Route path="/executors" element={<ExecutorsPage />} />
-        <Route path="/settings" element={<SettingsPage />} />
-        <Route path="/:projectSlug/:runSlug" element={<RunDetailPage />} />
-        <Route path="/:projectSlug/:runSlug/:jobId" element={<JobDetailPage />} />
+        <Route path="/:workspace" element={<ProjectsListPage />} />
+        <Route path="/:workspace/:projectSlug" element={<ProjectRunsPage />} />
+        <Route path="/:workspace/runs" element={<RunsListPage />} />
+        <Route path="/:workspace/jobs" element={<JobsListPage />} />
+        <Route path="/:workspace/artefacts" element={<ArtefactsListPage />} />
+        <Route path="/:workspace/executors" element={<ExecutorsPage />} />
+        <Route path="/:workspace/settings" element={<SettingsPage />} />
+        <Route path="/:workspace/:projectSlug/:runSlug" element={<RunDetailPage />} />
+        <Route path="/:workspace/:projectSlug/:runSlug/:jobId" element={<JobDetailPage />} />
       </Route>
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="/" element={<Navigate to={`/${defaultWorkspace}`} replace />} />
+      <Route path="*" element={<Navigate to={`/${defaultWorkspace}`} replace />} />
     </Routes>
   );
 }

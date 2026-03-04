@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -28,6 +29,11 @@ type API struct {
 
 // New creates a new API instance
 func New(cfg *config.Config, store *postgres.Store, q queue.Producer, storage *objectstore.S3Store, exec executor.Executor, logger *slog.Logger, baseURL string) *API {
+	if cfg.API.RBAC.SingleTenant {
+		if _, err := store.EnsureWorkspace(context.Background(), cfg.API.RBAC.DefaultWorkspaceSlug, "Default Workspace"); err != nil {
+			logger.Error("failed to ensure default workspace", "workspace", cfg.API.RBAC.DefaultWorkspaceSlug, "error", err)
+		}
+	}
 	return &API{
 		cfg:      cfg,
 		store:    store,

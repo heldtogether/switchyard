@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { listProjects, listAllJobs } from "../api";
 import { PageHeader } from "../components/PageHeader";
@@ -6,12 +6,12 @@ import { DataTable, DataTableBody, DataTableCell, DataTableHeader, DataTableHead
 import { StatusPill } from "../components/StatusPill";
 import { EmptyState } from "../components/EmptyState";
 import { ErrorBanner } from "../components/ErrorBanner";
-import { RelativeTime } from "../components/RelativeTime";
 import { formatDurationMs } from "../utils/format";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 
 export function JobsListPage() {
   const navigate = useNavigate();
+  const { workspace = "" } = useParams();
   const [statusFilter, setStatusFilter] = useState("all");
   const [projectFilter, setProjectFilter] = useState("all");
   const [search, setSearch] = useState("");
@@ -95,7 +95,7 @@ export function JobsListPage() {
               <tr
                 key={job.id}
                 className="cursor-pointer hover:bg-ink-50"
-                onClick={() => navigate(`/${job.project_slug}/${job.run_slug}/${job.id}`)}
+                onClick={() => navigate(`/${workspace}/${job.project_slug}/${job.run_slug}/${job.id}`)}
               >
                 <DataTableCell>
                   <div className="font-semibold text-ink-900">{job.name}</div>

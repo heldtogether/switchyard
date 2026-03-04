@@ -14,7 +14,7 @@ import { ErrorBanner } from "../components/ErrorBanner";
 import { Breadcrumbs } from "../components/Breadcrumbs";
 
 export function JobDetailPage() {
-  const { projectSlug = "", runSlug = "", jobId = "" } = useParams();
+  const { workspace = "", projectSlug = "", runSlug = "", jobId = "" } = useParams();
   const [tab, setTab] = useState("logs");
   const [autoScroll, setAutoScroll] = useState(true);
 
@@ -59,9 +59,9 @@ export function JobDetailPage() {
         breadcrumbs={
           <Breadcrumbs
             items={[
-              { label: "Projects", to: "/" },
-              { label: projectQuery.data?.name ?? projectSlug, to: `/${projectSlug}` },
-              { label: runQuery.data?.name ?? runSlug, to: `/${projectSlug}/${runSlug}` },
+              { label: "Projects", to: `/${workspace}` },
+              { label: projectQuery.data?.name ?? projectSlug, to: `/${workspace}/${projectSlug}` },
+              { label: runQuery.data?.name ?? runSlug, to: `/${workspace}/${projectSlug}/${runSlug}` },
               { label: jobQuery.data?.name ?? jobId }
             ]}
           />

@@ -1,9 +1,9 @@
-import React from "react";
 import { PageHeader } from "../components/PageHeader";
+import { useParams } from "react-router-dom";
 
 export function SettingsPage() {
   const apiBase = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8080";
-  const workspace = import.meta.env.VITE_WORKSPACE_SLUG ?? "default";
+  const { workspace = import.meta.env.VITE_WORKSPACE_SLUG ?? "default" } = useParams();
   const mocks = import.meta.env.VITE_USE_MOCKS === "true";
   const aggregateLimit = import.meta.env.VITE_AGGREGATE_LIMIT ?? "5";
 

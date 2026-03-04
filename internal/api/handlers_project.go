@@ -51,6 +51,9 @@ func (a *API) HandleCreateProject(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	if _, ok := a.requireWorkspaceAccess(w, r, workspace, true); !ok {
+		return
+	}
 
 	// Create project
 	project := &domain.Project{
@@ -73,6 +76,16 @@ func (a *API) HandleCreateProject(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	if a.rbacEnabled() {
+		if principalID, ok, err := a.currentPrincipalID(r); err == nil && ok {
+			_ = a.store.CreateProjectMembership(r.Context(), &domain.ProjectMembership{
+				ProjectID:   project.ID,
+				PrincipalID: principalID,
+				Role:        domain.MemberRoleOwner,
+				CreatedBy:   ActorFromRequest(r),
+			})
+		}
+	}
 
 	a.logger.Info("project created", "project_id", project.ID, "slug", project.Slug)
 
@@ -94,6 +107,9 @@ func (a *API) HandleGetProject(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	if _, ok := a.requireWorkspaceAccess(w, r, workspace, false); !ok {
+		return
+	}
 
 	project, err := a.store.GetProjectBySlug(r.Context(), workspace.ID, projectSlug)
 	if err != nil {
@@ -102,6 +118,9 @@ func (a *API) HandleGetProject(w http.ResponseWriter, r *http.Request) {
 			Message: "Project not found",
 			Code:    http.StatusNotFound,
 		})
+		return
+	}
+	if _, ok := a.requireProjectAccess(w, r, workspace, project); !ok {
 		return
 	}
 
@@ -133,6 +152,9 @@ func (a *API) HandleListProjects(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	if _, ok := a.requireWorkspaceAccess(w, r, workspace, false); !ok {
+		return
+	}
 
 	projects, err := a.store.ListProjects(r.Context(), workspace.ID, includeArchived, limit, offset)
 	if err != nil {
@@ -145,9 +167,24 @@ func (a *API) HandleListProjects(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	responses := make([]ProjectResponse, len(projects))
-	for i, p := range projects {
-		responses[i] = toProjectResponse(p)
+	responses := make([]ProjectResponse, 0, len(projects))
+	for _, p := range projects {
+		if a.rbacEnabled() {
+			_, ok, err := a.authorizeProject(r, workspace, p)
+			if err != nil {
+				a.logger.Error("failed to authorize project access", "error", err, "project_id", p.ID)
+				writeJSON(w, http.StatusInternalServerError, ErrorResponse{
+					Error:   "internal_error",
+					Message: "Failed to authorize project access",
+					Code:    http.StatusInternalServerError,
+				})
+				return
+			}
+			if !ok {
+				continue
+			}
+		}
+		responses = append(responses, toProjectResponse(p))
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -182,6 +219,9 @@ func (a *API) HandleUpdateProject(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	if _, ok := a.requireWorkspaceAccess(w, r, workspace, false); !ok {
+		return
+	}
 
 	project, err := a.store.GetProjectBySlug(r.Context(), workspace.ID, projectSlug)
 	if err != nil {
@@ -190,6 +230,9 @@ func (a *API) HandleUpdateProject(w http.ResponseWriter, r *http.Request) {
 			Message: "Project not found",
 			Code:    http.StatusNotFound,
 		})
+		return
+	}
+	if _, ok := a.requireProjectAccess(w, r, workspace, project); !ok {
 		return
 	}
 
@@ -232,6 +275,9 @@ func (a *API) HandleArchiveProject(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	if _, ok := a.requireWorkspaceAccess(w, r, workspace, false); !ok {
+		return
+	}
 
 	project, err := a.store.GetProjectBySlug(r.Context(), workspace.ID, projectSlug)
 	if err != nil {
@@ -240,6 +286,9 @@ func (a *API) HandleArchiveProject(w http.ResponseWriter, r *http.Request) {
 			Message: "Project not found",
 			Code:    http.StatusNotFound,
 		})
+		return
+	}
+	if _, ok := a.requireProjectAccess(w, r, workspace, project); !ok {
 		return
 	}
 

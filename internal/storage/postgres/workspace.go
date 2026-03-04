@@ -27,6 +27,23 @@ func (s *Store) CreateWorkspace(ctx context.Context, workspace *domain.Workspace
 	return err
 }
 
+func (s *Store) EnsureWorkspace(ctx context.Context, slug, name string) (*domain.Workspace, error) {
+	ws, err := s.GetWorkspaceBySlug(ctx, slug)
+	if err == nil {
+		return ws, nil
+	}
+	workspace := &domain.Workspace{
+		ID:   uuid.New(),
+		Slug: slug,
+		Name: name,
+	}
+	if err := s.CreateWorkspace(ctx, workspace); err != nil {
+		// Handle race where another instance created it.
+		return s.GetWorkspaceBySlug(ctx, slug)
+	}
+	return workspace, nil
+}
+
 // GetWorkspace retrieves a workspace by ID
 func (s *Store) GetWorkspace(ctx context.Context, id uuid.UUID) (*domain.Workspace, error) {
 	query := `

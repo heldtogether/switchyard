@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { getProject, getRun, listJobs, listArtefacts, savePromotion, listPromotions, rerunRun } from "../api";
@@ -16,7 +16,7 @@ import { EmptyState } from "../components/EmptyState";
 import { Breadcrumbs } from "../components/Breadcrumbs";
 
 export function RunDetailPage() {
-  const { projectSlug = "", runSlug = "" } = useParams();
+  const { workspace = "", projectSlug = "", runSlug = "" } = useParams();
   const navigate = useNavigate();
   const [tab, setTab] = useState("overview");
   const [promoOpen, setPromoOpen] = useState(false);
@@ -88,7 +88,7 @@ export function RunDetailPage() {
       const res = await rerunRun(projectSlug, runSlug, { mode });
       const newRunSlug = res.run?.slug;
       if (!newRunSlug) throw new Error("Rerun created but missing run slug");
-      navigate(`/${projectSlug}/${newRunSlug}`);
+      navigate(`/${workspace}/${projectSlug}/${newRunSlug}`);
     } catch (error) {
       setRerunError((error as Error).message ?? "Failed to create rerun");
     } finally {
@@ -103,8 +103,8 @@ export function RunDetailPage() {
         breadcrumbs={
           <Breadcrumbs
             items={[
-              { label: "Projects", to: "/" },
-              { label: projectQuery.data?.name ?? projectSlug, to: `/${projectSlug}` },
+              { label: "Projects", to: `/${workspace}` },
+              { label: projectQuery.data?.name ?? projectSlug, to: `/${workspace}/${projectSlug}` },
               { label: runQuery.data?.name ?? runSlug }
             ]}
           />
@@ -118,7 +118,7 @@ export function RunDetailPage() {
             {runQuery.data?.rerun_of_run_slug && (
               <span>
                 Re-run of:{" "}
-                <Link to={`/${projectSlug}/${runQuery.data.rerun_of_run_slug}`} className="text-ink-700 underline">
+                <Link to={`/${workspace}/${projectSlug}/${runQuery.data.rerun_of_run_slug}`} className="text-ink-700 underline">
                   {runQuery.data.rerun_of_run_slug}
                 </Link>
               </span>
@@ -211,7 +211,7 @@ export function RunDetailPage() {
                   <tr
                     key={job.id}
                     className="cursor-pointer hover:bg-ink-50"
-                    onClick={() => navigate(`/${projectSlug}/${runSlug}/${job.id}`)}
+                    onClick={() => navigate(`/${workspace}/${projectSlug}/${runSlug}/${job.id}`)}
                   >
                     <DataTableCell>
                       <div className="font-semibold text-ink-900">{job.name}</div>
@@ -249,7 +249,7 @@ export function RunDetailPage() {
                   <tr
                     key={job.id}
                     className="cursor-pointer hover:bg-ink-50"
-                    onClick={() => navigate(`/${projectSlug}/${runSlug}/${job.id}`)}
+                    onClick={() => navigate(`/${workspace}/${projectSlug}/${runSlug}/${job.id}`)}
                   >
                     <DataTableCell>
                       <div className="font-semibold text-ink-900">{job.name}</div>

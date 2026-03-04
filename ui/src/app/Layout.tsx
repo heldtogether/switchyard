@@ -1,18 +1,29 @@
 import React from "react";
-import { NavLink } from "react-router-dom";
+import { NavLink, useNavigate, useParams } from "react-router-dom";
 import clsx from "clsx";
 import { useAuth } from "../auth/AuthProvider";
-
-const navItems = [
-  { label: "Projects", to: "/" },
-  { label: "Runs", to: "/runs" },
-  { label: "Jobs", to: "/jobs" },
-  { label: "Artefacts", to: "/artefacts" },
-  { label: "Executors", to: "/executors" },
-  { label: "Settings", to: "/settings" }
-];
+import { useQuery } from "@tanstack/react-query";
+import { listWorkspaces, setWorkspaceSlug } from "../api";
 
 export function Layout({ children }: { children: React.ReactNode }) {
+  const navigate = useNavigate();
+  const { workspace = "" } = useParams();
+  setWorkspaceSlug(workspace);
+
+  const { data: workspaces = [] } = useQuery({
+    queryKey: ["workspaces"],
+    queryFn: listWorkspaces
+  });
+
+  const navItems = [
+    { label: "Projects", to: `/${workspace}` },
+    { label: "Runs", to: `/${workspace}/runs` },
+    { label: "Jobs", to: `/${workspace}/jobs` },
+    { label: "Artefacts", to: `/${workspace}/artefacts` },
+    { label: "Executors", to: `/${workspace}/executors` },
+    { label: "Settings", to: `/${workspace}/settings` }
+  ];
+
   const { user, logoutUrl } = useAuth();
   const displayName = user?.name ?? user?.email ?? "User";
   const avatarInitials = displayName
@@ -41,6 +52,17 @@ export function Layout({ children }: { children: React.ReactNode }) {
             >
               ⌘K Search
             </button>
+            <select
+              className="rounded-full border border-ink-200 bg-white px-3 py-1 text-xs text-ink-600"
+              value={workspace}
+              onChange={(e) => navigate(`/${e.target.value}`)}
+            >
+              {workspaces.map((ws) => (
+                <option key={ws.slug} value={ws.slug}>
+                  {ws.name}
+                </option>
+              ))}
+            </select>
             <div className="hidden text-right md:block">
               <p className="text-xs font-semibold text-ink-900">{displayName}</p>
               {user?.email && <p className="text-[11px] text-ink-500">{user.email}</p>}
@@ -75,7 +97,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 <NavLink
                   key={item.to}
                   to={item.to}
-                  end={item.to === "/"}
+                  end={item.to === `/${workspace}`}
                   className={({ isActive }) =>
                     clsx(
                       "rounded-lg px-3 py-2 text-sm font-medium",
