@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestGetEnvFromFile_TrimsNewlinesOnly(t *testing.T) {
@@ -67,5 +68,42 @@ func TestReplacePasswordInURL_NoUserInfo(t *testing.T) {
 	got := replacePasswordInURL(original, "new")
 	if got != original {
 		t.Fatalf("expected unchanged url, got %q", got)
+	}
+}
+
+func TestAuthNormalizeLegacyValues(t *testing.T) {
+	auth := AuthConfig{
+		Enabled: true,
+		APIKey:  "secret",
+	}
+
+	auth.Normalize()
+
+	if auth.Mode != "api_key" {
+		t.Fatalf("expected mode api_key, got %q", auth.Mode)
+	}
+	if !auth.APIKeyAuth.Enabled {
+		t.Fatalf("expected api key auth enabled")
+	}
+	if auth.APIKeyAuth.Key != "secret" {
+		t.Fatalf("expected api key auth key to be copied from legacy field")
+	}
+}
+
+func TestOIDCValidate(t *testing.T) {
+	oidc := OIDCAuthConfig{
+		Enabled:           true,
+		IssuerURL:         "https://example.com",
+		ClientID:          "client-id",
+		ClientSecret:      "secret",
+		RedirectURL:       "https://api.example.com/v1/auth/callback",
+		SessionSigningKey: "super-secret",
+		Cookie: OIDCCookieConfig{
+			SameSite: "lax",
+			TTL:      time.Hour,
+		},
+	}
+	if err := oidc.Validate(); err != nil {
+		t.Fatalf("expected valid OIDC config, got %v", err)
 	}
 }

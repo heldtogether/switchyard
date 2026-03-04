@@ -12,7 +12,7 @@ Switchyard accepts container jobs over an HTTP API, executes them on a Swarm clu
 - GPU-aware scheduling with per-job allocations and node capacity tracking
 - RabbitMQ or Redis queueing (RabbitMQ recommended for GPU routing)
 - Postgres metadata store + S3-compatible log and artefact storage
-- API key authentication
+- Hybrid authentication (API key + OIDC SSO)
 
 ## Quick Start (Local Dev)
 ```bash
@@ -36,7 +36,8 @@ Then open `http://localhost:5173`.
 docker build -f build/ui.Dockerfile -t switchyard-ui:latest .
 docker run -p 3000:80 \
   -e UI_API_BASE_URL=http://localhost:8080 \
-  -e UI_API_KEY=your-api-key \
+  -e UI_AUTH_LOGIN_URL=http://localhost:8080/v1/auth/login \
+  -e UI_AUTH_LOGOUT_URL=http://localhost:8080/v1/auth/logout \
   -e UI_WORKSPACE_SLUG=default \
   -e UI_USE_MOCKS=false \
   switchyard-ui:latest
@@ -58,6 +59,8 @@ examples/       # Example jobs and helper scripts
 - GPU-aware scheduling requires workers to register and heartbeat (automatic on startup).
 - RabbitMQ is the recommended queue for GPU routing via `gpu.N` topic keys.
 - Avoid committing secrets; use env vars or Docker secrets for credentials.
+- For OIDC with separate UI/API origins, set `api.auth.oidc.post_login_redirect` and `post_logout_redirect` to absolute UI URLs (for example `http://localhost:5173/` and `http://localhost:5173/login`).
+- `api.auth.oidc.logout_url` is optional. When set, `GET /v1/auth/logout` clears the local session and redirects to that IdP logout URL.
 
 ## Documentation Map
 - `AGENTS.md`: contributor guide and repo conventions

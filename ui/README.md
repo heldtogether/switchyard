@@ -13,28 +13,33 @@ npm run dev
 Create a `.env.local` file in `ui/` with:
 ```
 VITE_API_BASE_URL=http://localhost:8080
-VITE_API_KEY=your-api-key
+VITE_USE_MOCKS=false
 VITE_WORKSPACE_SLUG=default
-VITE_USE_MOCKS=true
 VITE_AGGREGATE_LIMIT=5
 ```
 
 - Set `VITE_USE_MOCKS=false` to hit real endpoints.
-- `VITE_API_KEY` is sent as `X-API-Key`.
+- Browser requests include cookies for SSO sessions.
+- In split-origin setups (UI host different from API host), configure API OIDC redirects to UI absolute URLs:
+  - `api.auth.oidc.post_login_redirect: "https://ui.example.com/"`
+  - `api.auth.oidc.post_logout_redirect: "https://ui.example.com/login"`
 
 ## Runtime config (Docker)
 The UI image reads runtime env vars and writes `/config.js` on container start:
 ```
 UI_API_BASE_URL=http://localhost:8080
-UI_API_KEY=your-api-key
+UI_AUTH_LOGIN_URL=http://localhost:8080/v1/auth/login
+UI_AUTH_LOGOUT_URL=http://localhost:8080/v1/auth/logout
 UI_WORKSPACE_SLUG=default
 UI_USE_MOCKS=false
 UI_AGGREGATE_LIMIT=5
 ```
+- `UI_AUTH_LOGOUT_URL` should point to API `GET /v1/auth/logout` (browser redirect logout flow).
 
 ## Routes
+- `/login` Login page (unauthenticated)
 - `/` Projects list
-- `/projects/:projectSlug` Project runs list
+- `/:projectSlug` Project runs list
 - `/runs` Runs list (all projects)
 - `/jobs` Jobs list (all projects)
 - `/artefacts` Artefacts list (all projects)

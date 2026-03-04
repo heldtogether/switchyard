@@ -43,7 +43,7 @@ func (a *API) HandleCreateRegistrySecret(w http.ResponseWriter, r *http.Request)
 
 	secret := &domain.RegistrySecret{
 		ID:                uuid.New(),
-		CreatedBy:         "api-key-user",
+		CreatedBy:         ActorFromRequest(r),
 		WorkspaceID:       workspace.ID,
 		Host:              req.Host,
 		Username:          req.Username,

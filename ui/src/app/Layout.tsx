@@ -1,6 +1,7 @@
 import React from "react";
 import { NavLink } from "react-router-dom";
 import clsx from "clsx";
+import { useAuth } from "../auth/AuthProvider";
 
 const navItems = [
   { label: "Projects", to: "/" },
@@ -12,6 +13,15 @@ const navItems = [
 ];
 
 export function Layout({ children }: { children: React.ReactNode }) {
+  const { user, logoutUrl } = useAuth();
+  const displayName = user?.name ?? user?.email ?? "User";
+  const avatarInitials = displayName
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("") || "U";
+
   return (
     <div className="min-h-screen">
       <header className="sticky top-0 z-40 border-b border-ink-100 bg-white/80 backdrop-blur">
@@ -31,9 +41,28 @@ export function Layout({ children }: { children: React.ReactNode }) {
             >
               ⌘K Search
             </button>
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-ink-900 text-xs font-semibold text-white">
-              JS
+            <div className="hidden text-right md:block">
+              <p className="text-xs font-semibold text-ink-900">{displayName}</p>
+              {user?.email && <p className="text-[11px] text-ink-500">{user.email}</p>}
             </div>
+            {user?.picture_url ? (
+              <img
+                src={user.picture_url}
+                alt={displayName}
+                className="h-9 w-9 rounded-full border border-ink-200 object-cover"
+              />
+            ) : (
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-ink-900 text-xs font-semibold text-white">
+                {avatarInitials}
+              </div>
+            )}
+            <button
+              type="button"
+              className="rounded-full border border-ink-200 px-3 py-1 text-xs text-ink-600"
+              onClick={() => window.location.assign(logoutUrl)}
+            >
+              Logout
+            </button>
           </div>
         </div>
       </header>

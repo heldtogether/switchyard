@@ -23,6 +23,7 @@ type API struct {
 	executor executor.Executor
 	logger   *slog.Logger
 	baseURL  string
+	auth     *AuthManager
 }
 
 // New creates a new API instance
@@ -36,6 +37,10 @@ func New(cfg *config.Config, store *postgres.Store, q queue.Producer, storage *o
 		logger:   logger,
 		baseURL:  baseURL,
 	}
+}
+
+func (a *API) SetAuthManager(auth *AuthManager) {
+	a.auth = auth
 }
 
 // writeJSON writes a JSON response

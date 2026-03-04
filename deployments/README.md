@@ -16,6 +16,13 @@ cd deployments
 printf "%s" "your-api-key" | docker secret create switchyard_api_key -
 printf "%s" "your-s3-access-key" | docker secret create switchyard_s3_access_key -
 printf "%s" "your-s3-secret-key" | docker secret create switchyard_s3_secret_key -
+# Optional for OIDC modes:
+# export AUTH_MODE=hybrid
+# export OIDC_ISSUER_URL=...
+# export OIDC_CLIENT_ID=...
+# export OIDC_CLIENT_SECRET=...
+# export OIDC_REDIRECT_URL=https://api.example.com/v1/auth/callback
+# export OIDC_SESSION_SIGNING_KEY=... # strong random string
 
 # Env
 cp .env.example .env

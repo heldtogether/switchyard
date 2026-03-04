@@ -4,3 +4,4 @@ coverage.out
 config.yaml
 .env.local
 node_modules
+dist/

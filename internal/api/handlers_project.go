@@ -59,7 +59,7 @@ func (a *API) HandleCreateProject(w http.ResponseWriter, r *http.Request) {
 		Slug:        req.Slug,
 		Name:        req.Name,
 		Description: req.Description,
-		CreatedBy:   "api-key-user", // TODO: Get from auth context
+		CreatedBy:   ActorFromRequest(r),
 		Archived:    false,
 		Metadata:    req.Metadata,
 	}

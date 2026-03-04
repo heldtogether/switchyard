@@ -8,14 +8,13 @@ export class ApiError extends Error {
 
 const runtimeEnv = (window as any).__ENV ?? {};
 const API_BASE_URL = runtimeEnv.API_BASE_URL ?? import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8080";
-const API_KEY = runtimeEnv.API_KEY ?? (import.meta.env.VITE_API_KEY as string | undefined);
 
 export async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
-      ...(API_KEY ? { "X-API-Key": API_KEY } : {}),
       ...(init?.headers ?? {})
     }
   });
@@ -31,14 +30,18 @@ export async function fetchJson<T>(path: string, init?: RequestInit): Promise<T>
     throw new ApiError(message, res.status);
   }
 
+  if (res.status === 204) {
+    return undefined as T;
+  }
+
   return res.json() as Promise<T>;
 }
 
 export async function fetchText(path: string, init?: RequestInit): Promise<string> {
   const res = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
+    credentials: "include",
     headers: {
-      ...(API_KEY ? { "X-API-Key": API_KEY } : {}),
       ...(init?.headers ?? {})
     }
   });

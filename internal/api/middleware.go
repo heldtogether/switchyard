@@ -3,6 +3,7 @@ package api
 import (
 	"log/slog"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -101,10 +102,20 @@ func RequestIDMiddleware() func(http.Handler) http.Handler {
 }
 
 // CORSMiddleware adds CORS headers (if needed)
-func CORSMiddleware() func(http.Handler) http.Handler {
+func CORSMiddleware(allowedOrigins []string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Access-Control-Allow-Origin", "*")
+			origin := r.Header.Get("Origin")
+			allowOrigin := "*"
+			if origin != "" {
+				if len(allowedOrigins) == 0 || slices.Contains(allowedOrigins, origin) {
+					allowOrigin = origin
+					w.Header().Set("Access-Control-Allow-Credentials", "true")
+					w.Header().Set("Vary", "Origin")
+				}
+			}
+
+			w.Header().Set("Access-Control-Allow-Origin", allowOrigin)
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-API-Key, Authorization")
 

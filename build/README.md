@@ -23,7 +23,8 @@ UI runtime config (set at container start):
 ```bash
 docker run -p 3000:80 \
   -e UI_API_BASE_URL=http://localhost:8080 \
-  -e UI_API_KEY=your-api-key \
+  -e UI_AUTH_LOGIN_URL=http://localhost:8080/v1/auth/login \
+  -e UI_AUTH_LOGOUT_URL=http://localhost:8080/v1/auth/logout \
   -e UI_WORKSPACE_SLUG=default \
   -e UI_USE_MOCKS=false \
   -e UI_AGGREGATE_LIMIT=5 \

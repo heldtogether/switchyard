@@ -8,8 +8,28 @@ api:
   read_timeout: 30s
   write_timeout: 30s
   auth:
+    mode: api_key
     enabled: true
-    api_key: "${API_KEY}"
+    api_key: "${API_KEY}" # legacy compatibility
+    api_key_auth:
+      enabled: true
+      key: "${API_KEY}"
+    oidc:
+      enabled: false
+      issuer_url: "${OIDC_ISSUER_URL}"
+      client_id: "${OIDC_CLIENT_ID}"
+      client_secret: "${OIDC_CLIENT_SECRET}"
+      redirect_url: "${OIDC_REDIRECT_URL}"
+      logout_url: "${OIDC_LOGOUT_URL}"
+      scopes: [openid, profile, email]
+      session_signing_key: "${OIDC_SESSION_SIGNING_KEY}"
+      post_login_redirect: "/"
+      post_logout_redirect: "/login"
+      cookie:
+        name: switchyard_session
+        secure: true
+        same_site: lax
+        ttl: 24h
 
 worker:
   concurrency: 5

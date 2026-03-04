@@ -17,6 +17,16 @@ echo "your-s3-access-key" | docker secret create switchyard_s3_access_key -
 echo "your-s3-secret-key" | docker secret create switchyard_s3_secret_key -
 ```
 
+For OIDC/hybrid auth, also configure environment variables before deploy:
+```bash
+export AUTH_MODE=hybrid
+export OIDC_ISSUER_URL=https://your-provider/.well-known/openid-configuration
+export OIDC_CLIENT_ID=...
+export OIDC_CLIENT_SECRET=...
+export OIDC_REDIRECT_URL=https://api.example.com/v1/auth/callback
+export OIDC_SESSION_SIGNING_KEY=...
+```
+
 ### 2. Configure Environment
 ```bash
 cd deployments

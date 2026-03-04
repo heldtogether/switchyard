@@ -25,12 +25,40 @@ api:
   read_timeout: 30s
   write_timeout: 30s
 
-  # Authentication (MVP: simple API key)
+  # Authentication
   auth:
-    # If enabled, all API requests must provide the API key.
+    # Supported modes: disabled, api_key, oidc, hybrid.
+    # Use "hybrid" to enable browser SSO while keeping API keys for automation.
+    mode: api_key
+
+    # Legacy compatibility (still supported):
     enabled: true
-    # Set via API_KEY env var or API_KEY_FILE.
     api_key: "${API_KEY}"
+
+    api_key_auth:
+      enabled: true
+      key: "${API_KEY}"
+
+    oidc:
+      enabled: false
+      issuer_url: "${OIDC_ISSUER_URL}"
+      client_id: "${OIDC_CLIENT_ID}"
+      client_secret: "${OIDC_CLIENT_SECRET}"
+      redirect_url: "${OIDC_REDIRECT_URL}"
+      logout_url: "${OIDC_LOGOUT_URL}" # Optional IdP logout endpoint. If set, /v1/auth/logout redirects here after clearing local session.
+      scopes:
+        - openid
+        - profile
+        - email
+      # Use absolute UI URLs when UI and API are on different origins.
+      post_login_redirect: "/"
+      post_logout_redirect: "/login"
+      session_signing_key: "${OIDC_SESSION_SIGNING_KEY}"
+      cookie:
+        name: switchyard_session
+        secure: false
+        same_site: lax
+        ttl: 24h
 
 # ==============================================================================
 # Worker Configuration

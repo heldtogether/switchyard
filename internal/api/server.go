@@ -33,6 +33,10 @@ func (s *Server) Start() error {
 	// Health check routes
 	mux.HandleFunc("/healthz", s.handleHealthCheck)
 	mux.HandleFunc("/readyz", s.handleHealthCheck)
+	mux.HandleFunc("GET /v1/auth/login", s.api.HandleAuthLogin)
+	mux.HandleFunc("GET /v1/auth/callback", s.api.HandleAuthCallback)
+	mux.HandleFunc("GET /v1/auth/logout", s.api.HandleAuthLogoutRedirect)
+	mux.HandleFunc("GET /v1/auth/me", s.api.HandleAuthMe)
 
 	// Workspace routes
 	mux.HandleFunc("POST /v1/workspaces", s.api.HandleCreateWorkspace)
@@ -82,13 +86,19 @@ func (s *Server) Start() error {
 	handler = LoggingMiddleware(s.logger)(handler)
 	handler = RecoveryMiddleware(s.logger)(handler)
 
+	authManager, err := NewAuthManager(s.cfg, s.logger)
+	if err != nil {
+		return fmt.Errorf("initialize auth manager: %w", err)
+	}
+	s.api.SetAuthManager(authManager)
+
 	// Add auth middleware if enabled
-	if s.cfg.API.Auth.Enabled {
-		handler = AuthMiddleware(s.cfg.API.Auth.APIKey, s.logger)(handler)
+	if authManager.Enabled() {
+		handler = authManager.Middleware(handler)
 	}
 
 	// Add CORS middleware (wrap outermost so OPTIONS preflight is handled)
-	handler = CORSMiddleware()(handler)
+	handler = CORSMiddleware(s.cfg.API.CORSAllowedOrigins)(handler)
 
 	// Create HTTP server
 	addr := fmt.Sprintf("%s:%d", s.cfg.API.Host, s.cfg.API.Port)

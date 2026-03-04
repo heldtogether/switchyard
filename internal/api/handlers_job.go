@@ -119,7 +119,7 @@ func (a *API) HandleCreateJob(w http.ResponseWriter, r *http.Request) {
 		ID:          uuid.New(),
 		RunID:       run.ID,
 		Name:        req.Name,
-		CreatedBy:   "api-key-user", // TODO: Get from auth context
+		CreatedBy:   ActorFromRequest(r),
 		Status:      domain.JobStatusPending,
 		Image:       req.Image,
 		Command:     req.Command,

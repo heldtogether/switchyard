@@ -76,7 +76,7 @@ func (a *API) HandleCreateRun(w http.ResponseWriter, r *http.Request) {
 		Name:        req.Name,
 		Description: req.Description,
 		Status:      domain.RunStatusPending,
-		CreatedBy:   "api-key-user", // TODO: Get from auth context
+		CreatedBy:   ActorFromRequest(r),
 		Metadata:    req.Metadata,
 	}
 
@@ -308,7 +308,7 @@ func (a *API) HandleRerunRun(w http.ResponseWriter, r *http.Request) {
 		Name:        newRunName,
 		Description: sourceRun.Description,
 		Status:      domain.RunStatusPending,
-		CreatedBy:   "api-key-user", // TODO: Get from auth context
+		CreatedBy:   ActorFromRequest(r),
 		Metadata:    metadata,
 	}
 
@@ -323,8 +323,9 @@ func (a *API) HandleRerunRun(w http.ResponseWriter, r *http.Request) {
 	}
 
 	createdCount := 0
+	actor := ActorFromRequest(r)
 	for _, sourceJob := range selectedJobs {
-		cloned := cloneJobForRerun(sourceJob, newRun.ID, sourceRun.ID)
+		cloned := cloneJobForRerun(sourceJob, newRun.ID, sourceRun.ID, actor)
 		if err := a.store.CreateJob(r.Context(), cloned); err != nil {
 			a.logger.Error("failed to clone rerun job", "source_job_id", sourceJob.ID, "new_run_id", newRun.ID, "error", err)
 			writeJSON(w, http.StatusInternalServerError, ErrorResponse{
@@ -375,7 +376,7 @@ func generateRerunSlug(sourceSlug string) string {
 	return fmt.Sprintf("%s-rerun-%d-%s", sourceSlug, time.Now().Unix(), uuid.NewString()[:8])
 }
 
-func cloneJobForRerun(source *domain.Job, runID uuid.UUID, sourceRunID uuid.UUID) *domain.Job {
+func cloneJobForRerun(source *domain.Job, runID uuid.UUID, sourceRunID uuid.UUID, actor string) *domain.Job {
 	metadata := mergeAnyMap(source.Metadata, map[string]any{
 		"rerun_of_job_id": source.ID.String(),
 		"rerun_of_run_id": sourceRunID.String(),
@@ -385,7 +386,7 @@ func cloneJobForRerun(source *domain.Job, runID uuid.UUID, sourceRunID uuid.UUID
 		ID:               uuid.New(),
 		RunID:            runID,
 		Name:             source.Name,
-		CreatedBy:        "api-key-user", // TODO: Get from auth context
+		CreatedBy:        actor,
 		Status:           domain.JobStatusPending,
 		Image:            source.Image,
 		Command:          append([]string(nil), source.Command...),

@@ -62,9 +62,15 @@ services:
       - switchyard_s3_secret_key
     environment:
       # Override config via environment variables
+      AUTH_MODE: ${AUTH_MODE:-hybrid}
       API_KEY_FILE: /run/secrets/switchyard_api_key
       S3_ACCESS_KEY_FILE: /run/secrets/switchyard_s3_access_key
       S3_SECRET_KEY_FILE: /run/secrets/switchyard_s3_secret_key
+      OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:-}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
+      OIDC_REDIRECT_URL: ${OIDC_REDIRECT_URL:-}
+      OIDC_SESSION_SIGNING_KEY: ${OIDC_SESSION_SIGNING_KEY:-}
       
       # Database connection (external Postgres)
       DATABASE_URL: ${DATABASE_URL}
@@ -200,7 +206,8 @@ services:
       - "3000:80"
     environment:
       UI_API_BASE_URL: ${UI_API_BASE_URL:-http://localhost:8080}
-      UI_API_KEY: ${UI_API_KEY:-}
+      UI_AUTH_LOGIN_URL: ${UI_AUTH_LOGIN_URL:-}
+      UI_AUTH_LOGOUT_URL: ${UI_AUTH_LOGOUT_URL:-}
       UI_WORKSPACE_SLUG: ${UI_WORKSPACE_SLUG:-default}
       UI_USE_MOCKS: ${UI_USE_MOCKS:-false}
       UI_AGGREGATE_LIMIT: ${UI_AGGREGATE_LIMIT:-5}
