@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { getRun, listJobs, listArtefacts, savePromotion, listPromotions, rerunRun } from "../api";
+import { getProject, getRun, listJobs, listArtefacts, savePromotion, listPromotions, rerunRun } from "../api";
 import { PageHeader } from "../components/PageHeader";
 import { StatusPill } from "../components/StatusPill";
 import { Tabs } from "../components/Tabs";
@@ -13,6 +13,7 @@ import { Modal } from "../components/Modal";
 import { ArtefactList } from "../components/ArtefactList";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { EmptyState } from "../components/EmptyState";
+import { Breadcrumbs } from "../components/Breadcrumbs";
 
 export function RunDetailPage() {
   const { projectSlug = "", runSlug = "" } = useParams();
@@ -30,6 +31,11 @@ export function RunDetailPage() {
   const runQuery = useQuery({
     queryKey: ["run", projectSlug, runSlug],
     queryFn: () => getRun(projectSlug, runSlug)
+  });
+
+  const projectQuery = useQuery({
+    queryKey: ["project", projectSlug],
+    queryFn: () => getProject(projectSlug)
   });
 
   const jobsQuery = useQuery({
@@ -94,6 +100,15 @@ export function RunDetailPage() {
     <div className="space-y-6">
       {rerunError && <ErrorBanner message={rerunError} onRetry={() => setRerunError(null)} />}
       <PageHeader
+        breadcrumbs={
+          <Breadcrumbs
+            items={[
+              { label: "Projects", to: "/" },
+              { label: projectQuery.data?.name ?? projectSlug, to: `/${projectSlug}` },
+              { label: runQuery.data?.name ?? runSlug }
+            ]}
+          />
+        }
         title={`Run · ${runQuery.data?.name ?? runQuery.data?.slug ?? runSlug}`}
         subtitle={`Created by ${runQuery.data?.created_by ?? "system"}`}
         meta={

@@ -3,14 +3,16 @@ import React from "react";
 interface PageHeaderProps {
   title: string;
   subtitle?: string;
+  breadcrumbs?: React.ReactNode;
   meta?: React.ReactNode;
   actions?: React.ReactNode;
 }
 
-export function PageHeader({ title, subtitle, meta, actions }: PageHeaderProps) {
+export function PageHeader({ title, subtitle, breadcrumbs, meta, actions }: PageHeaderProps) {
   return (
     <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
       <div>
+        {breadcrumbs && <div>{breadcrumbs}</div>}
         <h1 className="mt-2 text-3xl font-semibold text-ink-900">{title}</h1>
         {subtitle && <p className="mt-2 text-sm text-ink-500">{subtitle}</p>}
         {meta && <div className="mt-3 text-sm text-ink-500">{meta}</div>}

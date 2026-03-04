@@ -8,6 +8,7 @@ import { StatusPill } from "../components/StatusPill";
 import { EmptyState } from "../components/EmptyState";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { RelativeTime } from "../components/RelativeTime";
+import { Breadcrumbs } from "../components/Breadcrumbs";
 import { NewRunModal } from "./NewRunModal";
 
 export function ProjectRunsPage() {
@@ -46,6 +47,14 @@ export function ProjectRunsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
+        breadcrumbs={
+          <Breadcrumbs
+            items={[
+              { label: "Projects", to: "/" },
+              { label: projectQuery.data?.name ?? projectSlug }
+            ]}
+          />
+        }
         title={projectQuery.data?.name ?? "Project"}
         subtitle={projectQuery.data?.description ?? "Runs and promotions for this project."}
         meta={

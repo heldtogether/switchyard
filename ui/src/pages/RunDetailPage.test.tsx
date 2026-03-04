@@ -10,6 +10,7 @@ const { rerunRunMock, navigateMock } = vi.hoisted(() => ({
 }));
 
 vi.mock("../api", () => ({
+  getProject: vi.fn(async () => ({ id: "p1", slug: "proj", name: "Project Name" })),
   getRun: vi.fn(async () => ({ id: "r1", slug: "run-1", name: "run-1", status: "RUNNING", created_at: new Date().toISOString() })),
   listJobs: vi.fn(async () => [
     { id: "j1", name: "build", image: "build-image", status: "SUCCEEDED", executor_type: "swarm" },
@@ -41,6 +42,10 @@ describe("RunDetailPage", () => {
     await waitFor(() => {
       expect(screen.getByText("build")).toBeInTheDocument();
     });
+
+    expect(screen.getByRole("link", { name: "Projects" })).toHaveAttribute("href", "/");
+    expect(screen.getByRole("link", { name: "Project Name" })).toHaveAttribute("href", "/proj");
+    expect(screen.getByText("run-1")).toBeInTheDocument();
 
     expect(screen.getByText("build-image")).toBeInTheDocument();
     const sameLabels = screen.getAllByText("same");

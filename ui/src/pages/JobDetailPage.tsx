@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { getJob, getJobLogs, listArtefacts } from "../api";
+import { getJob, getJobLogs, getProject, getRun, listArtefacts } from "../api";
 import { PageHeader } from "../components/PageHeader";
 import { StatusPill } from "../components/StatusPill";
 import { Tabs } from "../components/Tabs";
@@ -11,6 +11,7 @@ import { JSONViewer } from "../components/JSONViewer";
 import { RelativeTime } from "../components/RelativeTime";
 import { formatDurationMs } from "../utils/format";
 import { ErrorBanner } from "../components/ErrorBanner";
+import { Breadcrumbs } from "../components/Breadcrumbs";
 
 export function JobDetailPage() {
   const { projectSlug = "", runSlug = "", jobId = "" } = useParams();
@@ -20,6 +21,16 @@ export function JobDetailPage() {
   const jobQuery = useQuery({
     queryKey: ["job", projectSlug, runSlug, jobId],
     queryFn: () => getJob(projectSlug, runSlug, jobId)
+  });
+
+  const projectQuery = useQuery({
+    queryKey: ["project", projectSlug],
+    queryFn: () => getProject(projectSlug)
+  });
+
+  const runQuery = useQuery({
+    queryKey: ["run", projectSlug, runSlug],
+    queryFn: () => getRun(projectSlug, runSlug)
   });
 
   const logsQuery = useQuery({
@@ -45,6 +56,16 @@ export function JobDetailPage() {
   return (
     <div className="space-y-6">
       <PageHeader
+        breadcrumbs={
+          <Breadcrumbs
+            items={[
+              { label: "Projects", to: "/" },
+              { label: projectQuery.data?.name ?? projectSlug, to: `/${projectSlug}` },
+              { label: runQuery.data?.name ?? runSlug, to: `/${projectSlug}/${runSlug}` },
+              { label: jobQuery.data?.name ?? jobId }
+            ]}
+          />
+        }
         title={jobName}
         subtitle={jobSubtitle}
         meta={
