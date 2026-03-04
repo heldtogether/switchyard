@@ -25,6 +25,9 @@ export interface Run {
   tags_system: string[];
   jobs_count: number;
   slug: string;
+  rerun_of_run_id?: string;
+  rerun_of_run_slug?: string;
+  rerun_mode?: "all" | "failed_only";
 }
 
 export interface Job {

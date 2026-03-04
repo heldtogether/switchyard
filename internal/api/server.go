@@ -52,6 +52,7 @@ func (s *Server) Start() error {
 	mux.HandleFunc("POST /v1/workspaces/{workspace_slug}/projects/{project_slug}/runs", s.api.HandleCreateRun)
 	mux.HandleFunc("GET /v1/workspaces/{workspace_slug}/projects/{project_slug}/runs", s.api.HandleListRuns)
 	mux.HandleFunc("GET /v1/workspaces/{workspace_slug}/projects/{project_slug}/runs/{run_slug}", s.api.HandleGetRun)
+	mux.HandleFunc("POST /v1/workspaces/{workspace_slug}/projects/{project_slug}/runs/{run_slug}/rerun", s.api.HandleRerunRun)
 
 	// Job routes
 	mux.HandleFunc("POST /v1/workspaces/{workspace_slug}/projects/{project_slug}/runs/{run_slug}/jobs", s.api.HandleCreateJob)

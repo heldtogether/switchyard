@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { getRun, listJobs, listArtefacts, savePromotion, listPromotions } from "../api";
+import { getRun, listJobs, listArtefacts, savePromotion, listPromotions, rerunRun } from "../api";
 import { PageHeader } from "../components/PageHeader";
 import { StatusPill } from "../components/StatusPill";
 import { Tabs } from "../components/Tabs";
@@ -23,6 +23,9 @@ export function RunDetailPage() {
   const [promoNote, setPromoNote] = useState("");
   const [promoMode, setPromoMode] = useState<"run" | "artefacts">("run");
   const [selectedArtefacts, setSelectedArtefacts] = useState<string[]>([]);
+  const [rerunOpen, setRerunOpen] = useState(false);
+  const [rerunSubmitting, setRerunSubmitting] = useState(false);
+  const [rerunError, setRerunError] = useState<string | null>(null);
 
   const runQuery = useQuery({
     queryKey: ["run", projectSlug, runSlug],
@@ -70,8 +73,26 @@ export function RunDetailPage() {
     return <ErrorBanner message={(runQuery.error as Error).message} onRetry={() => runQuery.refetch()} />;
   }
 
+  async function handleRerun(mode: "all" | "failed_only") {
+    if (!runQuery.data) return;
+    setRerunSubmitting(true);
+    setRerunError(null);
+    setRerunOpen(false);
+    try {
+      const res = await rerunRun(projectSlug, runSlug, { mode });
+      const newRunSlug = res.run?.slug;
+      if (!newRunSlug) throw new Error("Rerun created but missing run slug");
+      navigate(`/${projectSlug}/${newRunSlug}`);
+    } catch (error) {
+      setRerunError((error as Error).message ?? "Failed to create rerun");
+    } finally {
+      setRerunSubmitting(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
+      {rerunError && <ErrorBanner message={rerunError} onRetry={() => setRerunError(null)} />}
       <PageHeader
         title={`Run · ${runQuery.data?.name ?? runQuery.data?.slug ?? runSlug}`}
         subtitle={`Created by ${runQuery.data?.created_by ?? "system"}`}
@@ -79,12 +100,50 @@ export function RunDetailPage() {
           <div className="flex flex-wrap gap-4 text-xs text-ink-500">
             <span>Started: <RelativeTime value={runQuery.data?.started_at ?? runQuery.data?.created_at} /></span>
             <span>Updated: <RelativeTime value={runQuery.data?.updated_at} /></span>
+            {runQuery.data?.rerun_of_run_slug && (
+              <span>
+                Re-run of:{" "}
+                <Link to={`/${projectSlug}/${runQuery.data.rerun_of_run_slug}`} className="text-ink-700 underline">
+                  {runQuery.data.rerun_of_run_slug}
+                </Link>
+              </span>
+            )}
+            {runQuery.data?.rerun_mode && (
+              <span>Mode: {runQuery.data.rerun_mode === "failed_only" ? "failed-only" : "all jobs"}</span>
+            )}
           </div>
         }
         actions={
           <div className="flex flex-wrap gap-2">
             <StatusPill status={runQuery.data?.status ?? "PENDING"} />
-            <button className="rounded-full border border-ink-200 px-3 py-1 text-sm text-ink-500">Re-run</button>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setRerunOpen((open) => !open)}
+                disabled={rerunSubmitting}
+                className="rounded-full border border-ink-200 px-3 py-1 text-sm text-ink-500 disabled:opacity-60"
+              >
+                {rerunSubmitting ? "Re-running..." : "Re-run"}
+              </button>
+              {rerunOpen && (
+                <div className="absolute right-0 z-20 mt-2 w-56 rounded-xl border border-ink-200 bg-white p-1 shadow-lg">
+                  <button
+                    type="button"
+                    onClick={() => handleRerun("all")}
+                    className="block w-full rounded-lg px-3 py-2 text-left text-sm text-ink-700 hover:bg-ink-50"
+                  >
+                    Re-run all jobs
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleRerun("failed_only")}
+                    className="block w-full rounded-lg px-3 py-2 text-left text-sm text-ink-700 hover:bg-ink-50"
+                  >
+                    Re-run failed jobs only
+                  </button>
+                </div>
+              )}
+            </div>
             <button className="rounded-full border border-ink-200 px-3 py-1 text-sm text-ink-500">Cancel</button>
             <button
               className="rounded-full bg-ink-900 px-3 py-1 text-sm font-semibold text-white"

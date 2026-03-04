@@ -103,7 +103,14 @@ export function RunsListPage() {
                 onClick={() => navigate(`/${run.project_slug}/${run.slug}`)}
               >
                 <DataTableCell>
-                  <div className="font-semibold text-ink-900">{run.name ?? run.slug}</div>
+                  <div className="flex items-center gap-2">
+                    <div className="font-semibold text-ink-900">{run.name ?? run.slug}</div>
+                    {run.rerun_of_run_id && (
+                      <span className="rounded-full bg-ink-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-ink-500">
+                        Re-run
+                      </span>
+                    )}
+                  </div>
                   <div className="text-xs text-ink-500">{run.slug}</div>
                 </DataTableCell>
                 <DataTableCell>

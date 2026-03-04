@@ -31,7 +31,10 @@ function mapRun(run: any, index?: number): Run {
     trigger: metadata.trigger ?? "API",
     tags_user: metadata.tags_user ?? [],
     tags_system: metadata.tags_system ?? [],
-    jobs_count: metadata.jobs_count ?? 0
+    jobs_count: metadata.jobs_count ?? 0,
+    rerun_of_run_id: metadata.rerun_of_run_id,
+    rerun_of_run_slug: metadata.rerun_of_run_slug,
+    rerun_mode: metadata.rerun_mode
   } as Run;
 }
 
@@ -320,4 +323,14 @@ export async function createJob(projectSlug: string, runSlug: string, payload: a
   } catch (error) {
     throw error;
   }
+}
+
+export async function rerunRun(projectSlug: string, runSlug: string, payload: { mode: "all" | "failed_only" }) {
+  return fetchJson<{ run: any; jobs_created: number; source_run_id: string; mode: "all" | "failed_only" }>(
+    `/v1/workspaces/${WORKSPACE}/projects/${projectSlug}/runs/${runSlug}/rerun`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }
+  );
 }

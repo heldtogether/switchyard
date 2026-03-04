@@ -70,6 +70,13 @@ type CreateRunRequest struct {
 	Metadata    map[string]any `json:"metadata,omitempty"`
 }
 
+// RerunRunRequest is the request to clone an existing run
+type RerunRunRequest struct {
+	Mode string `json:"mode"` // "all" | "failed_only"
+	Name string `json:"name,omitempty"`
+	Slug string `json:"slug,omitempty"`
+}
+
 // RunResponse is the response for a run
 type RunResponse struct {
 	ID          uuid.UUID      `json:"id"`
@@ -84,6 +91,14 @@ type RunResponse struct {
 	FinishedAt  *time.Time     `json:"finished_at,omitempty"`
 	CreatedBy   string         `json:"created_by"`
 	Metadata    map[string]any `json:"metadata,omitempty"`
+}
+
+// RerunRunResponse is the response for a rerun action
+type RerunRunResponse struct {
+	Run         RunResponse `json:"run"`
+	JobsCreated int         `json:"jobs_created"`
+	SourceRunID uuid.UUID   `json:"source_run_id"`
+	Mode        string      `json:"mode"`
 }
 
 // ========== Job DTOs ==========
