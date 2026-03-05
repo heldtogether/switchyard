@@ -405,6 +405,13 @@ export async function createProject(payload: { slug: string; name: string; descr
   );
 }
 
+export async function createWorkspace(payload: { slug: string; name: string; description?: string }) {
+  return await fetchJson<any>("/v1/workspaces", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
 export async function createJob(projectSlug: string, runSlug: string, payload: any) {
   return await fetchJson<any>(
     `/v1/workspaces/${activeWorkspaceSlug}/projects/${projectSlug}/runs/${runSlug}/jobs`,

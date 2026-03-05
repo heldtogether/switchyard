@@ -71,5 +71,6 @@ UI_AGGREGATE_LIMIT=5
 - Run tags, run number, triggers (read from `metadata` when present)
 
 **Write endpoints used:**
+- `POST /v1/workspaces` (workspace menu -> Create Workspace)
 - `POST /v1/workspaces/:workspace/projects/:projectSlug/runs`
 - `POST /v1/workspaces/:workspace/projects/:projectSlug/runs/:runSlug/jobs`

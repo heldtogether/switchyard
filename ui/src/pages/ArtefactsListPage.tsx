@@ -6,18 +6,20 @@ import { DataTable, DataTableBody, DataTableCell, DataTableHeader, DataTableHead
 import { EmptyState } from "../components/EmptyState";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { formatBytes } from "../utils/format";
+import { useParams } from "react-router-dom";
 
 export function ArtefactsListPage() {
+  const { workspace = "" } = useParams();
   const [projectFilter, setProjectFilter] = useState("all");
   const [search, setSearch] = useState("");
 
   const projectsQuery = useQuery({
-    queryKey: ["projects"],
+    queryKey: ["projects", workspace],
     queryFn: listProjects
   });
 
   const artefactsQuery = useQuery({
-    queryKey: ["artefacts", "all"],
+    queryKey: ["artefacts", workspace, "all"],
     queryFn: listAllArtefacts,
     enabled: !!projectsQuery.data
   });

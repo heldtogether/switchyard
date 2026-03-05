@@ -21,12 +21,12 @@ export function ProjectsListPage() {
   const [createError, setCreateError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ["projects"],
+    queryKey: ["projects", workspace],
     queryFn: listProjects
   });
 
   const { data: runsData } = useQuery({
-    queryKey: ["projects", "runs"],
+    queryKey: ["projects", workspace, "runs"],
     queryFn: async () => {
       if (!data) return {} as Record<string, Awaited<ReturnType<typeof listRuns>>>;
       const entries = await Promise.all(

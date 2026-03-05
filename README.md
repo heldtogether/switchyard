@@ -14,6 +14,7 @@ Switchyard accepts container jobs over an HTTP API, executes them on a Swarm clu
 - Postgres metadata store + S3-compatible log and artefact storage
 - Hybrid authentication (API key + OIDC SSO)
 - RBAC memberships with workspace/project invites and UI invite acceptance (`/accept-invite`)
+- Workspace switcher with in-app workspace creation for authenticated users
 
 ## Quick Start (Local Dev)
 ```bash

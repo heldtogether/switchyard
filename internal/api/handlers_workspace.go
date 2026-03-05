@@ -2,12 +2,18 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
+	"regexp"
 	"strconv"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/heldtogether/switchyard/internal/domain"
+	"github.com/lib/pq"
 )
+
+var workspaceSlugPattern = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
 
 // HandleCreateWorkspace handles POST /v1/workspaces
 func (a *API) HandleCreateWorkspace(w http.ResponseWriter, r *http.Request) {
@@ -30,7 +36,17 @@ func (a *API) HandleCreateWorkspace(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	req.Slug = strings.TrimSpace(strings.ToLower(req.Slug))
+	if !workspaceSlugPattern.MatchString(req.Slug) {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{
+			Error:   "validation_error",
+			Message: "slug must be lowercase letters, numbers, and hyphens only",
+			Code:    http.StatusBadRequest,
+		})
+		return
+	}
 
+	req.Name = strings.TrimSpace(req.Name)
 	if req.Name == "" {
 		writeJSON(w, http.StatusBadRequest, ErrorResponse{
 			Error:   "validation_error",
@@ -51,6 +67,15 @@ func (a *API) HandleCreateWorkspace(w http.ResponseWriter, r *http.Request) {
 
 	if err := a.store.CreateWorkspace(r.Context(), workspace); err != nil {
 		a.logger.Error("failed to create workspace", "error", err)
+		var pqErr *pq.Error
+		if errors.As(err, &pqErr) && pqErr.Code == "23505" {
+			writeJSON(w, http.StatusConflict, ErrorResponse{
+				Error:   "conflict",
+				Message: "workspace slug already exists",
+				Code:    http.StatusConflict,
+			})
+			return
+		}
 		writeJSON(w, http.StatusInternalServerError, ErrorResponse{
 			Error:   "internal_error",
 			Message: "Failed to create workspace",
