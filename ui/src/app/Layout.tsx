@@ -110,12 +110,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
             </div>
           </div>
           <div className="flex items-center gap-4">
-            <button
+            {/* <button
               type="button"
               className="hidden w-72 rounded-full border border-ink-200 bg-white px-4 py-2 text-left text-sm text-ink-400 shadow-sm md:block"
             >
               ⌘K Search
-            </button>
+            </button> */}
             <div className="relative" ref={menuRef}>
               <button
                 type="button"
