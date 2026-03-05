@@ -18,6 +18,21 @@ export interface Workspace {
   updated_at: string;
 }
 
+export interface Member {
+  subject: string;
+  email?: string | null;
+  display_name?: string | null;
+  role: "owner" | "member";
+  added_at: string;
+}
+
+export interface CreateInviteResponse {
+  invite_id: string;
+  invite_url: string;
+  invite_token: string;
+  expires_at: string;
+}
+
 export interface Run {
   id: string;
   project_id: string;

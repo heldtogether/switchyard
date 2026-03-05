@@ -38,6 +38,7 @@ UI_AGGREGATE_LIMIT=5
 
 ## Routes
 - `/login` Login page (unauthenticated)
+- `/accept-invite` Invite acceptance page (`?token=...`)
 - `/:workspace` Projects list
 - `/:workspace/:projectSlug` Project runs list
 - `/:workspace/runs` Runs list (all projects)
@@ -48,7 +49,15 @@ UI_AGGREGATE_LIMIT=5
 
 ## Endpoints used
 **Real endpoints (available in API):**
+- `GET /v1/workspaces`
+- `GET /v1/auth/me`
 - `GET /v1/workspaces/:workspace/projects`
+- `GET /v1/workspaces/:workspace/members`
+- `POST /v1/workspaces/:workspace/invites`
+- `POST /v1/workspace-invites/accept`
+- `GET /v1/workspaces/:workspace/projects/:projectSlug/members`
+- `POST /v1/workspaces/:workspace/projects/:projectSlug/invites`
+- `POST /v1/project-invites/accept`
 - `GET /v1/workspaces/:workspace/projects/:projectSlug`
 - `GET /v1/workspaces/:workspace/projects/:projectSlug/runs`
 - `GET /v1/workspaces/:workspace/projects/:projectSlug/runs/:runSlug`

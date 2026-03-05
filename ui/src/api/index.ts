@@ -7,7 +7,7 @@ import {
   mockPromotions,
   mockRuns
 } from "./mocks";
-import { Artefact, Job, Project, Promotion, Run, Workspace } from "../models/types";
+import { Artefact, CreateInviteResponse, Job, Member, Project, Promotion, Run, Workspace } from "../models/types";
 
 const runtimeEnv = (window as any).__ENV ?? {};
 const DEFAULT_WORKSPACE = runtimeEnv.WORKSPACE_SLUG ?? import.meta.env.VITE_WORKSPACE_SLUG ?? "default";
@@ -92,7 +92,8 @@ function mapJob(job: any, runId?: string): Job {
 export async function listWorkspaces(): Promise<Workspace[]> {
   try {
     const res = await fetchJson<{ workspaces: any[] }>(`/v1/workspaces?limit=100&offset=0`);
-    return res.workspaces.map(mapWorkspace);
+    const workspaces = Array.isArray(res.workspaces) ? res.workspaces : [];
+    return workspaces.map(mapWorkspace);
   } catch (error) {
     if (shouldUseMocks(error)) {
       return [
@@ -330,6 +331,49 @@ export type RegistrySecret = {
 export async function listRegistrySecrets(): Promise<RegistrySecret[]> {
   const data = await fetchJson<{ registry_secrets: RegistrySecret[] }>(`/v1/workspaces/${activeWorkspaceSlug}/registry-secrets`);
   return data.registry_secrets ?? [];
+}
+
+export async function listWorkspaceMembers(): Promise<Member[]> {
+  const data = await fetchJson<{ members: Member[] }>(`/v1/workspaces/${activeWorkspaceSlug}/members`);
+  return data.members ?? [];
+}
+
+export async function listProjectMembers(projectSlug: string): Promise<Member[]> {
+  const data = await fetchJson<{ members: Member[] }>(
+    `/v1/workspaces/${activeWorkspaceSlug}/projects/${projectSlug}/members`
+  );
+  return data.members ?? [];
+}
+
+export async function createWorkspaceInvite(email: string): Promise<CreateInviteResponse> {
+  return fetchJson<CreateInviteResponse>(`/v1/workspaces/${activeWorkspaceSlug}/invites`, {
+    method: "POST",
+    body: JSON.stringify({ email, role: "member" })
+  });
+}
+
+export async function createProjectInvite(projectSlug: string, email: string): Promise<CreateInviteResponse> {
+  return fetchJson<CreateInviteResponse>(
+    `/v1/workspaces/${activeWorkspaceSlug}/projects/${projectSlug}/invites`,
+    {
+      method: "POST",
+      body: JSON.stringify({ email, role: "member" })
+    }
+  );
+}
+
+export async function acceptWorkspaceInvite(token: string): Promise<{ message: string }> {
+  return fetchJson<{ message: string }>(`/v1/workspace-invites/accept`, {
+    method: "POST",
+    body: JSON.stringify({ token })
+  });
+}
+
+export async function acceptProjectInvite(token: string): Promise<{ message: string }> {
+  return fetchJson<{ message: string }>(`/v1/project-invites/accept`, {
+    method: "POST",
+    body: JSON.stringify({ token })
+  });
 }
 
 export async function getAllocationCapacity(): Promise<{ max_gpu_per_node: number }> {

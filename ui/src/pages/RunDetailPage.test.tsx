@@ -26,7 +26,7 @@ vi.mock("react-router-dom", async () => {
   const actual = await vi.importActual<typeof import("react-router-dom")>("react-router-dom");
   return {
     ...actual,
-    useParams: () => ({ projectSlug: "proj", runSlug: "run-1" }),
+    useParams: () => ({ workspace: "default", projectSlug: "proj", runSlug: "run-1" }),
     useNavigate: () => navigateMock
   };
 });
@@ -43,8 +43,8 @@ describe("RunDetailPage", () => {
       expect(screen.getByText("build")).toBeInTheDocument();
     });
 
-    expect(screen.getByRole("link", { name: "Projects" })).toHaveAttribute("href", "/");
-    expect(screen.getByRole("link", { name: "Project Name" })).toHaveAttribute("href", "/proj");
+    expect(screen.getByRole("link", { name: "Projects" })).toHaveAttribute("href", "/default");
+    expect(screen.getByRole("link", { name: "Project Name" })).toHaveAttribute("href", "/default/proj");
     expect(screen.getByText("run-1")).toBeInTheDocument();
 
     expect(screen.getByText("build-image")).toBeInTheDocument();
@@ -78,6 +78,6 @@ describe("RunDetailPage", () => {
     await waitFor(() => {
       expect(rerunRunMock).toHaveBeenCalledWith("proj", "run-1", { mode: "failed_only" });
     });
-    expect(navigateMock).toHaveBeenCalledWith("/proj/run-2");
+    expect(navigateMock).toHaveBeenCalledWith("/default/proj/run-2");
   });
 });

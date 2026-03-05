@@ -199,9 +199,11 @@ func (a *API) HandleAcceptProjectInvite(w http.ResponseWriter, r *http.Request) 
 		email = *identity.principal.Email
 	}
 	if _, err := a.store.AcceptProjectInvite(r.Context(), hashInviteToken(token), identity.principal.ID, email, ActorFromRequest(r)); err != nil {
+		a.logger.Warn("failed to accept project invite", "error", err, "subject", identity.principal.Subject, "email", email)
 		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "invalid_request", Message: err.Error(), Code: http.StatusBadRequest})
 		return
 	}
+	a.logger.Info("accepted project invite", "subject", identity.principal.Subject, "email", email)
 	writeJSON(w, http.StatusOK, map[string]any{"message": "Invite accepted"})
 }
 

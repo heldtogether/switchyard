@@ -16,7 +16,7 @@ vi.mock("react-router-dom", async () => {
   const actual = await vi.importActual<typeof import("react-router-dom")>("react-router-dom");
   return {
     ...actual,
-    useParams: () => ({ projectSlug: "proj", runSlug: "run-1", jobId: "j1" })
+    useParams: () => ({ workspace: "default", projectSlug: "proj", runSlug: "run-1", jobId: "j1" })
   };
 });
 
@@ -28,9 +28,9 @@ describe("JobDetailPage", () => {
       expect(screen.getByRole("heading", { name: "build" })).toBeInTheDocument();
     });
 
-    expect(screen.getByRole("link", { name: "Projects" })).toHaveAttribute("href", "/");
-    expect(screen.getByRole("link", { name: "Project Name" })).toHaveAttribute("href", "/proj");
-    expect(screen.getByRole("link", { name: "Run Name" })).toHaveAttribute("href", "/proj/run-1");
+    expect(screen.getByRole("link", { name: "Projects" })).toHaveAttribute("href", "/default");
+    expect(screen.getByRole("link", { name: "Project Name" })).toHaveAttribute("href", "/default/proj");
+    expect(screen.getByRole("link", { name: "Run Name" })).toHaveAttribute("href", "/default/proj/run-1");
     expect(screen.getByText("build-image")).toBeInTheDocument();
   });
 });

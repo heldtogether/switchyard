@@ -11,12 +11,36 @@ export type AuthUser = {
   auth_method: string;
 };
 
+export type WorkspaceMembership = {
+  slug: string;
+  role: "owner" | "member";
+};
+
+export type ProjectMembership = {
+  workspace_slug: string;
+  project_slug: string;
+  role: "owner" | "member";
+};
+
+export type AuthMemberships = {
+  workspaces: WorkspaceMembership[];
+  projects: ProjectMembership[];
+};
+
+type AuthMeResponse = {
+  user: AuthUser;
+  memberships?: AuthMemberships;
+};
+
 type AuthContextValue = {
   user: AuthUser | null;
+  memberships: AuthMemberships;
   isLoading: boolean;
   isAuthenticated: boolean;
   loginUrl: string;
   logoutUrl: string;
+  workspaceRole: (workspaceSlug: string) => "owner" | "member" | null;
+  isWorkspaceOwner: (workspaceSlug: string) => boolean;
 };
 
 const runtimeEnv = (window as any).__ENV ?? {};
@@ -39,25 +63,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             name: "Mock User",
             provider: "mock",
             auth_method: "mock"
-          } as AuthUser
+          } as AuthUser,
+          memberships: {
+            workspaces: [{ slug: "default", role: "owner" }],
+            projects: []
+          } as AuthMemberships
         };
       }
-      return fetchJson<{ user: AuthUser }>("/v1/auth/me");
+      return fetchJson<AuthMeResponse>("/v1/auth/me");
     },
     retry: false
   });
 
   const value = useMemo<AuthContextValue>(() => {
     const user = userQuery.isSuccess ? (userQuery.data?.user ?? null) : null;
+    const memberships: AuthMemberships = userQuery.isSuccess
+      ? (userQuery.data?.memberships ?? { workspaces: [], projects: [] })
+      : { workspaces: [], projects: [] };
     const isUnauthorized = userQuery.error instanceof ApiError && userQuery.error.status === 401;
     return {
       user,
+      memberships,
       isLoading: userQuery.isLoading,
       isAuthenticated: userQuery.isSuccess && !!user && !isUnauthorized,
       loginUrl: AUTH_LOGIN_URL ?? `${API_BASE_URL}/v1/auth/login`,
-      logoutUrl: AUTH_LOGOUT_URL ?? `${API_BASE_URL}/v1/auth/logout`
+      logoutUrl: AUTH_LOGOUT_URL ?? `${API_BASE_URL}/v1/auth/logout`,
+      workspaceRole: (workspaceSlug: string) =>
+        memberships.workspaces.find((m) => m.slug === workspaceSlug)?.role ?? null,
+      isWorkspaceOwner: (workspaceSlug: string) =>
+        memberships.workspaces.some((m) => m.slug === workspaceSlug && m.role === "owner")
     };
-  }, [userQuery.data, userQuery.error, userQuery.isLoading, userQuery]);
+  }, [userQuery.data, userQuery.error, userQuery.isLoading, userQuery.isSuccess]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

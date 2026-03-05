@@ -12,6 +12,7 @@ import { ExecutorsPage } from "../pages/ExecutorsPage";
 import { SettingsPage } from "../pages/SettingsPage";
 import { LoginPage } from "../pages/LoginPage";
 import { RequireAuth } from "../auth/RequireAuth";
+import { AcceptInvitePage } from "../pages/AcceptInvitePage";
 
 function ProtectedLayout() {
   return (
@@ -29,6 +30,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/accept-invite" element={<AcceptInvitePage />} />
       <Route element={<ProtectedLayout />}>
         <Route path="/:workspace" element={<ProjectsListPage />} />
         <Route path="/:workspace/:projectSlug" element={<ProjectRunsPage />} />
