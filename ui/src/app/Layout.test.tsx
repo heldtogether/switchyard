@@ -1,6 +1,7 @@
 import React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { vi } from "vitest";
 import { Layout } from "./Layout";
@@ -73,6 +74,7 @@ describe("Layout workspace creation", () => {
   });
 
   it("creates workspace from switcher popover", async () => {
+    const user = userEvent.setup();
     renderLayout();
 
     await waitFor(() => {
@@ -82,7 +84,8 @@ describe("Layout workspace creation", () => {
     fireEvent.click(screen.getByRole("button", { name: /default workspace/i }));
     fireEvent.click(screen.getByRole("button", { name: /create workspace/i }));
 
-    fireEvent.change(screen.getByPlaceholderText("Acme"), { target: { value: "New Org" } });
+    await user.type(screen.getByPlaceholderText("Acme"), "New Org");
+    expect((screen.getByPlaceholderText("acme") as HTMLInputElement).value).toBe("new-org");
     fireEvent.click(screen.getByRole("button", { name: "Create" }));
 
     await waitFor(() => {

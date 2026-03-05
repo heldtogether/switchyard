@@ -15,6 +15,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const [workspaceModalOpen, setWorkspaceModalOpen] = useState(false);
   const [workspaceName, setWorkspaceName] = useState("");
   const [workspaceSlugInput, setWorkspaceSlugInput] = useState("");
+  const [workspaceSlugManuallyEdited, setWorkspaceSlugManuallyEdited] = useState(false);
   const [workspaceDescription, setWorkspaceDescription] = useState("");
   const [workspaceCreateError, setWorkspaceCreateError] = useState<string | null>(null);
   const [workspaceCreating, setWorkspaceCreating] = useState(false);
@@ -88,6 +89,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       setWorkspaceMenuOpen(false);
       setWorkspaceName("");
       setWorkspaceSlugInput("");
+      setWorkspaceSlugManuallyEdited(false);
       setWorkspaceDescription("");
       navigate(`/${created.slug}`);
     } catch (error) {
@@ -147,6 +149,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                     onClick={() => {
                       setWorkspaceModalOpen(true);
                       setWorkspaceMenuOpen(false);
+                      setWorkspaceSlugManuallyEdited(false);
                     }}
                   >
                     Create Workspace
@@ -242,7 +245,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               onChange={(e) => {
                 const nextName = e.target.value;
                 setWorkspaceName(nextName);
-                if (!workspaceSlugInput.trim()) {
+                if (!workspaceSlugManuallyEdited) {
                   setWorkspaceSlugInput(slugify(nextName));
                 }
               }}
@@ -254,7 +257,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
               className="mt-2 w-full rounded-lg border border-ink-200 px-3 py-2"
               placeholder="acme"
               value={workspaceSlugInput}
-              onChange={(e) => setWorkspaceSlugInput(slugify(e.target.value))}
+              onChange={(e) => {
+                const nextSlug = slugify(e.target.value);
+                setWorkspaceSlugInput(nextSlug);
+                setWorkspaceSlugManuallyEdited(nextSlug.trim().length > 0);
+              }}
             />
           </div>
           <div>

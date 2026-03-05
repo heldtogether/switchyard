@@ -17,6 +17,7 @@ export function ProjectsListPage() {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
+  const [slugManuallyEdited, setSlugManuallyEdited] = useState(false);
   const [description, setDescription] = useState("");
   const [createError, setCreateError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -67,6 +68,7 @@ export function ProjectsListPage() {
       setOpen(false);
       setName("");
       setSlug("");
+      setSlugManuallyEdited(false);
       setDescription("");
       await refetch();
     } catch (error) {
@@ -192,7 +194,7 @@ export function ProjectsListPage() {
               onChange={(e) => {
                 const nextName = e.target.value;
                 setName(nextName);
-                if (!slug) {
+                if (!slugManuallyEdited) {
                   setSlug(nextName.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, ""));
                 }
               }}
@@ -204,7 +206,11 @@ export function ProjectsListPage() {
               className="mt-2 w-full rounded-lg border border-ink-200 px-3 py-2"
               placeholder="vision-core"
               value={slug}
-              onChange={(e) => setSlug(e.target.value)}
+              onChange={(e) => {
+                const nextSlug = e.target.value;
+                setSlug(nextSlug);
+                setSlugManuallyEdited(nextSlug.trim().length > 0);
+              }}
             />
           </div>
           <div>
