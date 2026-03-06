@@ -190,7 +190,7 @@ func createTestJob(runID uuid.UUID) *domain.Job {
 		Env:         map[string]string{"FOO": "bar"},
 		Outputs:     []string{"/outputs"},
 		TimeoutSecs: 3600,
-		Executor:    domain.ExecutorTypeSwarm,
+		Executor:    domain.ExecutorTypeDocker,
 		CreatedAt:   time.Now(),
 	}
 }
@@ -220,7 +220,7 @@ func TestProcessor_Process_Success(t *testing.T) {
 	mockStore.On("RecomputeRunStatus", ctx, run.ID).Return(nil).Twice()
 
 	ref := executor.RunRef{
-		ExecutorType: "swarm",
+		ExecutorType: "docker",
 		Reference:    "service-123",
 	}
 	mockExecutor.On("CreateRun", ctx, mock.MatchedBy(func(spec executor.RunSpec) bool {
@@ -283,7 +283,7 @@ func TestProcessor_Process_FailedExitCode(t *testing.T) {
 	})).Return(nil)
 	mockStore.On("RecomputeRunStatus", ctx, run.ID).Return(nil).Twice()
 
-	ref := executor.RunRef{ExecutorType: "swarm", Reference: "service-123"}
+	ref := executor.RunRef{ExecutorType: "docker", Reference: "service-123"}
 	mockExecutor.On("CreateRun", ctx, mock.Anything).Return(ref, nil)
 
 	// Job exits with non-zero code
@@ -339,7 +339,7 @@ func TestProcessor_Process_Timeout(t *testing.T) {
 	})).Return(nil)
 	mockStore.On("RecomputeRunStatus", ctx, run.ID).Return(nil).Twice()
 
-	ref := executor.RunRef{ExecutorType: "swarm", Reference: "service-123"}
+	ref := executor.RunRef{ExecutorType: "docker", Reference: "service-123"}
 	mockExecutor.On("CreateRun", ctx, mock.Anything).Return(ref, nil)
 
 	// Wait returns context deadline exceeded
@@ -454,7 +454,7 @@ func TestProcessor_Process_LogUploadFailure_NonFatal(t *testing.T) {
 	})).Return(nil)
 	mockStore.On("RecomputeRunStatus", ctx, run.ID).Return(nil).Twice()
 
-	ref := executor.RunRef{ExecutorType: "swarm", Reference: "service-123"}
+	ref := executor.RunRef{ExecutorType: "docker", Reference: "service-123"}
 	mockExecutor.On("CreateRun", ctx, mock.Anything).Return(ref, nil)
 
 	result := executor.Result{
@@ -512,7 +512,7 @@ func TestProcessor_Process_ArtefactCollectionFailure_NonFatal(t *testing.T) {
 	})).Return(nil)
 	mockStore.On("RecomputeRunStatus", ctx, run.ID).Return(nil).Twice()
 
-	ref := executor.RunRef{ExecutorType: "swarm", Reference: "service-123"}
+	ref := executor.RunRef{ExecutorType: "docker", Reference: "service-123"}
 	mockExecutor.On("CreateRun", ctx, mock.Anything).Return(ref, nil)
 
 	result := executor.Result{
@@ -566,7 +566,7 @@ func TestProcessor_Process_NoArtefactsOnFailedJob(t *testing.T) {
 	})).Return(nil)
 	mockStore.On("RecomputeRunStatus", ctx, run.ID).Return(nil).Twice()
 
-	ref := executor.RunRef{ExecutorType: "swarm", Reference: "service-123"}
+	ref := executor.RunRef{ExecutorType: "docker", Reference: "service-123"}
 	mockExecutor.On("CreateRun", ctx, mock.Anything).Return(ref, nil)
 
 	// Job fails with non-zero exit code
@@ -647,7 +647,7 @@ func TestProcessor_Process_DecryptsRegistrySecretBeforeCreateRun(t *testing.T) {
 	})).Return(nil)
 	mockStore.On("RecomputeRunStatus", ctx, run.ID).Return(nil).Twice()
 
-	ref := executor.RunRef{ExecutorType: "swarm", Reference: "service-123"}
+	ref := executor.RunRef{ExecutorType: "docker", Reference: "service-123"}
 	mockExecutor.On("CreateRun", ctx, mock.MatchedBy(func(spec executor.RunSpec) bool {
 		return spec.RegistryAuth != nil && spec.RegistryAuth.Password == "super-secret"
 	})).Return(ref, nil)

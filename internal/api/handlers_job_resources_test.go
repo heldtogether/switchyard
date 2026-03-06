@@ -21,7 +21,7 @@ import (
 type nopQueue struct{}
 
 func (n *nopQueue) Publish(ctx context.Context, jobID string, gpuCount int) error { return nil }
-func (n *nopQueue) Close() error                                                { return nil }
+func (n *nopQueue) Close() error                                                  { return nil }
 
 func TestCreateJob_GPUValidation(t *testing.T) {
 	pg := testutil.SetupTestPostgres(t)
@@ -40,10 +40,14 @@ func TestCreateJob_GPUValidation(t *testing.T) {
 	require.NoError(t, store.CreateRun(ctx, run))
 
 	cfg := &config.Config{
-		API:      config.APIConfig{BaseURL: "http://localhost:8080"},
+		API: config.APIConfig{BaseURL: "http://localhost:8080"},
 		Executor: config.ExecutorConfig{
-			Type:  "swarm",
-			Swarm: config.SwarmConfig{Defaults: config.ExecutorDefaultsConfig{Resources: config.ResourcesConfig{CPU: "1.0", Memory: "1g"}}},
+			Type: "docker",
+			Docker: config.DockerConfig{
+				Defaults: config.ExecutorDefaultsConfig{
+					Resources: config.ResourcesConfig{CPU: "1.0", Memory: "1g"},
+				},
+			},
 		},
 	}
 
@@ -91,12 +95,19 @@ func TestCreateJob_GPUDefaultsCPUAndMemory(t *testing.T) {
 	run := &domain.Run{ID: uuid.New(), ProjectID: project.ID, Slug: "test-run", Name: "Test Run", Status: domain.RunStatusPending, CreatedBy: "test-user"}
 	require.NoError(t, store.CreateRun(ctx, run))
 
-	node := &domain.Node{ID: "node-1", Hostname: "node-1", Executor: domain.ExecutorType("swarm"), GPUTotal: 4}
+	node := &domain.Node{ID: "node-1", Hostname: "node-1", Executor: domain.ExecutorType("docker"), GPUTotal: 4}
 	require.NoError(t, store.UpsertNode(ctx, node))
 
 	cfg := &config.Config{
-		API:      config.APIConfig{BaseURL: "http://localhost:8080"},
-		Executor: config.ExecutorConfig{Type: "swarm", Swarm: config.SwarmConfig{Defaults: config.ExecutorDefaultsConfig{Resources: config.ResourcesConfig{CPU: "1.0", Memory: "1g"}}}},
+		API: config.APIConfig{BaseURL: "http://localhost:8080"},
+		Executor: config.ExecutorConfig{
+			Type: "docker",
+			Docker: config.DockerConfig{
+				Defaults: config.ExecutorDefaultsConfig{
+					Resources: config.ResourcesConfig{CPU: "1.0", Memory: "1g"},
+				},
+			},
+		},
 	}
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelError}))

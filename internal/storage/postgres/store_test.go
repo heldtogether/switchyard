@@ -87,7 +87,7 @@ func TestStore_CreateJob(t *testing.T) {
 		Env:         map[string]string{"FOO": "bar"},
 		Outputs:     []string{"/outputs"},
 		TimeoutSecs: 3600,
-		Executor:    domain.ExecutorTypeSwarm,
+		Executor:    domain.ExecutorTypeDocker,
 	}
 
 	err := store.CreateJob(ctx, job)
@@ -137,7 +137,7 @@ func TestStore_UpdateJob(t *testing.T) {
 		Env:         map[string]string{},
 		Outputs:     []string{"/outputs"},
 		TimeoutSecs: 3600,
-		Executor:    domain.ExecutorTypeSwarm,
+		Executor:    domain.ExecutorTypeDocker,
 	}
 	err := store.CreateJob(ctx, job)
 	require.NoError(t, err)
@@ -185,7 +185,7 @@ func TestStore_ListJobs(t *testing.T) {
 			Env:         map[string]string{},
 			Outputs:     []string{"/outputs"},
 			TimeoutSecs: 3600,
-			Executor:    domain.ExecutorTypeSwarm,
+			Executor:    domain.ExecutorTypeDocker,
 		},
 		{
 			ID:          uuid.New(),
@@ -197,7 +197,7 @@ func TestStore_ListJobs(t *testing.T) {
 			Env:         map[string]string{},
 			Outputs:     []string{"/outputs"},
 			TimeoutSecs: 3600,
-			Executor:    domain.ExecutorTypeSwarm,
+			Executor:    domain.ExecutorTypeDocker,
 		},
 		{
 			ID:          uuid.New(),
@@ -209,7 +209,7 @@ func TestStore_ListJobs(t *testing.T) {
 			Env:         map[string]string{},
 			Outputs:     []string{"/outputs"},
 			TimeoutSecs: 3600,
-			Executor:    domain.ExecutorTypeSwarm,
+			Executor:    domain.ExecutorTypeDocker,
 		},
 	}
 
@@ -258,7 +258,7 @@ func TestStore_SaveArtefacts(t *testing.T) {
 		Env:         map[string]string{},
 		Outputs:     []string{"/outputs"},
 		TimeoutSecs: 3600,
-		Executor:    domain.ExecutorTypeSwarm,
+		Executor:    domain.ExecutorTypeDocker,
 	}
 	err := store.CreateJob(ctx, job)
 	require.NoError(t, err)
@@ -321,7 +321,7 @@ func TestStore_GetRunningJobs(t *testing.T) {
 			Env:         map[string]string{},
 			Outputs:     []string{"/outputs"},
 			TimeoutSecs: 3600,
-			Executor:    domain.ExecutorTypeSwarm,
+			Executor:    domain.ExecutorTypeDocker,
 		}
 		err := store.CreateJob(ctx, job)
 		require.NoError(t, err)
@@ -355,7 +355,7 @@ func TestStore_RecomputeRunStatus(t *testing.T) {
 		Env:         map[string]string{},
 		Outputs:     []string{"/outputs"},
 		TimeoutSecs: 3600,
-		Executor:    domain.ExecutorTypeSwarm,
+		Executor:    domain.ExecutorTypeDocker,
 	}
 	job2 := &domain.Job{
 		ID:          uuid.New(),
@@ -367,7 +367,7 @@ func TestStore_RecomputeRunStatus(t *testing.T) {
 		Env:         map[string]string{},
 		Outputs:     []string{"/outputs"},
 		TimeoutSecs: 3600,
-		Executor:    domain.ExecutorTypeSwarm,
+		Executor:    domain.ExecutorTypeDocker,
 	}
 
 	require.NoError(t, store.CreateJob(ctx, job1))

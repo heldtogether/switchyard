@@ -13,8 +13,8 @@ vi.mock("../api", () => ({
   getProject: vi.fn(async () => ({ id: "p1", slug: "proj", name: "Project Name" })),
   getRun: vi.fn(async () => ({ id: "r1", slug: "run-1", name: "run-1", status: "RUNNING", created_at: new Date().toISOString() })),
   listJobs: vi.fn(async () => [
-    { id: "j1", name: "build", image: "build-image", status: "SUCCEEDED", executor_type: "swarm" },
-    { id: "j2", name: "same", image: "same", status: "FAILED", executor_type: "swarm" }
+    { id: "j1", name: "build", image: "build-image", status: "SUCCEEDED", executor_type: "docker" },
+    { id: "j2", name: "same", image: "same", status: "FAILED", executor_type: "docker" }
   ]),
   listArtefacts: vi.fn(async () => []),
   savePromotion: vi.fn(),

@@ -153,9 +153,8 @@ type StorageConfig struct {
 
 // ExecutorConfig holds executor configuration
 type ExecutorConfig struct {
-	Type   string       `yaml:"type"` // swarm, docker, kube
+	Type   string       `yaml:"type"` // docker, kube
 	Docker DockerConfig `yaml:"docker"`
-	Swarm  SwarmConfig  `yaml:"swarm"`
 	Kube   KubeConfig   `yaml:"kube"`
 }
 
@@ -163,18 +162,6 @@ type ExecutorConfig struct {
 type DockerConfig struct {
 	// ⚠️ CRITICAL: NFS mount base path
 	// Must be accessible on all nodes
-	NFSBasePath string `yaml:"nfs_base_path"`
-
-	DockerHost      string                 `yaml:"docker_host"`
-	NetworkIsolated bool                   `yaml:"network_isolated"`
-	Defaults        ExecutorDefaultsConfig `yaml:"defaults"`
-	Cleanup         CleanupConfig          `yaml:"cleanup"`
-}
-
-// SwarmConfig holds Docker Swarm executor configuration
-type SwarmConfig struct {
-	// ⚠️ CRITICAL: NFS mount base path
-	// Must be accessible on all Swarm nodes
 	NFSBasePath string `yaml:"nfs_base_path"`
 
 	DockerHost      string                 `yaml:"docker_host"`
@@ -427,11 +414,9 @@ func applyEnvOverrides(cfg *Config) {
 	}
 	if v := os.Getenv("EXECUTOR_NFS_BASE"); v != "" {
 		cfg.Executor.Docker.NFSBasePath = v
-		cfg.Executor.Swarm.NFSBasePath = v
 	}
 	if v := os.Getenv("DOCKER_HOST"); v != "" {
 		cfg.Executor.Docker.DockerHost = v
-		cfg.Executor.Swarm.DockerHost = v
 	}
 
 	// Worker
@@ -589,8 +574,8 @@ func (c *Config) Validate() error {
 	}
 
 	// Executor validation
-	if c.Executor.Type != "swarm" && c.Executor.Type != "kube" && c.Executor.Type != "docker" {
-		return fmt.Errorf("invalid executor type: %s (must be 'swarm' or 'kube' or 'docker')", c.Executor.Type)
+	if c.Executor.Type != "kube" && c.Executor.Type != "docker" {
+		return fmt.Errorf("invalid executor type: %s (must be 'kube' or 'docker')", c.Executor.Type)
 	}
 
 	if c.Executor.Type == "docker" {
@@ -601,15 +586,6 @@ func (c *Config) Validate() error {
 			return fmt.Errorf("docker executor: docker_host is required")
 		}
 	}
-	if c.Executor.Type == "swarm" {
-		if c.Executor.Swarm.NFSBasePath == "" {
-			return fmt.Errorf("swarm executor: nfs_base_path is required")
-		}
-		if c.Executor.Swarm.DockerHost == "" {
-			return fmt.Errorf("swarm executor: docker_host is required")
-		}
-	}
-
 	// Worker validation
 	if c.Worker.Concurrency < 1 {
 		return fmt.Errorf("worker concurrency must be at least 1")
@@ -783,21 +759,18 @@ func (o *OIDCAuthConfig) Validate() error {
 
 // CheckNFSMount verifies that the NFS base path exists and is writable
 func (c *Config) CheckNFSMount() error {
-	if c.Executor.Type != "swarm" && c.Executor.Type != "docker" {
+	if c.Executor.Type != "docker" {
 		return nil
 	}
 
-	path := c.Executor.Swarm.NFSBasePath
-	if c.Executor.Type == "docker" {
-		path = c.Executor.Docker.NFSBasePath
-	}
+	path := c.Executor.Docker.NFSBasePath
 
 	// Check if directory exists
 	info, err := os.Stat(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return fmt.Errorf("NFS base path does not exist: %s\n"+
-				"Please mount your NFS share at this location or update 'executor.swarm.nfs_base_path' in config.yaml", path)
+				"Please mount your NFS share at this location or update 'executor.docker.nfs_base_path' in config.yaml", path)
 		}
 		return fmt.Errorf("failed to stat NFS base path: %w", err)
 	}

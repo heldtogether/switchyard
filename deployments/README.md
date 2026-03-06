@@ -1,14 +1,14 @@
 # Switchyard Deployment Files
 
-This directory contains Swarm deployment configs and supporting docs.
+This directory contains deployment configs and supporting docs.
 
 ## Files
-- `stack.yml`: Swarm stack definition (API, Worker, Redis, networks, secrets)
+- `stack.yml`: Docker stack definition (API, Worker, Redis, networks, secrets)
 - `docker-compose.yml`: Local dev Postgres + Redis
 - `config.yaml`: Production config template
 - `DEPLOYMENT.md`: Full deployment guide
 
-## Quick Start (Swarm)
+## Quick Start (Docker Stack)
 ```bash
 cd deployments
 

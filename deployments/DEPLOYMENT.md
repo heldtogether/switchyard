@@ -1,10 +1,10 @@
 # Switchyard Deployment Guide
 
-This guide covers deploying Switchyard to a Docker Swarm cluster. For file inventory and quick commands, see `deployments/README.md`.
+This guide covers deploying Switchyard with Docker stack/service orchestration. For file inventory and quick commands, see `deployments/README.md`.
 
 ## Prerequisites
-- **Docker Swarm** initialized with manager/worker nodes.
-- **Postgres 12+** reachable by the swarm.
+- **Docker** initialized with manager/worker nodes.
+- **Postgres 12+** reachable by your Docker nodes.
 - **NFS share** mounted at the same path on all nodes (for job outputs).
 - **S3-compatible storage** for logs and artefacts.
 
@@ -45,9 +45,9 @@ S3_REGION=us-east-1
 
 ### 3. Validate `deployments/config.yaml`
 Ensure:
-- `executor.swarm.nfs_base_path` matches your NFS mount
+- `executor.docker.nfs_base_path` matches your NFS mount
 - `worker.concurrency` matches capacity
-- `executor.swarm.defaults.constraints` match your node labels
+- `executor.docker.defaults.constraints` match your node labels (if used)
 
 ### 4. Build/Push Images (if self-hosting)
 ```bash
@@ -97,5 +97,5 @@ docker service logs -f switchyard_worker
 
 ## Troubleshooting (Short)
 - **Jobs stuck in PENDING**: check worker logs and Redis connectivity.
-- **NFS errors**: confirm the NFS mount exists on every node and matches `executor.swarm.nfs_base_path`.
+- **NFS errors**: confirm the NFS mount exists on every node and matches `executor.docker.nfs_base_path`.
 - **API not ready**: validate `DATABASE_URL` and Redis reachability.

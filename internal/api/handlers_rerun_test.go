@@ -75,7 +75,7 @@ func TestHandleRerunRun_AllJobs(t *testing.T) {
 			Env:         map[string]string{"A": "1"},
 			Outputs:     []string{"/outputs"},
 			TimeoutSecs: 60,
-			Executor:    domain.ExecutorTypeSwarm,
+			Executor:    domain.ExecutorTypeDocker,
 		},
 		{
 			ID:          uuid.New(),
@@ -88,7 +88,7 @@ func TestHandleRerunRun_AllJobs(t *testing.T) {
 			Env:         map[string]string{"B": "2"},
 			Outputs:     []string{"/outputs"},
 			TimeoutSecs: 60,
-			Executor:    domain.ExecutorTypeSwarm,
+			Executor:    domain.ExecutorTypeDocker,
 		},
 	}
 	for _, job := range jobs {
@@ -182,7 +182,7 @@ func TestHandleRerunRun_FailedOnlyRequiresMatchingJobs(t *testing.T) {
 		Env:         map[string]string{},
 		Outputs:     []string{"/outputs"},
 		TimeoutSecs: 60,
-		Executor:    domain.ExecutorTypeSwarm,
+		Executor:    domain.ExecutorTypeDocker,
 	}
 	require.NoError(t, store.CreateJob(ctx, job))
 

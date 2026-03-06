@@ -44,10 +44,7 @@ type Worker struct {
 func New(cfg *config.Config, q queue.Consumer, store *postgres.Store, exec executor.Executor, storage *objectstore.S3Store, logger *slog.Logger, api *APIClient, nodeID, hostname string, gpuTotal int, gpuDeviceIDs []string, secretCodec *registrysecrets.Codec) *Worker {
 	ctx, cancel := context.WithCancel(context.Background())
 
-	cleanup := cfg.Executor.Swarm.Cleanup
-	if cfg.Executor.Type == "docker" {
-		cleanup = cfg.Executor.Docker.Cleanup
-	}
+	cleanup := cfg.Executor.Docker.Cleanup
 
 	return &Worker{
 		cfg:          cfg,

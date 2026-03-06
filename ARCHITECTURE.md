@@ -1,10 +1,10 @@
 # Switchyard Architecture
 
 ## System Overview
-Switchyard is a job execution platform that runs containerized workloads on Docker Swarm with plans for Kubernetes support. Jobs are submitted to the API, queued in Redis, executed by workers, and stored in Postgres/S3.
+Switchyard is a job execution platform that runs containerized workloads on Docker with plans for Kubernetes support. Jobs are submitted to the API, queued in Redis, executed by workers, and stored in Postgres/S3.
 
 ```
-Client -> API -> Redis queue -> Worker -> Executor -> Docker Swarm
+Client -> API -> Redis queue -> Worker -> Executor -> Docker
                          \-> Postgres (metadata)
                          \-> S3 (logs/artefacts)
                          \-> NFS (shared outputs)
@@ -30,7 +30,7 @@ Client -> API -> Redis queue -> Worker -> Executor -> Docker Swarm
 - Shared utilities in `internal/executor/common.go`
 - Implementations:
   - `internal/executor/docker/` (Docker containers)
-  - `internal/executor/swarm/` (Swarm services)
+  - `internal/executor/docker/` (Docker containers)
   - `internal/executor/kube/` (stub)
 
 ### Storage Layer

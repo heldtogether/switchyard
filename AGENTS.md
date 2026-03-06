@@ -4,7 +4,7 @@
 - `cmd/` contains service entrypoints: `cmd/api`, `cmd/worker`, `cmd/migrate`.
 - `internal/` holds core packages: `api`, `worker`, `executor`, `storage`, `config`, `domain`.
 - `migrations/` stores SQL migration files.
-- `deployments/` includes Docker Compose/Swarm configs and deployment docs.
+- `deployments/` includes Docker Compose/stack configs and deployment docs.
 - `build/` holds Dockerfiles and example-job assets.
 - `examples/` includes helper scripts for API usage.
 - Configuration lives in `config.yaml`; use `config.example.yaml` as a template.

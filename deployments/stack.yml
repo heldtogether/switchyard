@@ -1,9 +1,9 @@
-# Docker Swarm Stack for Switchyard Job Runner
+# Docker Stack for Switchyard Job Runner
 # Deploy with: docker stack deploy -c deployments/stack.yml switchyard
 #
 # Prerequisites:
 # 1. External Postgres database (configured via DATABASE_URL)
-# 2. NFS share mounted at same path on all Swarm nodes
+# 2. NFS share mounted at same path on all worker nodes
 # 3. S3-compatible storage configured
 # 4. Docker secrets created (see README.md)
 
@@ -135,8 +135,8 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       
       # NFS mount - required for artefact collection
-      # ⚠️  This path MUST match executor.swarm.nfs_base_path in config.yaml
-      # ⚠️  This path MUST be mounted on ALL Swarm nodes
+      # ⚠️  This path MUST match executor.docker.nfs_base_path in config.yaml
+      # ⚠️  This path MUST be mounted on all worker nodes
       - type: bind
         source: /mnt/jobrunner
         target: /mnt/jobrunner
@@ -157,7 +157,7 @@ services:
       S3_REGION: ${S3_REGION:-us-east-1}
       
       # Executor configuration
-      EXECUTOR_TYPE: swarm
+      EXECUTOR_TYPE: docker
       EXECUTOR_NFS_BASE: /mnt/jobrunner
       
       # Worker configuration

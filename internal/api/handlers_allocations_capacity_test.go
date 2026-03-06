@@ -41,8 +41,8 @@ func TestGetAllocationCapacity(t *testing.T) {
 
 	// Add nodes and expect max
 	ctx := context.Background()
-	nodeA := &domain.Node{ID: "node-a", Hostname: "node-a", Executor: domain.ExecutorType("swarm"), GPUTotal: 2}
-	nodeB := &domain.Node{ID: "node-b", Hostname: "node-b", Executor: domain.ExecutorType("swarm"), GPUTotal: 4}
+	nodeA := &domain.Node{ID: "node-a", Hostname: "node-a", Executor: domain.ExecutorType("docker"), GPUTotal: 2}
+	nodeB := &domain.Node{ID: "node-b", Hostname: "node-b", Executor: domain.ExecutorType("docker"), GPUTotal: 4}
 	require.NoError(t, store.UpsertNode(ctx, nodeA))
 	require.NoError(t, store.UpsertNode(ctx, nodeB))
 

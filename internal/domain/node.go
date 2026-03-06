@@ -7,7 +7,7 @@ import (
 )
 
 // Node represents a worker node and its reported capacity
-// Node ID should be stable across restarts (e.g., Swarm node ID)
+// Node ID should be stable across restarts (for example, hostname or orchestrator node ID)
 type Node struct {
 	ID            string       `json:"id"`
 	Hostname      string       `json:"hostname"`

@@ -28,7 +28,6 @@ type ExecutorType string
 
 const (
 	ExecutorTypeDocker ExecutorType = "docker"
-	ExecutorTypeSwarm  ExecutorType = "swarm"
 	ExecutorTypeKube   ExecutorType = "kube"
 )
 

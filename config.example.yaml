@@ -202,10 +202,9 @@ storage:
 # ==============================================================================
 executor:
   # Execution backend:
-  # - docker: single-host Docker (simple, good for dev or small deployments)
-  # - swarm: Docker Swarm (multi-node scheduling and placement constraints)
+  # - docker: Docker API executor
   # - kube: Kubernetes (not implemented yet)
-  type: swarm
+  type: docker
 
   # ---------------------------------------------------------------------------
   # Docker Executor
@@ -238,49 +237,14 @@ executor:
       # Default timeout for jobs (jobs exceeding this will be killed).
       timeout: "1h"
 
-      # Node constraints (reserved for future use; enforced by swarm executor).
+      # Node constraints (reserved for future use).
       constraints: []
-
-  # ---------------------------------------------------------------------------
-  # Docker Swarm Executor
-  # ---------------------------------------------------------------------------
-  swarm:
-    # NFS mount base path for job outputs.
-    # This path MUST be:
-    # 1) An NFS share mounted on all Swarm nodes at the same path
-    # 2) Readable and writable by the worker containers
-    # 3) Accessible by job containers for writing outputs
-    nfs_base_path: "/mnt/jobrunner"
-
-    # Docker API connection string.
-    docker_host: "unix:///var/run/docker.sock"
-
-    # If true, jobs run in isolated networks (no outbound internet).
-    network_isolated: true
-
-    # Job Defaults (can be overridden per-job via API)
-    defaults:
-      resources:
-        cpu: "1.0"
-        memory: "2g"
-
-      # Default timeout for jobs.
-      timeout: "1h"
-
-      # Node constraints determine where jobs can run.
-      # Examples:
-      # - node.role==worker      (only on worker nodes)
-      # - node.role==manager     (only on manager nodes)
-      # - node.labels.gpu==true  (only on nodes with GPU label)
-      constraints:
-        - "node.role==worker"
-
-    # Cleanup policy after job completion
+    # Cleanup policy after job completion.
     cleanup:
-      # Remove services after job completes.
+      # Remove containers/networks after job completes.
       remove_on_complete: true
 
-      # Keep failed services for debugging.
+      # Keep failed containers for debugging.
       keep_failed_services: false
 
   # ---------------------------------------------------------------------------

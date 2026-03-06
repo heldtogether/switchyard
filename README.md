@@ -1,13 +1,13 @@
 # Switchyard - Docker Job Runner Platform
 
-A job execution platform for running containerized workloads on Docker Swarm (with Kubernetes support planned).
+A job execution platform for running containerized workloads on Docker (with Kubernetes support planned).
 
 ## Overview
-Switchyard accepts container jobs over an HTTP API, executes them on a Swarm cluster, and stores logs and artefacts in S3-compatible storage. Jobs are organized hierarchically: Workspace → Project → Run → Jobs.
+Switchyard accepts container jobs over an HTTP API, executes them via Docker, and stores logs and artefacts in S3-compatible storage. Jobs are organized hierarchically: Workspace → Project → Run → Jobs.
 
 ## Key Features
 - Hierarchical job organization (workspace/project/run/job)
-- Swarm and Docker executors with shared utilities
+- Docker executor with shared runtime utilities
 - Per-job resource limits (CPU, memory, GPU) and timeouts
 - GPU-aware scheduling with per-job allocations and node capacity tracking
 - RabbitMQ or Redis queueing (RabbitMQ recommended for GPU routing)
@@ -53,7 +53,7 @@ For deployment and ops, see `deployments/README.md` and `deployments/DEPLOYMENT.
 cmd/            # Service entrypoints
 internal/       # Core packages (api, worker, executor, storage, config, domain)
 migrations/     # SQL migrations
-deployments/    # Swarm/Compose configs and docs
+deployments/    # Deployment configs and docs
 build/          # Dockerfiles and image docs
 examples/       # Example jobs and helper scripts
 ```
@@ -74,5 +74,5 @@ examples/       # Example jobs and helper scripts
 - `ARCHITECTURE.md`: system and component overview
 - `TESTING.md`: how to run tests and current expectations
 - `deployments/README.md`: deployment file index and quick ops notes
-- `deployments/DEPLOYMENT.md`: full Swarm deployment guide
+- `deployments/DEPLOYMENT.md`: deployment guide
 - `build/README.md`: Docker image build details

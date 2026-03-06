@@ -124,7 +124,7 @@ func TestHandleCancelJob_Integration_PendingJob(t *testing.T) {
 		Command:     []string{"echo", "hello"},
 		Outputs:     []string{"/output"},
 		TimeoutSecs: 3600,
-		Executor:    domain.ExecutorTypeSwarm,
+		Executor:    domain.ExecutorTypeDocker,
 	}
 
 	err := store.CreateJob(ctx, job)
@@ -197,7 +197,7 @@ func TestHandleCancelJob_Integration_RunningJob(t *testing.T) {
 
 	// Create a job, then update it to RUNNING status
 	// (mimicking the real workflow where worker updates job when starting execution)
-	executorRef := "swarm-service-123"
+	executorRef := "docker-container-123"
 	startedAt := time.Now().Add(-5 * time.Minute)
 	job := &domain.Job{
 		ID:          uuid.New(),
@@ -208,7 +208,7 @@ func TestHandleCancelJob_Integration_RunningJob(t *testing.T) {
 		Command:     []string{"sleep", "3600"},
 		Outputs:     []string{"/output"},
 		TimeoutSecs: 3600,
-		Executor:    domain.ExecutorTypeSwarm,
+		Executor:    domain.ExecutorTypeDocker,
 	}
 
 	err := store.CreateJob(ctx, job)
@@ -231,7 +231,7 @@ func TestHandleCancelJob_Integration_RunningJob(t *testing.T) {
 	// Mock executor Cancel to return success
 	// Use mock.MatchedBy for flexible matching
 	mockExecutor.On("Cancel", mock.Anything, mock.MatchedBy(func(ref executor.RunRef) bool {
-		return ref.ExecutorType == string(domain.ExecutorTypeSwarm) &&
+		return ref.ExecutorType == string(domain.ExecutorTypeDocker) &&
 			ref.Reference == executorRef
 	})).Return(nil)
 
@@ -323,7 +323,7 @@ func TestHandleCancelJob_Integration_TerminalStates(t *testing.T) {
 				Command:     []string{"echo", "hello"},
 				Outputs:     []string{"/output"},
 				TimeoutSecs: 3600,
-				Executor:    domain.ExecutorTypeSwarm,
+				Executor:    domain.ExecutorTypeDocker,
 				FinishedAt:  &finishedAt,
 			}
 
@@ -460,7 +460,7 @@ func TestHandleCancelJob_Integration_RunningJobNoExecutorRef(t *testing.T) {
 				Command:     []string{"sleep", "3600"},
 				Outputs:     []string{"/output"},
 				TimeoutSecs: 3600,
-				Executor:    domain.ExecutorTypeSwarm,
+				Executor:    domain.ExecutorTypeDocker,
 				ExecutorRef: tt.executorRef,
 				StartedAt:   &startedAt,
 			}
@@ -523,7 +523,7 @@ func TestHandleCancelJob_Integration_ExecutorCancelFails(t *testing.T) {
 	mux := setupTestRouter(api)
 
 	// Create a job, then update it to RUNNING status
-	executorRef := "swarm-service-123"
+	executorRef := "docker-container-123"
 	startedAt := time.Now().Add(-5 * time.Minute)
 	job := &domain.Job{
 		ID:          uuid.New(),
@@ -534,7 +534,7 @@ func TestHandleCancelJob_Integration_ExecutorCancelFails(t *testing.T) {
 		Command:     []string{"sleep", "3600"},
 		Outputs:     []string{"/output"},
 		TimeoutSecs: 3600,
-		Executor:    domain.ExecutorTypeSwarm,
+		Executor:    domain.ExecutorTypeDocker,
 	}
 
 	err := store.CreateJob(ctx, job)
@@ -550,7 +550,7 @@ func TestHandleCancelJob_Integration_ExecutorCancelFails(t *testing.T) {
 	// Mock executor Cancel to fail
 	// Use mock.MatchedBy for flexible matching
 	mockExecutor.On("Cancel", mock.Anything, mock.MatchedBy(func(ref executor.RunRef) bool {
-		return ref.ExecutorType == string(domain.ExecutorTypeSwarm) &&
+		return ref.ExecutorType == string(domain.ExecutorTypeDocker) &&
 			ref.Reference == executorRef
 	})).Return(fmt.Errorf("executor service unavailable"))
 

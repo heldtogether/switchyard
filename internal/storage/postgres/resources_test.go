@@ -32,7 +32,7 @@ func TestClaimGPUAllocation_HappyPath(t *testing.T) {
 	node := &domain.Node{
 		ID:           "node-1",
 		Hostname:     "node-1",
-		Executor:     domain.ExecutorTypeSwarm,
+		Executor:     domain.ExecutorTypeDocker,
 		GPUTotal:     2,
 		GPUDeviceIDs: makeGPUDeviceIDs(2),
 	}
@@ -46,7 +46,7 @@ func TestClaimGPUAllocation_HappyPath(t *testing.T) {
 		Image:       "alpine:latest",
 		Outputs:     []string{"/outputs"},
 		TimeoutSecs: 3600,
-		Executor:    domain.ExecutorTypeSwarm,
+		Executor:    domain.ExecutorTypeDocker,
 		GPUCount:    1,
 	}
 	require.NoError(t, store.CreateJob(ctx, job))
@@ -73,7 +73,7 @@ func TestClaimGPUAllocation_Insufficient(t *testing.T) {
 	node := &domain.Node{
 		ID:           "node-2",
 		Hostname:     "node-2",
-		Executor:     domain.ExecutorTypeSwarm,
+		Executor:     domain.ExecutorTypeDocker,
 		GPUTotal:     1,
 		GPUDeviceIDs: makeGPUDeviceIDs(1),
 	}
@@ -87,7 +87,7 @@ func TestClaimGPUAllocation_Insufficient(t *testing.T) {
 		Image:       "alpine:latest",
 		Outputs:     []string{"/outputs"},
 		TimeoutSecs: 3600,
-		Executor:    domain.ExecutorTypeSwarm,
+		Executor:    domain.ExecutorTypeDocker,
 		GPUCount:    1,
 	}
 	require.NoError(t, store.CreateJob(ctx, jobA))
@@ -102,7 +102,7 @@ func TestClaimGPUAllocation_Insufficient(t *testing.T) {
 		Image:       "alpine:latest",
 		Outputs:     []string{"/outputs"},
 		TimeoutSecs: 3600,
-		Executor:    domain.ExecutorTypeSwarm,
+		Executor:    domain.ExecutorTypeDocker,
 		GPUCount:    1,
 	}
 	require.NoError(t, store.CreateJob(ctx, jobB))
@@ -120,7 +120,7 @@ func TestClaimGPUAllocation_NodeInactive(t *testing.T) {
 	node := &domain.Node{
 		ID:           "node-3",
 		Hostname:     "node-3",
-		Executor:     domain.ExecutorTypeSwarm,
+		Executor:     domain.ExecutorTypeDocker,
 		GPUTotal:     2,
 		GPUDeviceIDs: makeGPUDeviceIDs(2),
 	}
@@ -137,7 +137,7 @@ func TestClaimGPUAllocation_NodeInactive(t *testing.T) {
 		Image:       "alpine:latest",
 		Outputs:     []string{"/outputs"},
 		TimeoutSecs: 3600,
-		Executor:    domain.ExecutorTypeSwarm,
+		Executor:    domain.ExecutorTypeDocker,
 		GPUCount:    1,
 	}
 	require.NoError(t, store.CreateJob(ctx, job))
@@ -155,7 +155,7 @@ func TestMarkStaleNodes(t *testing.T) {
 	node := &domain.Node{
 		ID:           "node-4",
 		Hostname:     "node-4",
-		Executor:     domain.ExecutorTypeSwarm,
+		Executor:     domain.ExecutorTypeDocker,
 		GPUTotal:     1,
 		GPUDeviceIDs: makeGPUDeviceIDs(1),
 	}
@@ -187,7 +187,7 @@ func TestClaimGPUAllocation_Concurrent(t *testing.T) {
 	node := &domain.Node{
 		ID:           "node-concurrent",
 		Hostname:     "node-concurrent",
-		Executor:     domain.ExecutorTypeSwarm,
+		Executor:     domain.ExecutorTypeDocker,
 		GPUTotal:     2,
 		GPUDeviceIDs: makeGPUDeviceIDs(2),
 	}
@@ -203,7 +203,7 @@ func TestClaimGPUAllocation_Concurrent(t *testing.T) {
 			Image:       "alpine:latest",
 			Outputs:     []string{"/outputs"},
 			TimeoutSecs: 3600,
-			Executor:    domain.ExecutorTypeSwarm,
+			Executor:    domain.ExecutorTypeDocker,
 			GPUCount:    1,
 		}
 		require.NoError(t, store.CreateJob(ctx, jobs[i]))
@@ -264,7 +264,7 @@ func TestClaimGPUAllocation_Idempotent(t *testing.T) {
 	node := &domain.Node{
 		ID:           "node-idempotent",
 		Hostname:     "node-idempotent",
-		Executor:     domain.ExecutorTypeSwarm,
+		Executor:     domain.ExecutorTypeDocker,
 		GPUTotal:     2,
 		GPUDeviceIDs: makeGPUDeviceIDs(2),
 	}
@@ -278,7 +278,7 @@ func TestClaimGPUAllocation_Idempotent(t *testing.T) {
 		Image:       "alpine:latest",
 		Outputs:     []string{"/outputs"},
 		TimeoutSecs: 3600,
-		Executor:    domain.ExecutorTypeSwarm,
+		Executor:    domain.ExecutorTypeDocker,
 		GPUCount:    1,
 	}
 	require.NoError(t, store.CreateJob(ctx, job))
@@ -301,7 +301,7 @@ func TestUpdateNodeHeartbeat_Reactivates(t *testing.T) {
 	node := &domain.Node{
 		ID:           "node-reactivate",
 		Hostname:     "node-reactivate",
-		Executor:     domain.ExecutorTypeSwarm,
+		Executor:     domain.ExecutorTypeDocker,
 		GPUTotal:     1,
 		GPUDeviceIDs: makeGPUDeviceIDs(1),
 	}
@@ -330,7 +330,7 @@ func TestReleaseGPUAllocation_Reenable(t *testing.T) {
 	node := &domain.Node{
 		ID:           "node-release",
 		Hostname:     "node-release",
-		Executor:     domain.ExecutorTypeSwarm,
+		Executor:     domain.ExecutorTypeDocker,
 		GPUTotal:     1,
 		GPUDeviceIDs: makeGPUDeviceIDs(1),
 	}
@@ -344,7 +344,7 @@ func TestReleaseGPUAllocation_Reenable(t *testing.T) {
 		Image:       "alpine:latest",
 		Outputs:     []string{"/outputs"},
 		TimeoutSecs: 3600,
-		Executor:    domain.ExecutorTypeSwarm,
+		Executor:    domain.ExecutorTypeDocker,
 		GPUCount:    1,
 	}
 	require.NoError(t, store.CreateJob(ctx, jobA))
@@ -362,7 +362,7 @@ func TestReleaseGPUAllocation_Reenable(t *testing.T) {
 		Image:       "alpine:latest",
 		Outputs:     []string{"/outputs"},
 		TimeoutSecs: 3600,
-		Executor:    domain.ExecutorTypeSwarm,
+		Executor:    domain.ExecutorTypeDocker,
 		GPUCount:    1,
 	}
 	require.NoError(t, store.CreateJob(ctx, jobB))

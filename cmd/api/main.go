@@ -22,7 +22,6 @@ import (
 	"github.com/heldtogether/switchyard/internal/config"
 	"github.com/heldtogether/switchyard/internal/executor"
 	dockerexec "github.com/heldtogether/switchyard/internal/executor/docker"
-	swarmexec "github.com/heldtogether/switchyard/internal/executor/swarm"
 	"github.com/heldtogether/switchyard/internal/registrysecrets"
 	"github.com/heldtogether/switchyard/internal/storage/objectstore"
 	"github.com/heldtogether/switchyard/internal/storage/postgres"
@@ -139,16 +138,6 @@ func main() {
 		)
 		if err != nil {
 			logger.Error("failed to create docker executor", "error", err)
-			os.Exit(1)
-		}
-	case "swarm":
-		exec, err = swarmexec.New(
-			cfg.Executor.Swarm.DockerHost,
-			cfg.Executor.Swarm.NFSBasePath,
-			cfg.Executor.Swarm.NetworkIsolated,
-		)
-		if err != nil {
-			logger.Error("failed to create swarm executor", "error", err)
 			os.Exit(1)
 		}
 	case "kube":

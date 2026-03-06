@@ -113,17 +113,14 @@ func (a *API) HandleCreateJob(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create job
-	defaults := a.cfg.Executor.Swarm.Defaults
-	executorType := domain.ExecutorTypeSwarm
+	defaults := a.cfg.Executor.Docker.Defaults
+	executorType := domain.ExecutorTypeDocker
 	switch a.cfg.Executor.Type {
 	case "docker":
 		defaults = a.cfg.Executor.Docker.Defaults
 		executorType = domain.ExecutorTypeDocker
-	case "swarm":
-		defaults = a.cfg.Executor.Swarm.Defaults
-		executorType = domain.ExecutorTypeSwarm
 	case "kube":
-		defaults = a.cfg.Executor.Swarm.Defaults
+		defaults = a.cfg.Executor.Docker.Defaults
 		executorType = domain.ExecutorTypeKube
 	}
 

@@ -85,7 +85,7 @@ export const mockJobs: Job[] = [
     command: ["/app/run"],
     env: { DATASET: "s3://datasets/v7" },
     status: "SUCCEEDED",
-    executor_type: "swarm",
+    executor_type: "docker",
     started_at: new Date(now - 1000 * 60 * 65).toISOString(),
     finished_at: new Date(now - 1000 * 60 * 60).toISOString(),
     duration: 1000 * 60 * 5
@@ -99,7 +99,7 @@ export const mockJobs: Job[] = [
     command: ["/app/train"],
     env: { SEED: "42" },
     status: "RUNNING",
-    executor_type: "swarm",
+    executor_type: "docker",
     started_at: new Date(now - 1000 * 60 * 50).toISOString(),
     finished_at: null,
     duration: 1000 * 60 * 50
@@ -113,7 +113,7 @@ export const mockJobs: Job[] = [
     command: ["/app/validate"],
     env: { METRIC: "f1" },
     status: "PENDING",
-    executor_type: "swarm",
+    executor_type: "docker",
     started_at: null,
     finished_at: null,
     duration: null
