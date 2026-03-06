@@ -39,9 +39,10 @@ describe("ProjectsListPage", () => {
     await user.click(screen.getByRole("button", { name: /create project/i }));
     await user.type(screen.getByPlaceholderText("Vision Core"), "My Cool Project");
 
-    expect((screen.getByPlaceholderText("vision-core") as HTMLInputElement).value).toBe(
-      "my-cool-project"
-    );
+    await waitFor(() => {
+      expect((screen.getByPlaceholderText("vision-core") as HTMLInputElement).value).toBe(
+        "my-cool-project"
+      );
+    });
   });
 });
-

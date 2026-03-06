@@ -1,19 +1,24 @@
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { PageHeader } from "../components/PageHeader";
 import { useParams } from "react-router-dom";
 import {
+  createRegistrySecret,
   createProjectInvite,
+  deleteRegistrySecret,
   // createWorkspaceInvite,
   listProjectMembers,
   listProjects,
-  listWorkspaceMembers
+  listRegistrySecrets,
+  listWorkspaceMembers,
+  rotateRegistrySecret
 } from "../api";
 // import { ErrorBanner } from "../components/ErrorBanner";
 import { RelativeTime } from "../components/RelativeTime";
 import { useAuth } from "../auth/AuthProvider";
 
 export function SettingsPage() {
+  const queryClient = useQueryClient();
   const apiBase = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8080";
   const { workspace = import.meta.env.VITE_WORKSPACE_SLUG ?? "default" } = useParams();
   const { isWorkspaceOwner } = useAuth();
@@ -30,6 +35,13 @@ export function SettingsPage() {
   const [projectInviteResult, setProjectInviteResult] = useState<string | null>(null);
   const [projectInviteError, setProjectInviteError] = useState<string | null>(null);
   const [projectInviting, setProjectInviting] = useState(false);
+  const [secretHost, setSecretHost] = useState("");
+  const [secretUsername, setSecretUsername] = useState("");
+  const [secretPassword, setSecretPassword] = useState("");
+  const [secretCreateError, setSecretCreateError] = useState<string | null>(null);
+  const [rotatingSecretID, setRotatingSecretID] = useState<string | null>(null);
+  const [rotatePassword, setRotatePassword] = useState("");
+  const [rotateError, setRotateError] = useState<string | null>(null);
 
   const workspaceMembersQuery = useQuery({
     queryKey: ["workspace-members", workspace],
@@ -39,6 +51,42 @@ export function SettingsPage() {
   const projectsQuery = useQuery({
     queryKey: ["projects", workspace],
     queryFn: listProjects
+  });
+
+  const registrySecretsQuery = useQuery({
+    queryKey: ["registry-secrets", workspace],
+    queryFn: listRegistrySecrets
+  });
+
+  const createRegistrySecretMutation = useMutation({
+    mutationFn: createRegistrySecret,
+    onSuccess: async () => {
+      setSecretHost("");
+      setSecretUsername("");
+      setSecretPassword("");
+      setSecretCreateError(null);
+      await queryClient.invalidateQueries({ queryKey: ["registry-secrets", workspace] });
+    },
+    onError: (error) => setSecretCreateError((error as Error).message)
+  });
+
+  const rotateRegistrySecretMutation = useMutation({
+    mutationFn: ({ secretID, password }: { secretID: string; password: string }) =>
+      rotateRegistrySecret(secretID, { password }),
+    onSuccess: async () => {
+      setRotatingSecretID(null);
+      setRotatePassword("");
+      setRotateError(null);
+      await queryClient.invalidateQueries({ queryKey: ["registry-secrets", workspace] });
+    },
+    onError: (error) => setRotateError((error as Error).message)
+  });
+
+  const deleteRegistrySecretMutation = useMutation({
+    mutationFn: deleteRegistrySecret,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["registry-secrets", workspace] });
+    }
   });
 
   const projectMembersQuery = useQuery({
@@ -130,6 +178,30 @@ export function SettingsPage() {
     } catch {
       // no-op
     }
+  }
+
+  async function onCreateRegistrySecret() {
+    const host = secretHost.trim();
+    const username = secretUsername.trim();
+    const password = secretPassword.trim();
+    if (!host || !username || !password) {
+      setSecretCreateError("Host, username, and password are required.");
+      return;
+    }
+    await createRegistrySecretMutation.mutateAsync({ host, username, password });
+  }
+
+  async function onRotateSecret(secretID: string) {
+    const password = rotatePassword.trim();
+    if (!password) {
+      setRotateError("New password is required.");
+      return;
+    }
+    await rotateRegistrySecretMutation.mutateAsync({ secretID, password });
+  }
+
+  async function onDeactivateSecret(secretID: string) {
+    await deleteRegistrySecretMutation.mutateAsync(secretID);
   }
 
   return (
@@ -287,9 +359,162 @@ export function SettingsPage() {
               </div>
             </div>
 
+            
+
           </div>
         )}
       </div>
+
+        <div className="card p-6">
+        <div className="mb-3 text-xs uppercase tracking-[0.2em] text-ink-400">Secret Management</div>
+              <div className="text-sm font-semibold text-ink-900">Registry Secrets</div>
+              <p className="mt-1 text-xs text-ink-500">
+                Workspace-scoped credentials for private container registries. Secret values are never shown.
+              </p>
+
+              <div className="mt-4 overflow-x-auto rounded-lg border border-ink-100">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-ink-50 text-left text-xs uppercase tracking-[0.15em] text-ink-500">
+                    <tr>
+                      <th className="px-4 py-3">Registry</th>
+                      <th className="px-4 py-3">Status</th>
+                      <th className="px-4 py-3">Created</th>
+                      <th className="px-4 py-3">Deactivated</th>
+                      <th className="px-4 py-3">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(registrySecretsQuery.data ?? []).map((secret) => (
+                      <tr key={secret.id} className="border-t border-ink-100">
+                        <td className="px-4 py-3">
+                          <div className="font-medium text-ink-900">{secret.host}</div>
+                          <div className="text-xs text-ink-500">{secret.username}</div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={secret.active ? "text-emerald-600" : "text-ink-500"}>
+                            {secret.active ? "Active" : "Inactive"}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-ink-600">
+                          <RelativeTime value={secret.created_at} />
+                          <div className="text-xs text-ink-500">{secret.created_by}</div>
+                        </td>
+                        <td className="px-4 py-3 text-ink-600">
+                          {secret.deactivated_at ? (
+                            <>
+                              <RelativeTime value={secret.deactivated_at} />
+                              <div className="text-xs text-ink-500">{secret.deactivated_by ?? "Unknown"}</div>
+                            </>
+                          ) : (
+                            <span className="text-xs text-ink-400">-</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          {!secret.active ? (
+                            <span className="text-xs text-ink-400">No actions</span>
+                          ) : (
+                            <div className="space-y-2">
+                              {rotatingSecretID === secret.id ? (
+                                <div className="flex gap-2">
+                                  <input
+                                    type="password"
+                                    className="rounded-lg border border-ink-200 px-2 py-1 text-xs"
+                                    placeholder="New password"
+                                    value={rotatePassword}
+                                    onChange={(event) => setRotatePassword(event.target.value)}
+                                  />
+                                  <button
+                                    type="button"
+                                    className="rounded-full border border-ink-200 px-3 py-1 text-xs text-ink-700"
+                                    onClick={() => onRotateSecret(secret.id)}
+                                  >
+                                    Save
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="rounded-full border border-ink-200 px-3 py-1 text-xs text-ink-500"
+                                    onClick={() => {
+                                      setRotatingSecretID(null);
+                                      setRotatePassword("");
+                                      setRotateError(null);
+                                    }}
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="flex gap-2">
+                                  <button
+                                    type="button"
+                                    className="rounded-full border border-ink-200 px-3 py-1 text-xs text-ink-700"
+                                    onClick={() => {
+                                      setRotatingSecretID(secret.id);
+                                      setRotatePassword("");
+                                      setRotateError(null);
+                                    }}
+                                  >
+                                    Rotate
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="rounded-full border border-red-200 px-3 py-1 text-xs text-red-600"
+                                    onClick={() => onDeactivateSecret(secret.id)}
+                                  >
+                                    Deactivate
+                                  </button>
+                                </div>
+                              )}
+                              {rotateError && rotatingSecretID === secret.id && (
+                                <p className="text-xs text-red-600">{rotateError}</p>
+                              )}
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                    {(registrySecretsQuery.data?.length ?? 0) === 0 && (
+                      <tr>
+                        <td className="px-4 py-4 text-sm text-ink-500" colSpan={5}>
+                          No registry secrets configured.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="mt-3 grid gap-2 md:grid-cols-4">
+                <input
+                  className="rounded-lg border border-ink-200 px-3 py-2 text-sm"
+                  placeholder="registry.example.com"
+                  value={secretHost}
+                  onChange={(event) => setSecretHost(event.target.value)}
+                />
+                <input
+                  className="rounded-lg border border-ink-200 px-3 py-2 text-sm"
+                  placeholder="username"
+                  value={secretUsername}
+                  onChange={(event) => setSecretUsername(event.target.value)}
+                />
+                <input
+                  className="rounded-lg border border-ink-200 px-3 py-2 text-sm"
+                  placeholder="password"
+                  type="password"
+                  value={secretPassword}
+                  onChange={(event) => setSecretPassword(event.target.value)}
+                />
+                <button
+                  type="button"
+                  onClick={onCreateRegistrySecret}
+                  disabled={createRegistrySecretMutation.isPending}
+                  className="rounded-full bg-ink-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                >
+                  Add Secret
+                </button>
+              </div>
+              {secretCreateError && <p className="mt-2 text-sm text-red-600">{secretCreateError}</p>}
+              
+            </div>
 
       <div className="card p-6">
         <div className="space-y-4 text-sm text-ink-600">

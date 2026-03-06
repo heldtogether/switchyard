@@ -137,14 +137,21 @@ type CreateRegistrySecretRequest struct {
 	Password string `json:"password"`
 }
 
+type RotateRegistrySecretRequest struct {
+	Password string `json:"password"`
+}
+
 // RegistrySecretResponse represents a registry secret (without password)
 type RegistrySecretResponse struct {
-	ID        uuid.UUID `json:"id"`
-	CreatedAt time.Time `json:"created_at"`
-	CreatedBy string    `json:"created_by"`
-	Host      string    `json:"host"`
-	Username  string    `json:"username"`
-	Active    bool      `json:"active"`
+	ID                  uuid.UUID  `json:"id"`
+	CreatedAt           time.Time  `json:"created_at"`
+	CreatedBy           string     `json:"created_by"`
+	Host                string     `json:"host"`
+	Username            string     `json:"username"`
+	Active              bool       `json:"active"`
+	DeactivatedAt       *time.Time `json:"deactivated_at,omitempty"`
+	DeactivatedBy       *string    `json:"deactivated_by,omitempty"`
+	RotatedFromSecretID *uuid.UUID `json:"rotated_from_secret_id,omitempty"`
 }
 
 // JobResponse is the response for a job

@@ -47,6 +47,8 @@ func (s *Server) Start() error {
 	mux.HandleFunc("GET /v1/workspaces/{workspace_slug}/members", s.api.HandleListWorkspaceMembers)
 	mux.HandleFunc("POST /v1/workspaces/{workspace_slug}/registry-secrets", s.api.HandleCreateRegistrySecret)
 	mux.HandleFunc("GET /v1/workspaces/{workspace_slug}/registry-secrets", s.api.HandleListRegistrySecrets)
+	mux.HandleFunc("DELETE /v1/workspaces/{workspace_slug}/registry-secrets/{secret_id}", s.api.HandleDeleteRegistrySecret)
+	mux.HandleFunc("POST /v1/workspaces/{workspace_slug}/registry-secrets/{secret_id}/rotate", s.api.HandleRotateRegistrySecret)
 
 	// Project routes
 	mux.HandleFunc("POST /v1/workspaces/{workspace_slug}/projects", s.api.HandleCreateProject)

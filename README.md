@@ -15,6 +15,7 @@ Switchyard accepts container jobs over an HTTP API, executes them on a Swarm clu
 - Hybrid authentication (API key + OIDC SSO)
 - RBAC memberships with workspace/project invites and UI invite acceptance (`/accept-invite`)
 - Workspace switcher with in-app workspace creation for authenticated users
+- Workspace-scoped registry secret lifecycle (create/list/deactivate/rotate) surfaced in project settings UI
 
 ## Quick Start (Local Dev)
 ```bash

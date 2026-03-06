@@ -326,11 +326,34 @@ export type RegistrySecret = {
   host: string;
   username: string;
   active: boolean;
+  deactivated_at?: string | null;
+  deactivated_by?: string | null;
+  rotated_from_secret_id?: string | null;
 };
 
 export async function listRegistrySecrets(): Promise<RegistrySecret[]> {
   const data = await fetchJson<{ registry_secrets: RegistrySecret[] }>(`/v1/workspaces/${activeWorkspaceSlug}/registry-secrets`);
   return data.registry_secrets ?? [];
+}
+
+export async function createRegistrySecret(payload: { host: string; username: string; password: string }): Promise<RegistrySecret> {
+  return fetchJson<RegistrySecret>(`/v1/workspaces/${activeWorkspaceSlug}/registry-secrets`, {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function deleteRegistrySecret(secretId: string): Promise<{ message: string }> {
+  return fetchJson<{ message: string }>(`/v1/workspaces/${activeWorkspaceSlug}/registry-secrets/${secretId}`, {
+    method: "DELETE"
+  });
+}
+
+export async function rotateRegistrySecret(secretId: string, payload: { password: string }): Promise<RegistrySecret> {
+  return fetchJson<RegistrySecret>(`/v1/workspaces/${activeWorkspaceSlug}/registry-secrets/${secretId}/rotate`, {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
 }
 
 export async function listWorkspaceMembers(): Promise<Member[]> {

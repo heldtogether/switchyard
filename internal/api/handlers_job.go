@@ -213,10 +213,10 @@ func (a *API) HandleCreateJob(w http.ResponseWriter, r *http.Request) {
 	job.GPUCount = gpuCount
 
 	if req.RegistrySecretID != nil {
-		if _, err := a.store.GetRegistrySecretForWorkspace(r.Context(), workspace.ID, *req.RegistrySecretID); err != nil {
+		if _, err := a.store.GetActiveRegistrySecretForWorkspace(r.Context(), workspace.ID, *req.RegistrySecretID); err != nil {
 			writeJSON(w, http.StatusNotFound, ErrorResponse{
 				Error:   "not_found",
-				Message: "Registry secret not found",
+				Message: "Registry secret not found or inactive",
 				Code:    http.StatusNotFound,
 			})
 			return

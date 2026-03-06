@@ -41,6 +41,7 @@ UI_AGGREGATE_LIMIT=5
 - `/accept-invite` Invite acceptance page (`?token=...`)
 - `/:workspace` Projects list
 - `/:workspace/:projectSlug` Project runs list
+- `/:workspace/settings` Workspace settings (members, invites, registry secrets)
 - `/:workspace/runs` Runs list (all projects)
 - `/:workspace/jobs` Jobs list (all projects)
 - `/:workspace/artefacts` Artefacts list (all projects)
@@ -65,6 +66,7 @@ UI_AGGREGATE_LIMIT=5
 - `GET /v1/workspaces/:workspace/projects/:projectSlug/runs/:runSlug/jobs/:jobId`
 - `GET /v1/workspaces/:workspace/projects/:projectSlug/runs/:runSlug/jobs/:jobId/logs`
 - `GET /v1/workspaces/:workspace/projects/:projectSlug/runs/:runSlug/jobs/:jobId/artefacts`
+- `GET /v1/workspaces/:workspace/registry-secrets`
 
 **Mocked / client-side only:**
 - Promotions (stored in `localStorage`)
@@ -74,3 +76,6 @@ UI_AGGREGATE_LIMIT=5
 - `POST /v1/workspaces` (workspace menu -> Create Workspace)
 - `POST /v1/workspaces/:workspace/projects/:projectSlug/runs`
 - `POST /v1/workspaces/:workspace/projects/:projectSlug/runs/:runSlug/jobs`
+- `POST /v1/workspaces/:workspace/registry-secrets`
+- `DELETE /v1/workspaces/:workspace/registry-secrets/:secretId`
+- `POST /v1/workspaces/:workspace/registry-secrets/:secretId/rotate`

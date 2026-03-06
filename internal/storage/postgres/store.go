@@ -258,21 +258,22 @@ func (s *Store) GetRunningJobs(ctx context.Context) ([]*domain.Job, error) {
 func (s *Store) CreateRegistrySecret(ctx context.Context, secret *domain.RegistrySecret) error {
 	query := `
 		INSERT INTO registry_secrets (
-			id, created_by, workspace_id, host, username, password_encrypted, active
-		) VALUES ($1, $2, $3, $4, $5, $6, $7)
+			id, created_by, workspace_id, host, username, password_encrypted, active, rotated_from_secret_id
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING created_at
 	`
 
 	return s.db.QueryRowContext(ctx, query,
 		secret.ID, secret.CreatedBy, secret.WorkspaceID, secret.Host,
-		secret.Username, secret.PasswordEncrypted, secret.Active,
+		secret.Username, secret.PasswordEncrypted, secret.Active, secret.RotatedFromID,
 	).Scan(&secret.CreatedAt)
 }
 
 // ListRegistrySecrets returns all registry secrets for a workspace
 func (s *Store) ListRegistrySecrets(ctx context.Context, workspaceID uuid.UUID) ([]domain.RegistrySecret, error) {
 	query := `
-		SELECT id, created_at, created_by, workspace_id, host, username, password_encrypted, active
+		SELECT id, created_at, created_by, workspace_id, host, username, password_encrypted, active,
+		       deactivated_at, deactivated_by, rotated_from_secret_id
 		FROM registry_secrets
 		WHERE workspace_id = $1
 		ORDER BY created_at DESC
@@ -290,6 +291,7 @@ func (s *Store) ListRegistrySecrets(ctx context.Context, workspaceID uuid.UUID) 
 		if err := rows.Scan(
 			&sct.ID, &sct.CreatedAt, &sct.CreatedBy, &sct.WorkspaceID,
 			&sct.Host, &sct.Username, &sct.PasswordEncrypted, &sct.Active,
+			&sct.DeactivatedAt, &sct.DeactivatedBy, &sct.RotatedFromID,
 		); err != nil {
 			return nil, err
 		}
@@ -304,7 +306,8 @@ func (s *Store) ListRegistrySecrets(ctx context.Context, workspaceID uuid.UUID) 
 // GetRegistrySecret retrieves a registry secret by ID
 func (s *Store) GetRegistrySecret(ctx context.Context, id uuid.UUID) (*domain.RegistrySecret, error) {
 	query := `
-		SELECT id, created_at, created_by, workspace_id, host, username, password_encrypted, active
+		SELECT id, created_at, created_by, workspace_id, host, username, password_encrypted, active,
+		       deactivated_at, deactivated_by, rotated_from_secret_id
 		FROM registry_secrets
 		WHERE id = $1
 	`
@@ -313,6 +316,7 @@ func (s *Store) GetRegistrySecret(ctx context.Context, id uuid.UUID) (*domain.Re
 	err := s.db.QueryRowContext(ctx, query, id).Scan(
 		&secret.ID, &secret.CreatedAt, &secret.CreatedBy, &secret.WorkspaceID,
 		&secret.Host, &secret.Username, &secret.PasswordEncrypted, &secret.Active,
+		&secret.DeactivatedAt, &secret.DeactivatedBy, &secret.RotatedFromID,
 	)
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("registry secret not found")
@@ -326,7 +330,8 @@ func (s *Store) GetRegistrySecret(ctx context.Context, id uuid.UUID) (*domain.Re
 // GetRegistrySecretForWorkspace retrieves a registry secret by ID scoped to a workspace
 func (s *Store) GetRegistrySecretForWorkspace(ctx context.Context, workspaceID, secretID uuid.UUID) (*domain.RegistrySecret, error) {
 	query := `
-		SELECT id, created_at, created_by, workspace_id, host, username, password_encrypted, active
+		SELECT id, created_at, created_by, workspace_id, host, username, password_encrypted, active,
+		       deactivated_at, deactivated_by, rotated_from_secret_id
 		FROM registry_secrets
 		WHERE id = $1 AND workspace_id = $2
 	`
@@ -335,6 +340,7 @@ func (s *Store) GetRegistrySecretForWorkspace(ctx context.Context, workspaceID, 
 	err := s.db.QueryRowContext(ctx, query, secretID, workspaceID).Scan(
 		&secret.ID, &secret.CreatedAt, &secret.CreatedBy, &secret.WorkspaceID,
 		&secret.Host, &secret.Username, &secret.PasswordEncrypted, &secret.Active,
+		&secret.DeactivatedAt, &secret.DeactivatedBy, &secret.RotatedFromID,
 	)
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("registry secret not found")
@@ -343,6 +349,112 @@ func (s *Store) GetRegistrySecretForWorkspace(ctx context.Context, workspaceID, 
 		return nil, err
 	}
 	return secret, nil
+}
+
+// GetActiveRegistrySecretForWorkspace retrieves an active registry secret by ID scoped to a workspace.
+func (s *Store) GetActiveRegistrySecretForWorkspace(ctx context.Context, workspaceID, secretID uuid.UUID) (*domain.RegistrySecret, error) {
+	query := `
+		SELECT id, created_at, created_by, workspace_id, host, username, password_encrypted, active,
+		       deactivated_at, deactivated_by, rotated_from_secret_id
+		FROM registry_secrets
+		WHERE id = $1 AND workspace_id = $2 AND active = true
+	`
+
+	secret := &domain.RegistrySecret{}
+	err := s.db.QueryRowContext(ctx, query, secretID, workspaceID).Scan(
+		&secret.ID, &secret.CreatedAt, &secret.CreatedBy, &secret.WorkspaceID,
+		&secret.Host, &secret.Username, &secret.PasswordEncrypted, &secret.Active,
+		&secret.DeactivatedAt, &secret.DeactivatedBy, &secret.RotatedFromID,
+	)
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("registry secret not found")
+	}
+	if err != nil {
+		return nil, err
+	}
+	return secret, nil
+}
+
+// DeactivateRegistrySecret marks a registry secret inactive for future job submissions.
+func (s *Store) DeactivateRegistrySecret(ctx context.Context, workspaceID, secretID uuid.UUID, actor string) error {
+	query := `
+		UPDATE registry_secrets
+		SET active = false,
+		    deactivated_at = NOW(),
+		    deactivated_by = $3
+		WHERE id = $1 AND workspace_id = $2 AND active = true
+	`
+	res, err := s.db.ExecContext(ctx, query, secretID, workspaceID, actor)
+	if err != nil {
+		return err
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return fmt.Errorf("registry secret not found")
+	}
+	return nil
+}
+
+// RotateRegistrySecret deactivates an active secret and creates a replacement with the same host/username.
+func (s *Store) RotateRegistrySecret(ctx context.Context, workspaceID, secretID uuid.UUID, newPassword, actor string) (*domain.RegistrySecret, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	var current domain.RegistrySecret
+	err = tx.QueryRowContext(ctx, `
+		SELECT id, created_by, workspace_id, host, username
+		FROM registry_secrets
+		WHERE id = $1 AND workspace_id = $2 AND active = true
+		FOR UPDATE
+	`, secretID, workspaceID).Scan(
+		&current.ID, &current.CreatedBy, &current.WorkspaceID, &current.Host, &current.Username,
+	)
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("registry secret not found")
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE registry_secrets
+		SET active = false,
+		    deactivated_at = NOW(),
+		    deactivated_by = $2
+		WHERE id = $1
+	`, secretID, actor); err != nil {
+		return nil, err
+	}
+
+	next := &domain.RegistrySecret{
+		ID:                uuid.New(),
+		CreatedBy:         actor,
+		WorkspaceID:       workspaceID,
+		Host:              current.Host,
+		Username:          current.Username,
+		PasswordEncrypted: newPassword,
+		Active:            true,
+		RotatedFromID:     &secretID,
+	}
+	if err := tx.QueryRowContext(ctx, `
+		INSERT INTO registry_secrets (
+			id, created_by, workspace_id, host, username, password_encrypted, active, rotated_from_secret_id
+		) VALUES ($1, $2, $3, $4, $5, $6, true, $7)
+		RETURNING created_at
+	`, next.ID, next.CreatedBy, next.WorkspaceID, next.Host, next.Username, next.PasswordEncrypted, next.RotatedFromID).Scan(&next.CreatedAt); err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return next, nil
 }
 
 // SetConnPoolLimits configures connection pool

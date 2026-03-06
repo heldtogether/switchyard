@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useParams } from "react-router-dom";
 import { Modal } from "../components/Modal";
 import { slugify } from "../utils/slug";
 import { createJob, createRun, getAllocationCapacity, listRegistrySecrets } from "../api";
@@ -25,6 +26,7 @@ interface NewRunModalProps {
 }
 
 export function NewRunModal({ open, projectSlug, onClose, onSuccess }: NewRunModalProps) {
+  const { workspace = "" } = useParams();
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [description, setDescription] = useState("");
@@ -47,7 +49,7 @@ export function NewRunModal({ open, projectSlug, onClose, onSuccess }: NewRunMod
   const [error, setError] = useState<string | null>(null);
 
   const registrySecretsQuery = useQuery({
-    queryKey: ["registry-secrets"],
+    queryKey: ["registry-secrets", workspace],
     queryFn: listRegistrySecrets,
     enabled: open
   });

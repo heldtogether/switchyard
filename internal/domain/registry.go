@@ -16,4 +16,7 @@ type RegistrySecret struct {
 	Username          string    `json:"username"`
 	PasswordEncrypted string    `json:"-"` // Never expose in JSON
 	Active            bool      `json:"active"`
+	DeactivatedAt     *time.Time
+	DeactivatedBy     *string
+	RotatedFromID     *uuid.UUID
 }

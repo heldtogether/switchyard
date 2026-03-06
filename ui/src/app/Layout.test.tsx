@@ -1,6 +1,6 @@
 import React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { vi } from "vitest";
@@ -43,7 +43,10 @@ function renderLayout() {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: {
-        retry: false
+        retry: false,
+        refetchOnWindowFocus: false,
+        refetchOnReconnect: false,
+        refetchOnMount: false
       }
     }
   });
@@ -81,12 +84,12 @@ describe("Layout workspace creation", () => {
       expect(screen.getByRole("button", { name: /default workspace/i })).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /default workspace/i }));
-    fireEvent.click(screen.getByRole("button", { name: /create workspace/i }));
+    await user.click(screen.getByRole("button", { name: /default workspace/i }));
+    await user.click(screen.getByRole("button", { name: /create workspace/i }));
 
     await user.type(screen.getByPlaceholderText("Acme"), "New Org");
     expect((screen.getByPlaceholderText("acme") as HTMLInputElement).value).toBe("new-org");
-    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+    await user.click(screen.getByRole("button", { name: "Create" }));
 
     await waitFor(() => {
       expect(createWorkspaceMock).toHaveBeenCalledWith({

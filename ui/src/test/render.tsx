@@ -7,7 +7,10 @@ function Wrapper({ children }: PropsWithChildren) {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: {
-        retry: false
+        retry: false,
+        refetchOnWindowFocus: false,
+        refetchOnReconnect: false,
+        refetchOnMount: false
       }
     }
   });

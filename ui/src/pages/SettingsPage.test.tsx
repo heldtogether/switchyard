@@ -40,7 +40,11 @@ vi.mock("../api", () => ({
     }
   ]),
   createWorkspaceInvite: vi.fn(),
-  createProjectInvite: vi.fn()
+  createProjectInvite: vi.fn(),
+  listRegistrySecrets: vi.fn(async () => []),
+  createRegistrySecret: vi.fn(),
+  rotateRegistrySecret: vi.fn(),
+  deleteRegistrySecret: vi.fn()
 }));
 
 vi.mock("react-router-dom", async () => {
@@ -58,6 +62,7 @@ describe("SettingsPage", () => {
     await waitFor(() => {
       expect(screen.getByText("Alice")).toBeInTheDocument();
       expect(screen.getByText("Project One (member)")).toBeInTheDocument();
+      expect(screen.getByText("Registry Secrets")).toBeInTheDocument();
     });
 
     expect(screen.getByText("owner")).toBeInTheDocument();
