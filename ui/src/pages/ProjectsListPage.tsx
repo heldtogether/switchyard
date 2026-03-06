@@ -143,7 +143,6 @@ export function ProjectsListPage() {
                 <DataTableCell>
                   {lastRun ? (
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-semibold">#{lastRun.run_number}</span>
                       <StatusPill status={lastRun.status} />
                     </div>
                   ) : (
