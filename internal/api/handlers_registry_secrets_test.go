@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -13,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/heldtogether/switchyard/internal/config"
 	"github.com/heldtogether/switchyard/internal/domain"
+	"github.com/heldtogether/switchyard/internal/registrysecrets"
 	"github.com/stretchr/testify/require"
 )
 
@@ -45,6 +47,14 @@ func TestHandleRegistrySecrets_CRUDLifecycle(t *testing.T) {
 		store:  store,
 		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
 	}
+	key := base64.StdEncoding.EncodeToString([]byte("01234567890123456789012345678901"))
+	codec, err := registrysecrets.NewCodec(config.RegistrySecretEncryptionConfig{
+		Enabled:     true,
+		ActiveKeyID: "active-key",
+		ActiveKey:   key,
+	})
+	require.NoError(t, err)
+	api.secretCodec = codec
 	mux := setupRegistrySecretRouter(api)
 
 	createReq := bytes.NewBufferString(`{"host":"Docker.IO","username":"robot","password":"secret-one"}`)
@@ -58,6 +68,12 @@ func TestHandleRegistrySecrets_CRUDLifecycle(t *testing.T) {
 	require.Equal(t, "docker.io", created.Host)
 	require.Equal(t, "robot", created.Username)
 	require.True(t, created.Active)
+	storedCreated, err := store.GetRegistrySecret(context.Background(), created.ID)
+	require.NoError(t, err)
+	require.NotEqual(t, "secret-one", storedCreated.PasswordEncrypted)
+	require.Equal(t, domain.RegistrySecretEncodingAEADV1, storedCreated.SecretEncoding)
+	require.NotNil(t, storedCreated.SecretKeyID)
+	require.Equal(t, "active-key", *storedCreated.SecretKeyID)
 
 	rotateReq := bytes.NewBufferString(`{"password":"secret-two"}`)
 	rotateHTTPReq := httptest.NewRequest(http.MethodPost, "/v1/workspaces/registry-workspace/registry-secrets/"+created.ID.String()+"/rotate", rotateReq)
@@ -71,6 +87,10 @@ func TestHandleRegistrySecrets_CRUDLifecycle(t *testing.T) {
 	require.True(t, rotated.Active)
 	require.NotNil(t, rotated.RotatedFromSecretID)
 	require.Equal(t, created.ID, *rotated.RotatedFromSecretID)
+	storedRotated, err := store.GetRegistrySecret(context.Background(), rotated.ID)
+	require.NoError(t, err)
+	require.NotEqual(t, "secret-two", storedRotated.PasswordEncrypted)
+	require.Equal(t, domain.RegistrySecretEncodingAEADV1, storedRotated.SecretEncoding)
 
 	listReq := httptest.NewRequest(http.MethodGet, "/v1/workspaces/registry-workspace/registry-secrets", nil)
 	listResp := httptest.NewRecorder()

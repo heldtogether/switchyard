@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"io"
 	"log/slog"
@@ -13,8 +14,10 @@ import (
 	"github.com/heldtogether/switchyard/internal/config"
 	"github.com/heldtogether/switchyard/internal/domain"
 	"github.com/heldtogether/switchyard/internal/executor"
+	"github.com/heldtogether/switchyard/internal/registrysecrets"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
 
 // Mock Executor
@@ -592,4 +595,75 @@ func TestProcessor_Process_NoArtefactsOnFailedJob(t *testing.T) {
 	mockExecutor.AssertExpectations(t)
 	// Verify CollectOutputs was NOT called
 	mockExecutor.AssertNotCalled(t, "CollectOutputs", ctx, ref, mock.Anything)
+}
+
+func TestProcessor_Process_DecryptsRegistrySecretBeforeCreateRun(t *testing.T) {
+	ctx := context.Background()
+	workspace, project, run := createTestHierarchy()
+	job := createTestJob(run.ID)
+	secretID := uuid.New()
+	job.RegistrySecretID = &secretID
+
+	mockStore := new(MockStore)
+	mockExecutor := new(MockExecutor)
+	mockStorage := new(MockStorage)
+
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	processor := NewProcessor(mockStore, mockExecutor, mockStorage, logger, "http://localhost:8080", "test-bucket", "", config.CleanupConfig{RemoveOnComplete: true})
+
+	key := base64.StdEncoding.EncodeToString([]byte("01234567890123456789012345678901"))
+	codec, err := registrysecrets.NewCodec(config.RegistrySecretEncryptionConfig{
+		Enabled:     true,
+		ActiveKeyID: "key-1",
+		ActiveKey:   key,
+	})
+	require.NoError(t, err)
+	processor.SetSecretCodec(codec)
+
+	ciphertext, encoding, keyID, err := codec.Encrypt(workspace.ID, "docker.io", "robot", "super-secret")
+	require.NoError(t, err)
+
+	secret := &domain.RegistrySecret{
+		ID:                secretID,
+		WorkspaceID:       workspace.ID,
+		Host:              "docker.io",
+		Username:          "robot",
+		PasswordEncrypted: ciphertext,
+		SecretEncoding:    encoding,
+		SecretKeyID:       keyID,
+		Active:            true,
+	}
+
+	mockStore.On("GetJob", ctx, job.ID).Return(job, nil)
+	mockStore.On("GetRun", ctx, run.ID).Return(run, nil)
+	mockStore.On("GetProject", ctx, project.ID).Return(project, nil)
+	mockStore.On("GetWorkspace", ctx, workspace.ID).Return(workspace, nil)
+	mockStore.On("GetRegistrySecret", ctx, secretID).Return(secret, nil)
+	mockStore.On("UpdateJob", ctx, mock.MatchedBy(func(j *domain.Job) bool {
+		return j.Status == domain.JobStatusRunning
+	})).Return(nil)
+	mockStore.On("RecomputeRunStatus", ctx, run.ID).Return(nil).Twice()
+
+	ref := executor.RunRef{ExecutorType: "swarm", Reference: "service-123"}
+	mockExecutor.On("CreateRun", ctx, mock.MatchedBy(func(spec executor.RunSpec) bool {
+		return spec.RegistryAuth != nil && spec.RegistryAuth.Password == "super-secret"
+	})).Return(ref, nil)
+	mockExecutor.On("Wait", mock.Anything, ref).Return(executor.Result{
+		Status:     executor.StatusSuccess,
+		ExitCode:   0,
+		StartedAt:  time.Now(),
+		FinishedAt: time.Now().Add(1 * time.Second),
+	}, nil)
+	mockExecutor.On("GetLogs", ctx, ref, mock.Anything).Return(nil)
+	mockExecutor.On("CollectOutputs", ctx, ref, mock.Anything).Return([]domain.Artefact{}, nil)
+	mockStorage.On("Upload", ctx, mock.Anything, mock.Anything, "text/plain").Return(nil)
+	mockStore.On("UpdateJob", ctx, mock.MatchedBy(func(j *domain.Job) bool {
+		return j.Status == domain.JobStatusSucceeded
+	})).Return(nil)
+	mockExecutor.On("Cleanup", ctx, ref).Return(nil)
+
+	err = processor.Process(ctx, job.ID)
+	assert.NoError(t, err)
+	mockStore.AssertExpectations(t)
+	mockExecutor.AssertExpectations(t)
 }

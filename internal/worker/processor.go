@@ -11,19 +11,21 @@ import (
 	"github.com/heldtogether/switchyard/internal/config"
 	"github.com/heldtogether/switchyard/internal/domain"
 	"github.com/heldtogether/switchyard/internal/executor"
+	"github.com/heldtogether/switchyard/internal/registrysecrets"
 	"github.com/heldtogether/switchyard/internal/version"
 )
 
 // Processor handles individual job execution
 type Processor struct {
-	store      JobStore
-	executor   executor.Executor
-	storage    ObjectStorage
-	logger     *slog.Logger
-	apiBaseURL string
-	bucket     string
-	nodeID     string
-	cleanup    config.CleanupConfig
+	store       JobStore
+	executor    executor.Executor
+	storage     ObjectStorage
+	logger      *slog.Logger
+	apiBaseURL  string
+	bucket      string
+	nodeID      string
+	cleanup     config.CleanupConfig
+	secretCodec *registrysecrets.Codec
 }
 
 // NewProcessor creates a new job processor
@@ -38,6 +40,10 @@ func NewProcessor(store JobStore, exec executor.Executor, storage ObjectStorage,
 		nodeID:     nodeID,
 		cleanup:    cleanup,
 	}
+}
+
+func (p *Processor) SetSecretCodec(codec *registrysecrets.Codec) {
+	p.secretCodec = codec
 }
 
 // Process executes a single job from start to finish
@@ -99,10 +105,14 @@ func (p *Processor) Process(ctx context.Context, jobID uuid.UUID) error {
 		if err != nil {
 			return p.failJob(ctx, job, fmt.Errorf("failed to load registry secret: %w", err))
 		}
+		password, err := p.secretCodec.Decrypt(*secret)
+		if err != nil {
+			return p.failJob(ctx, job, fmt.Errorf("failed to decrypt registry secret: %w", err))
+		}
 		registryAuth = &domain.RegistryAuth{
 			Host:     secret.Host,
 			Username: secret.Username,
-			Password: secret.PasswordEncrypted,
+			Password: password,
 		}
 	}
 

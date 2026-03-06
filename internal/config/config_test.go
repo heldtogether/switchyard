@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/base64"
 	"os"
 	"path/filepath"
 	"testing"
@@ -105,5 +106,31 @@ func TestOIDCValidate(t *testing.T) {
 	}
 	if err := oidc.Validate(); err != nil {
 		t.Fatalf("expected valid OIDC config, got %v", err)
+	}
+}
+
+func TestRegistrySecretEncryptionValidate(t *testing.T) {
+	key := base64.StdEncoding.EncodeToString([]byte("01234567890123456789012345678901"))
+
+	cfg := RegistrySecretEncryptionConfig{
+		Enabled:       true,
+		ActiveKeyID:   "key-1",
+		ActiveKey:     key,
+		PreviousKeyID: "key-0",
+		PreviousKey:   key,
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("expected valid encryption config, got %v", err)
+	}
+}
+
+func TestRegistrySecretEncryptionValidate_InvalidKeyLength(t *testing.T) {
+	cfg := RegistrySecretEncryptionConfig{
+		Enabled:     true,
+		ActiveKeyID: "key-1",
+		ActiveKey:   base64.StdEncoding.EncodeToString([]byte("short")),
+	}
+	if err := cfg.Validate(); err == nil {
+		t.Fatalf("expected invalid key length error")
 	}
 }

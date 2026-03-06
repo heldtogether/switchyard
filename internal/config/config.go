@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/base64"
 	"fmt"
 	urlpkg "net/url"
 	"os"
@@ -24,14 +25,15 @@ type Config struct {
 
 // APIConfig holds API server configuration
 type APIConfig struct {
-	Port               int           `yaml:"port"`
-	Host               string        `yaml:"host"`
-	BaseURL            string        `yaml:"base_url"`
-	ReadTimeout        time.Duration `yaml:"read_timeout"`
-	WriteTimeout       time.Duration `yaml:"write_timeout"`
-	CORSAllowedOrigins []string      `yaml:"cors_allowed_origins"`
-	Auth               AuthConfig    `yaml:"auth"`
-	RBAC               RBACConfig    `yaml:"rbac"`
+	Port               int                   `yaml:"port"`
+	Host               string                `yaml:"host"`
+	BaseURL            string                `yaml:"base_url"`
+	ReadTimeout        time.Duration         `yaml:"read_timeout"`
+	WriteTimeout       time.Duration         `yaml:"write_timeout"`
+	CORSAllowedOrigins []string              `yaml:"cors_allowed_origins"`
+	Auth               AuthConfig            `yaml:"auth"`
+	RBAC               RBACConfig            `yaml:"rbac"`
+	RegistrySecrets    RegistrySecretsConfig `yaml:"registry_secrets"`
 }
 
 // AuthConfig holds authentication configuration
@@ -82,6 +84,18 @@ type RBACServiceAccountSpec struct {
 	AuthMethod        string              `yaml:"auth_method"`
 	AllowedWorkspaces []string            `yaml:"allowed_workspaces"`
 	AllowedProjects   map[string][]string `yaml:"allowed_projects"`
+}
+
+type RegistrySecretsConfig struct {
+	Encryption RegistrySecretEncryptionConfig `yaml:"encryption"`
+}
+
+type RegistrySecretEncryptionConfig struct {
+	Enabled       bool   `yaml:"enabled"`
+	ActiveKeyID   string `yaml:"active_key_id"`
+	ActiveKey     string `yaml:"active_key"`
+	PreviousKeyID string `yaml:"previous_key_id"`
+	PreviousKey   string `yaml:"previous_key"`
 }
 
 // WorkerConfig holds worker configuration
@@ -306,6 +320,27 @@ func applyEnvOverrides(cfg *Config) {
 		}
 		cfg.API.CORSAllowedOrigins = origins
 	}
+	if v := os.Getenv("REGISTRY_SECRETS_ENCRYPTION_ENABLED"); v != "" {
+		cfg.API.RegistrySecrets.Encryption.Enabled = v == "true" || v == "1"
+	}
+	if v := os.Getenv("REGISTRY_SECRETS_ACTIVE_KEY_ID"); v != "" {
+		cfg.API.RegistrySecrets.Encryption.ActiveKeyID = v
+	}
+	if v := os.Getenv("REGISTRY_SECRETS_ACTIVE_KEY"); v != "" {
+		cfg.API.RegistrySecrets.Encryption.ActiveKey = v
+	}
+	if v := getEnvFromFile("REGISTRY_SECRETS_ACTIVE_KEY_FILE"); v != "" {
+		cfg.API.RegistrySecrets.Encryption.ActiveKey = v
+	}
+	if v := os.Getenv("REGISTRY_SECRETS_PREVIOUS_KEY_ID"); v != "" {
+		cfg.API.RegistrySecrets.Encryption.PreviousKeyID = v
+	}
+	if v := os.Getenv("REGISTRY_SECRETS_PREVIOUS_KEY"); v != "" {
+		cfg.API.RegistrySecrets.Encryption.PreviousKey = v
+	}
+	if v := getEnvFromFile("REGISTRY_SECRETS_PREVIOUS_KEY_FILE"); v != "" {
+		cfg.API.RegistrySecrets.Encryption.PreviousKey = v
+	}
 
 	// Database
 	if v := os.Getenv("DATABASE_URL"); v != "" {
@@ -499,6 +534,9 @@ func (c *Config) Validate() error {
 	default:
 		return fmt.Errorf("invalid auth mode: %s (must be 'disabled', 'api_key', 'oidc', or 'hybrid')", c.API.Auth.Mode)
 	}
+	if err := c.API.RegistrySecrets.Encryption.Validate(); err != nil {
+		return err
+	}
 
 	// Database validation
 	if c.Database.URL == "" {
@@ -597,6 +635,52 @@ func (c *Config) Validate() error {
 	}
 
 	return nil
+}
+
+func (e *RegistrySecretEncryptionConfig) Validate() error {
+	if !e.Enabled {
+		return nil
+	}
+
+	e.ActiveKeyID = strings.TrimSpace(e.ActiveKeyID)
+	e.ActiveKey = strings.TrimSpace(e.ActiveKey)
+	e.PreviousKeyID = strings.TrimSpace(e.PreviousKeyID)
+	e.PreviousKey = strings.TrimSpace(e.PreviousKey)
+
+	if e.ActiveKeyID == "" {
+		return fmt.Errorf("registry secret encryption active_key_id is required when enabled")
+	}
+	if _, err := decodeEncryptionKey(e.ActiveKey); err != nil {
+		return fmt.Errorf("registry secret encryption active_key is invalid: %w", err)
+	}
+
+	if e.PreviousKeyID != "" || e.PreviousKey != "" {
+		if e.PreviousKeyID == "" {
+			return fmt.Errorf("registry secret encryption previous_key_id is required when previous_key is set")
+		}
+		if _, err := decodeEncryptionKey(e.PreviousKey); err != nil {
+			return fmt.Errorf("registry secret encryption previous_key is invalid: %w", err)
+		}
+		if e.PreviousKeyID == e.ActiveKeyID {
+			return fmt.Errorf("registry secret encryption key ids must be distinct")
+		}
+	}
+
+	return nil
+}
+
+func decodeEncryptionKey(encoded string) ([]byte, error) {
+	if strings.TrimSpace(encoded) == "" {
+		return nil, fmt.Errorf("missing base64 key")
+	}
+	decoded, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		return nil, err
+	}
+	if len(decoded) != 32 {
+		return nil, fmt.Errorf("expected 32-byte key, got %d", len(decoded))
+	}
+	return decoded, nil
 }
 
 func (r *RBACConfig) Normalize() {

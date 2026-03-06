@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/heldtogether/switchyard/internal/config"
 	"github.com/heldtogether/switchyard/internal/executor"
+	"github.com/heldtogether/switchyard/internal/registrysecrets"
 	"github.com/heldtogether/switchyard/internal/storage/objectstore"
 	"github.com/heldtogether/switchyard/internal/storage/postgres"
 	"github.com/heldtogether/switchyard/internal/storage/queue"
@@ -18,27 +19,28 @@ import (
 
 // Worker polls for jobs and executes them
 type Worker struct {
-	cfg      *config.Config
-	queue    queue.Consumer
-	store    *postgres.Store
-	executor executor.Executor
-	storage  *objectstore.S3Store
-	logger   *slog.Logger
-	api      *APIClient
-	nodeID   string
-	hostname string
-	gpuTotal int
-	cleanup  config.CleanupConfig
-	wg       sync.WaitGroup
-	ctx      context.Context
-	cancel   context.CancelFunc
+	cfg         *config.Config
+	queue       queue.Consumer
+	store       *postgres.Store
+	executor    executor.Executor
+	storage     *objectstore.S3Store
+	logger      *slog.Logger
+	api         *APIClient
+	nodeID      string
+	hostname    string
+	gpuTotal    int
+	cleanup     config.CleanupConfig
+	secretCodec *registrysecrets.Codec
+	wg          sync.WaitGroup
+	ctx         context.Context
+	cancel      context.CancelFunc
 
 	attempts   map[string]int
 	attemptsMu sync.Mutex
 }
 
 // New creates a new Worker
-func New(cfg *config.Config, q queue.Consumer, store *postgres.Store, exec executor.Executor, storage *objectstore.S3Store, logger *slog.Logger, api *APIClient, nodeID, hostname string, gpuTotal int) *Worker {
+func New(cfg *config.Config, q queue.Consumer, store *postgres.Store, exec executor.Executor, storage *objectstore.S3Store, logger *slog.Logger, api *APIClient, nodeID, hostname string, gpuTotal int, secretCodec *registrysecrets.Codec) *Worker {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	cleanup := cfg.Executor.Swarm.Cleanup
@@ -47,20 +49,21 @@ func New(cfg *config.Config, q queue.Consumer, store *postgres.Store, exec execu
 	}
 
 	return &Worker{
-		cfg:      cfg,
-		queue:    q,
-		store:    store,
-		executor: exec,
-		storage:  storage,
-		logger:   logger,
-		api:      api,
-		nodeID:   nodeID,
-		hostname: hostname,
-		gpuTotal: gpuTotal,
-		cleanup:  cleanup,
-		ctx:      ctx,
-		cancel:   cancel,
-		attempts: make(map[string]int),
+		cfg:         cfg,
+		queue:       q,
+		store:       store,
+		executor:    exec,
+		storage:     storage,
+		logger:      logger,
+		api:         api,
+		nodeID:      nodeID,
+		hostname:    hostname,
+		gpuTotal:    gpuTotal,
+		cleanup:     cleanup,
+		secretCodec: secretCodec,
+		ctx:         ctx,
+		cancel:      cancel,
+		attempts:    make(map[string]int),
 	}
 }
 
@@ -206,6 +209,7 @@ func (w *Worker) processJob(ctx context.Context, jobIDStr string) error {
 	// Wrap S3Store to match ObjectStorage interface
 	storageAdapter := &s3StorageAdapter{store: w.storage}
 	processor := NewProcessor(w.store, w.executor, storageAdapter, w.logger, w.cfg.API.BaseURL, w.cfg.Storage.Bucket, w.nodeID, w.cleanup)
+	processor.SetSecretCodec(w.secretCodec)
 	return processor.Process(ctx, jobID)
 }
 

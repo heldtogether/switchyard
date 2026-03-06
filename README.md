@@ -15,7 +15,8 @@ Switchyard accepts container jobs over an HTTP API, executes them on a Swarm clu
 - Hybrid authentication (API key + OIDC SSO)
 - RBAC memberships with workspace/project invites and UI invite acceptance (`/accept-invite`)
 - Workspace switcher with in-app workspace creation for authenticated users
-- Workspace-scoped registry secret lifecycle (create/list/deactivate/rotate) surfaced in project settings UI
+- Workspace-scoped registry secret lifecycle (create/list/deactivate/rotate) surfaced in workspace settings UI
+- Registry secrets encrypted at rest with AES-256-GCM (decrypt only at worker pull time)
 
 ## Quick Start (Local Dev)
 ```bash
@@ -65,6 +66,8 @@ examples/       # Example jobs and helper scripts
 - For OIDC with separate UI/API origins, set `api.auth.oidc.post_login_redirect` and `post_logout_redirect` to absolute UI URLs (for example `http://localhost:5173/` and `http://localhost:5173/login`).
 - `api.auth.oidc.logout_url` is optional. When set, `GET /v1/auth/logout` clears the local session and redirects to that IdP logout URL.
 - RBAC is configurable under `api.rbac` (workspace + project memberships, token invites, and service-account allowlists for API key auth).
+- Registry secret encryption is configured under `api.registry_secrets.encryption` (`REGISTRY_SECRETS_*` env vars, including `*_FILE` forms).
+- To backfill legacy plaintext secrets after enabling encryption metadata migration, run: `go run ./cmd/secretmigrate -config config.yaml` (use `-dry-run` first).
 
 ## Documentation Map
 - `AGENTS.md`: contributor guide and repo conventions

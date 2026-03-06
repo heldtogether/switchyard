@@ -2,9 +2,11 @@ package testutil
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -74,21 +76,66 @@ func SetupTestPostgres(t *testing.T) *PostgresContainer {
 	// Find migrations directory - it should be at project root
 	// Try common paths relative to where tests run
 	migrationsPath := findMigrationsPath(t)
-	m, err := migrate.New(migrationsPath, connStr)
-	require.NoError(t, err, "failed to create migrate instance for path: %s", migrationsPath)
-
-	err = m.Up()
-	require.NoError(t, err, "failed to run migrations")
-
-	// Close migrate instance
-	sourceErr, dbErr := m.Close()
-	require.NoError(t, sourceErr, "failed to close migration source")
-	require.NoError(t, dbErr, "failed to close migration database")
+	require.NoError(t, runMigrationsWithRetry(migrationsPath, connStr), "failed to run migrations")
 
 	return &PostgresContainer{
 		ConnString: connStr,
 		container:  container,
 	}
+}
+
+func runMigrationsWithRetry(migrationsPath, connStr string) error {
+	var lastErr error
+	for attempt := 1; attempt <= 20; attempt++ {
+		m, err := migrate.New(migrationsPath, connStr)
+		if err != nil {
+			lastErr = err
+			if isRetryablePGConnectErr(err) {
+				time.Sleep(250 * time.Millisecond)
+				continue
+			}
+			return err
+		}
+
+		upErr := m.Up()
+		sourceErr, dbErr := m.Close()
+		if sourceErr != nil {
+			return sourceErr
+		}
+		if dbErr != nil {
+			if isRetryablePGConnectErr(dbErr) {
+				lastErr = dbErr
+				time.Sleep(250 * time.Millisecond)
+				continue
+			}
+			return dbErr
+		}
+
+		if upErr == nil || errors.Is(upErr, migrate.ErrNoChange) {
+			return nil
+		}
+		if isRetryablePGConnectErr(upErr) {
+			lastErr = upErr
+			time.Sleep(250 * time.Millisecond)
+			continue
+		}
+		return upErr
+	}
+	if lastErr == nil {
+		lastErr = fmt.Errorf("migration failed for unknown reason")
+	}
+	return fmt.Errorf("migration retries exhausted: %w", lastErr)
+}
+
+func isRetryablePGConnectErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "connect: connection refused") ||
+		strings.Contains(msg, "connection reset by peer") ||
+		strings.Contains(msg, "failed to connect") ||
+		strings.Contains(msg, "dial tcp")
 }
 
 // findMigrationsPath locates the migrations directory relative to the current working directory.

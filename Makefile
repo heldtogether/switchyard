@@ -4,6 +4,7 @@
 BINARY_API=bin/api
 BINARY_WORKER=bin/worker
 BINARY_MIGRATE=bin/migrate
+BINARY_SECRETMIGRATE=bin/secretmigrate
 DOCKER_REGISTRY?=ghcr.io/heldtogether
 VERSION?=$(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 UI_API_BASE_URL?=http://localhost:8080
@@ -20,6 +21,7 @@ build: ## Build all binaries
 	go build -ldflags="-X github.com/heldtogether/switchyard/internal/version.Version=$(VERSION)" -o $(BINARY_API) ./cmd/api
 	go build -ldflags="-X github.com/heldtogether/switchyard/internal/version.Version=$(VERSION)" -o $(BINARY_WORKER) ./cmd/worker
 	go build -o $(BINARY_MIGRATE) ./cmd/migrate
+	go build -o $(BINARY_SECRETMIGRATE) ./cmd/secretmigrate
 
 test: ## Run tests
 	go test -race -coverprofile=coverage.out ./...

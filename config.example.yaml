@@ -71,6 +71,18 @@ api:
         allowed_projects:
           default: []
 
+  registry_secrets:
+    encryption:
+      # Encrypt registry credentials at rest using AES-256-GCM.
+      enabled: true
+      # Stable key ID for the currently active key used for new writes.
+      active_key_id: "dev-key-1"
+      # Base64-encoded 32-byte key. Override in production via env / *_FILE.
+      active_key: "MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE="
+      # Optional previous key for seamless key rotation / re-wrap.
+      previous_key_id: "${REGISTRY_SECRETS_PREVIOUS_KEY_ID}"
+      previous_key: "${REGISTRY_SECRETS_PREVIOUS_KEY}"
+
 # ==============================================================================
 # Worker Configuration
 # ==============================================================================

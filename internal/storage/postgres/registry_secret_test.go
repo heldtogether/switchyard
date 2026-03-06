@@ -34,11 +34,12 @@ func TestStore_RotateRegistrySecret_CreatesNewActiveAndDeactivatesPrevious(t *te
 		Host:              "docker.io",
 		Username:          "svc-user",
 		PasswordEncrypted: "old-secret",
+		SecretEncoding:    domain.RegistrySecretEncodingPlain,
 		Active:            true,
 	}
 	require.NoError(t, store.CreateRegistrySecret(ctx, original))
 
-	rotated, err := store.RotateRegistrySecret(ctx, workspace.ID, original.ID, "new-secret", "owner@example.com")
+	rotated, err := store.RotateRegistrySecret(ctx, workspace.ID, original.ID, "new-secret", domain.RegistrySecretEncodingPlain, nil, "owner@example.com")
 	require.NoError(t, err)
 	require.NotEqual(t, original.ID, rotated.ID)
 	require.Equal(t, original.Host, rotated.Host)
@@ -76,6 +77,7 @@ func TestStore_DeactivateRegistrySecret_MarksSecretInactive(t *testing.T) {
 		Host:              "ghcr.io",
 		Username:          "bot",
 		PasswordEncrypted: "token",
+		SecretEncoding:    domain.RegistrySecretEncodingPlain,
 		Active:            true,
 	}
 	require.NoError(t, store.CreateRegistrySecret(ctx, secret))

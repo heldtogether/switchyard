@@ -70,14 +70,25 @@ func (a *API) HandleCreateRegistrySecret(w http.ResponseWriter, r *http.Request)
 	}
 
 	secret := &domain.RegistrySecret{
-		ID:                uuid.New(),
-		CreatedBy:         ActorFromRequest(r),
-		WorkspaceID:       workspace.ID,
-		Host:              host,
-		Username:          username,
-		PasswordEncrypted: password,
-		Active:            true,
+		ID:          uuid.New(),
+		CreatedBy:   ActorFromRequest(r),
+		WorkspaceID: workspace.ID,
+		Host:        host,
+		Username:    username,
+		Active:      true,
 	}
+	encryptedPassword, encoding, keyID, err := a.secretCodec.Encrypt(secret.WorkspaceID, secret.Host, secret.Username, password)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{
+			Error:   "internal_error",
+			Message: "Failed to encrypt registry secret",
+			Code:    http.StatusInternalServerError,
+		})
+		return
+	}
+	secret.PasswordEncrypted = encryptedPassword
+	secret.SecretEncoding = encoding
+	secret.SecretKeyID = keyID
 
 	if err := a.store.CreateRegistrySecret(r.Context(), secret); err != nil {
 		var pqErr *pq.Error
@@ -192,7 +203,19 @@ func (a *API) HandleRotateRegistrySecret(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	rotated, err := a.store.RotateRegistrySecret(r.Context(), workspace.ID, secretID, password, ActorFromRequest(r))
+	existing, err := a.store.GetActiveRegistrySecretForWorkspace(r.Context(), workspace.ID, secretID)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "not_found", Message: "Registry secret not found", Code: http.StatusNotFound})
+		return
+	}
+
+	encryptedPassword, encoding, keyID, err := a.secretCodec.Encrypt(existing.WorkspaceID, existing.Host, existing.Username, password)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "internal_error", Message: "Failed to encrypt registry secret", Code: http.StatusInternalServerError})
+		return
+	}
+
+	rotated, err := a.store.RotateRegistrySecret(r.Context(), workspace.ID, secretID, encryptedPassword, encoding, keyID, ActorFromRequest(r))
 	if err != nil {
 		var pqErr *pq.Error
 		if errors.As(err, &pqErr) && pqErr.Code == "23505" {

@@ -23,6 +23,7 @@ import (
 	"github.com/heldtogether/switchyard/internal/executor"
 	dockerexec "github.com/heldtogether/switchyard/internal/executor/docker"
 	swarmexec "github.com/heldtogether/switchyard/internal/executor/swarm"
+	"github.com/heldtogether/switchyard/internal/registrysecrets"
 	"github.com/heldtogether/switchyard/internal/storage/objectstore"
 	"github.com/heldtogether/switchyard/internal/storage/postgres"
 	"github.com/heldtogether/switchyard/internal/storage/queue"
@@ -161,9 +162,14 @@ func main() {
 
 	// Build base URL
 	baseURL := fmt.Sprintf("http://%s:%d", cfg.API.Host, cfg.API.Port)
+	secretCodec, err := registrysecrets.NewCodec(cfg.API.RegistrySecrets.Encryption)
+	if err != nil {
+		logger.Error("failed to initialize registry secret encryption", "error", err)
+		os.Exit(1)
+	}
 
 	// Create API
-	apiInstance := api.New(cfg, store, producer, s3Store, exec, logger, baseURL)
+	apiInstance := api.New(cfg, store, producer, s3Store, exec, logger, baseURL, secretCodec)
 
 	// Create and start server
 	server := api.NewServer(cfg, apiInstance, logger)

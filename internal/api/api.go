@@ -10,6 +10,7 @@ import (
 
 	"github.com/heldtogether/switchyard/internal/config"
 	"github.com/heldtogether/switchyard/internal/executor"
+	"github.com/heldtogether/switchyard/internal/registrysecrets"
 	"github.com/heldtogether/switchyard/internal/storage/objectstore"
 	"github.com/heldtogether/switchyard/internal/storage/postgres"
 	"github.com/heldtogether/switchyard/internal/storage/queue"
@@ -17,31 +18,33 @@ import (
 
 // API holds the API dependencies
 type API struct {
-	cfg      *config.Config
-	store    *postgres.Store
-	queue    queue.Producer
-	storage  *objectstore.S3Store
-	executor executor.Executor
-	logger   *slog.Logger
-	baseURL  string
-	auth     *AuthManager
+	cfg         *config.Config
+	store       *postgres.Store
+	queue       queue.Producer
+	storage     *objectstore.S3Store
+	executor    executor.Executor
+	logger      *slog.Logger
+	baseURL     string
+	auth        *AuthManager
+	secretCodec *registrysecrets.Codec
 }
 
 // New creates a new API instance
-func New(cfg *config.Config, store *postgres.Store, q queue.Producer, storage *objectstore.S3Store, exec executor.Executor, logger *slog.Logger, baseURL string) *API {
+func New(cfg *config.Config, store *postgres.Store, q queue.Producer, storage *objectstore.S3Store, exec executor.Executor, logger *slog.Logger, baseURL string, secretCodec *registrysecrets.Codec) *API {
 	if cfg.API.RBAC.SingleTenant {
 		if _, err := store.EnsureWorkspace(context.Background(), cfg.API.RBAC.DefaultWorkspaceSlug, "Default Workspace"); err != nil {
 			logger.Error("failed to ensure default workspace", "workspace", cfg.API.RBAC.DefaultWorkspaceSlug, "error", err)
 		}
 	}
 	return &API{
-		cfg:      cfg,
-		store:    store,
-		queue:    q,
-		storage:  storage,
-		executor: exec,
-		logger:   logger,
-		baseURL:  baseURL,
+		cfg:         cfg,
+		store:       store,
+		queue:       q,
+		storage:     storage,
+		executor:    exec,
+		logger:      logger,
+		baseURL:     baseURL,
+		secretCodec: secretCodec,
 	}
 }
 

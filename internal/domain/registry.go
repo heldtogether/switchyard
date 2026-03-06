@@ -6,6 +6,11 @@ import (
 	"github.com/google/uuid"
 )
 
+const (
+	RegistrySecretEncodingPlain  = "plain"
+	RegistrySecretEncodingAEADV1 = "aead_v1"
+)
+
 // RegistrySecret holds credentials for private Docker registries
 type RegistrySecret struct {
 	ID                uuid.UUID `json:"id"`
@@ -15,6 +20,8 @@ type RegistrySecret struct {
 	Host              string    `json:"host"` // e.g., "docker.io", "gcr.io", "registry.company.com"
 	Username          string    `json:"username"`
 	PasswordEncrypted string    `json:"-"` // Never expose in JSON
+	SecretEncoding    string    `json:"-"`
+	SecretKeyID       *string   `json:"-"`
 	Active            bool      `json:"active"`
 	DeactivatedAt     *time.Time
 	DeactivatedBy     *string

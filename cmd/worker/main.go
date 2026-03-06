@@ -14,6 +14,7 @@ import (
 	"github.com/heldtogether/switchyard/internal/executor"
 	dockerexec "github.com/heldtogether/switchyard/internal/executor/docker"
 	"github.com/heldtogether/switchyard/internal/executor/swarm"
+	"github.com/heldtogether/switchyard/internal/registrysecrets"
 	"github.com/heldtogether/switchyard/internal/storage/objectstore"
 	"github.com/heldtogether/switchyard/internal/storage/postgres"
 	"github.com/heldtogether/switchyard/internal/storage/queue"
@@ -190,9 +191,14 @@ func main() {
 		apiBaseURL = fmt.Sprintf("http://%s:%d", cfg.API.Host, cfg.API.Port)
 	}
 	apiClient := worker.NewAPIClient(apiBaseURL, cfg.API.Auth.APIKey)
+	secretCodec, err := registrysecrets.NewCodec(cfg.API.RegistrySecrets.Encryption)
+	if err != nil {
+		logger.Error("failed to initialize registry secret encryption", "error", err)
+		os.Exit(1)
+	}
 
 	// Create worker
-	w := worker.New(cfg, consumer, store, exec, s3Store, logger, apiClient, nodeID, hostname, gpuTotal)
+	w := worker.New(cfg, consumer, store, exec, s3Store, logger, apiClient, nodeID, hostname, gpuTotal, secretCodec)
 
 	// Start worker
 	if err := w.Start(); err != nil {
