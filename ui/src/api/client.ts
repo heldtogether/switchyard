@@ -60,10 +60,9 @@ export async function fetchText(path: string, init?: RequestInit): Promise<strin
   return res.text();
 }
 
-export function shouldUseMocks(error: unknown) {
+export function shouldUseMocks(_error: unknown) {
   return (
     runtimeEnv.USE_MOCKS === "true" ||
-    import.meta.env.VITE_USE_MOCKS === "true" ||
-    (error instanceof ApiError && (error.status === 404 || error.status === 501))
+    import.meta.env.VITE_USE_MOCKS === "true"
   );
 }
