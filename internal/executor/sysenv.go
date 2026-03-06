@@ -2,6 +2,7 @@ package executor
 
 import (
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -56,6 +57,9 @@ func BuildSystemEnv(spec RunSpec) []string {
 	}
 	if spec.GPUCount > 0 {
 		env = append(env, fmt.Sprintf("SWITCHYARD_GPU_COUNT=%d", spec.GPUCount))
+		if len(spec.GPUDeviceIDs) > 0 {
+			env = append(env, fmt.Sprintf("SWITCHYARD_GPU_DEVICE_IDS=%s", strings.Join(spec.GPUDeviceIDs, ",")))
+		}
 	}
 
 	// Add user environment variables after system ones

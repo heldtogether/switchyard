@@ -215,11 +215,12 @@ type ErrorResponse struct {
 
 // RegisterWorkerRequest registers a worker node
 type RegisterWorkerRequest struct {
-	NodeID   string            `json:"node_id"`
-	Hostname string            `json:"hostname"`
-	Executor string            `json:"executor"`
-	GPUTotal int               `json:"gpu_total"`
-	Labels   map[string]string `json:"labels,omitempty"`
+	NodeID       string            `json:"node_id"`
+	Hostname     string            `json:"hostname"`
+	Executor     string            `json:"executor"`
+	GPUTotal     int               `json:"gpu_total"`
+	GPUDeviceIDs []string          `json:"gpu_device_ids,omitempty"`
+	Labels       map[string]string `json:"labels,omitempty"`
 }
 
 // RegisterWorkerResponse is returned on successful registration
@@ -230,8 +231,9 @@ type RegisterWorkerResponse struct {
 
 // WorkerHeartbeatRequest updates worker heartbeat
 type WorkerHeartbeatRequest struct {
-	NodeID   string `json:"node_id"`
-	GPUTotal int    `json:"gpu_total"`
+	NodeID       string   `json:"node_id"`
+	GPUTotal     int      `json:"gpu_total"`
+	GPUDeviceIDs []string `json:"gpu_device_ids,omitempty"`
 }
 
 // AllocationClaimRequest claims GPU allocation for a job on a node
@@ -245,6 +247,7 @@ type AllocationClaimResponse struct {
 	AllocationID uuid.UUID `json:"allocation_id"`
 	NodeID       string    `json:"node_id"`
 	GPUCount     int       `json:"gpu_count"`
+	DeviceIDs    []string  `json:"device_ids,omitempty"`
 }
 
 // AllocationReleaseRequest releases an allocation

@@ -41,12 +41,22 @@ func (a *API) HandleRegisterWorker(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	if len(req.GPUDeviceIDs) > 0 && len(req.GPUDeviceIDs) != req.GPUTotal {
+		a.logger.Warn("worker register gpu inventory mismatch", "remote", r.RemoteAddr, "node_id", req.NodeID, "gpu_total", req.GPUTotal, "gpu_device_ids", len(req.GPUDeviceIDs))
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{
+			Error:   "validation_error",
+			Message: "gpu_device_ids must match gpu_total when provided",
+			Code:    http.StatusBadRequest,
+		})
+		return
+	}
 
 	node := &domain.Node{
 		ID:            req.NodeID,
 		Hostname:      req.Hostname,
 		Executor:      domain.ExecutorType(req.Executor),
 		GPUTotal:      req.GPUTotal,
+		GPUDeviceIDs:  req.GPUDeviceIDs,
 		LastHeartbeat: time.Now(),
 	}
 
@@ -98,8 +108,17 @@ func (a *API) HandleWorkerHeartbeat(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	if len(req.GPUDeviceIDs) > 0 && len(req.GPUDeviceIDs) != req.GPUTotal {
+		a.logger.Warn("worker heartbeat gpu inventory mismatch", "remote", r.RemoteAddr, "node_id", req.NodeID, "gpu_total", req.GPUTotal, "gpu_device_ids", len(req.GPUDeviceIDs))
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{
+			Error:   "validation_error",
+			Message: "gpu_device_ids must match gpu_total when provided",
+			Code:    http.StatusBadRequest,
+		})
+		return
+	}
 
-	if err := a.store.UpdateNodeHeartbeat(r.Context(), req.NodeID, req.GPUTotal); err != nil {
+	if err := a.store.UpdateNodeHeartbeat(r.Context(), req.NodeID, req.GPUTotal, req.GPUDeviceIDs); err != nil {
 		if err == postgres.ErrNodeNotFound {
 			a.logger.Warn("worker heartbeat node not found", "node_id", req.NodeID)
 			writeJSON(w, http.StatusNotFound, ErrorResponse{

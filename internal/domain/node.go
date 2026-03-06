@@ -13,6 +13,7 @@ type Node struct {
 	Hostname      string       `json:"hostname"`
 	Executor      ExecutorType `json:"executor"`
 	GPUTotal      int          `json:"gpu_total"`
+	GPUDeviceIDs  []string     `json:"gpu_device_ids,omitempty"`
 	LastHeartbeat time.Time    `json:"last_heartbeat"`
 	IsActive      bool         `json:"is_active"`
 	StaleAt       *time.Time   `json:"stale_at,omitempty"`
@@ -27,6 +28,7 @@ type GPUAllocation struct {
 	JobID       uuid.UUID  `json:"job_id"`
 	NodeID      string     `json:"node_id"`
 	GPUCount    int        `json:"gpu_count"`
+	DeviceIDs   []string   `json:"device_ids,omitempty"`
 	AllocatedAt time.Time  `json:"allocated_at"`
 	ReleasedAt  *time.Time `json:"released_at,omitempty"`
 }

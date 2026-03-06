@@ -94,14 +94,25 @@ func main() {
 	}
 
 	gpuTotal := cfg.Worker.GPUCount
+	gpuDeviceIDs := make([]string, 0, gpuTotal)
+	dockerHost := cfg.Executor.Swarm.DockerHost
+	if cfg.Executor.Type == "docker" {
+		dockerHost = cfg.Executor.Docker.DockerHost
+	}
+
 	if gpuTotal <= 0 {
-		dockerHost := cfg.Executor.Swarm.DockerHost
-		if cfg.Executor.Type == "docker" {
-			dockerHost = cfg.Executor.Docker.DockerHost
-		}
 		logger.Info("detecting number of GPUs on this node")
-		gpuTotal = worker.DetectGPUCountViaDocker(context.Background(), dockerHost, cfg.Worker.GPUDetectImage)
+		gpuDeviceIDs = worker.DetectGPUDeviceIDsViaDocker(context.Background(), dockerHost, cfg.Worker.GPUDetectImage)
+		gpuTotal = len(gpuDeviceIDs)
 		logger.Info("found GPUs on this node", "numNodes", gpuTotal)
+	} else {
+		gpuDeviceIDs = worker.DetectGPUDeviceIDsViaDocker(context.Background(), dockerHost, cfg.Worker.GPUDetectImage)
+		if len(gpuDeviceIDs) != gpuTotal {
+			gpuDeviceIDs = make([]string, 0, gpuTotal)
+			for i := 0; i < gpuTotal; i++ {
+				gpuDeviceIDs = append(gpuDeviceIDs, fmt.Sprintf("%d", i))
+			}
+		}
 	}
 
 	// Initialize queue
@@ -198,7 +209,7 @@ func main() {
 	}
 
 	// Create worker
-	w := worker.New(cfg, consumer, store, exec, s3Store, logger, apiClient, nodeID, hostname, gpuTotal, secretCodec)
+	w := worker.New(cfg, consumer, store, exec, s3Store, logger, apiClient, nodeID, hostname, gpuTotal, gpuDeviceIDs, secretCodec)
 
 	// Start worker
 	if err := w.Start(); err != nil {

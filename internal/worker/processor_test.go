@@ -199,6 +199,7 @@ func TestProcessor_Process_Success(t *testing.T) {
 	ctx := context.Background()
 	workspace, project, run := createTestHierarchy()
 	job := createTestJob(run.ID)
+	job.GPUCount = 1
 
 	mockStore := new(MockStore)
 	mockExecutor := new(MockExecutor)
@@ -222,7 +223,9 @@ func TestProcessor_Process_Success(t *testing.T) {
 		ExecutorType: "swarm",
 		Reference:    "service-123",
 	}
-	mockExecutor.On("CreateRun", ctx, mock.Anything).Return(ref, nil)
+	mockExecutor.On("CreateRun", ctx, mock.MatchedBy(func(spec executor.RunSpec) bool {
+		return spec.GPUCount == 1 && len(spec.GPUDeviceIDs) == 1 && spec.GPUDeviceIDs[0] == "0"
+	})).Return(ref, nil)
 
 	result := executor.Result{
 		Status:     executor.StatusSuccess,
@@ -248,7 +251,7 @@ func TestProcessor_Process_Success(t *testing.T) {
 	mockExecutor.On("Cleanup", ctx, ref).Return(nil)
 
 	// Execute
-	err := processor.Process(ctx, job.ID)
+	err := processor.ProcessWithAllocation(ctx, job.ID, []string{"0"})
 
 	// Verify
 	assert.NoError(t, err)

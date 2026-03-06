@@ -127,16 +127,18 @@ func (c *APIClient) postWithStatus(ctx context.Context, path string, payload any
 // Local copies of API DTOs
 
 type RegisterWorkerRequest struct {
-	NodeID   string            `json:"node_id"`
-	Hostname string            `json:"hostname"`
-	Executor string            `json:"executor"`
-	GPUTotal int               `json:"gpu_total"`
-	Labels   map[string]string `json:"labels,omitempty"`
+	NodeID       string            `json:"node_id"`
+	Hostname     string            `json:"hostname"`
+	Executor     string            `json:"executor"`
+	GPUTotal     int               `json:"gpu_total"`
+	GPUDeviceIDs []string          `json:"gpu_device_ids,omitempty"`
+	Labels       map[string]string `json:"labels,omitempty"`
 }
 
 type WorkerHeartbeatRequest struct {
-	NodeID   string `json:"node_id"`
-	GPUTotal int    `json:"gpu_total"`
+	NodeID       string   `json:"node_id"`
+	GPUTotal     int      `json:"gpu_total"`
+	GPUDeviceIDs []string `json:"gpu_device_ids,omitempty"`
 }
 
 type AllocationClaimRequest struct {
@@ -148,6 +150,7 @@ type AllocationClaimResponse struct {
 	AllocationID uuid.UUID `json:"allocation_id"`
 	NodeID       string    `json:"node_id"`
 	GPUCount     int       `json:"gpu_count"`
+	DeviceIDs    []string  `json:"device_ids,omitempty"`
 }
 
 type AllocationReleaseRequest struct {

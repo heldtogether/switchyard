@@ -58,9 +58,25 @@ func DetectGPUCount(ctx context.Context) int {
 	return count
 }
 
+// DetectGPUDeviceIDs returns stable NVIDIA device indexes from nvidia-smi.
+func DetectGPUDeviceIDs(ctx context.Context) []string {
+	cmd := exec.CommandContext(ctx, "nvidia-smi", "--query-gpu=index", "--format=csv,noheader")
+	out, err := cmd.Output()
+	if err != nil {
+		return nil
+	}
+	return parseGPUDeviceIDs(string(out))
+}
+
 // DetectGPUCountViaDocker runs nvidia-smi in a short-lived container and counts GPUs.
 // Returns 0 on failure.
 func DetectGPUCountViaDocker(ctx context.Context, dockerHost string, detectImage string) int {
+	return len(DetectGPUDeviceIDsViaDocker(ctx, dockerHost, detectImage))
+}
+
+// DetectGPUDeviceIDsViaDocker runs nvidia-smi in a short-lived container and returns device indexes.
+// Returns nil on failure.
+func DetectGPUDeviceIDsViaDocker(ctx context.Context, dockerHost string, detectImage string) []string {
 	if detectImage == "" {
 		detectImage = defaultGPUDetectImage
 	}
@@ -70,18 +86,18 @@ func DetectGPUCountViaDocker(ctx context.Context, dockerHost string, detectImage
 
 	cli, err := client.NewClientWithOpts(client.WithHost(dockerHost), client.WithAPIVersionNegotiation())
 	if err != nil {
-		return 0
+		return nil
 	}
 	defer cli.Close()
 
 	if err := ensureImagePresent(ctx, cli, detectImage); err != nil {
-		return 0
+		return nil
 	}
 
 	resp, err := cli.ContainerCreate(ctx, &container.Config{
 		Image:      detectImage,
 		Entrypoint: []string{"nvidia-smi"},
-		Cmd:        []string{"-L"},
+		Cmd:        []string{"--query-gpu=index", "--format=csv,noheader"},
 		Tty:        false,
 	}, &container.HostConfig{
 		Resources: container.Resources{
@@ -95,23 +111,23 @@ func DetectGPUCountViaDocker(ctx context.Context, dockerHost string, detectImage
 		},
 	}, nil, nil, "")
 	if err != nil {
-		return 0
+		return nil
 	}
 	defer cli.ContainerRemove(context.Background(), resp.ID, container.RemoveOptions{Force: true})
 
 	if err := cli.ContainerStart(ctx, resp.ID, container.StartOptions{}); err != nil {
-		return 0
+		return nil
 	}
 
 	statusCh, errCh := cli.ContainerWait(ctx, resp.ID, container.WaitConditionNotRunning)
 	select {
 	case err := <-errCh:
 		if err != nil {
-			return 0
+			return nil
 		}
 	case <-statusCh:
 	case <-ctx.Done():
-		return 0
+		return nil
 	}
 
 	logs, err := cli.ContainerLogs(ctx, resp.ID, container.LogsOptions{
@@ -119,17 +135,17 @@ func DetectGPUCountViaDocker(ctx context.Context, dockerHost string, detectImage
 		ShowStderr: true,
 	})
 	if err != nil {
-		return 0
+		return nil
 	}
 	defer logs.Close()
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	if _, err := stdcopy.StdCopy(&stdout, &stderr, logs); err != nil {
-		return 0
+		return nil
 	}
 
-	return countGPULines(stdout.String())
+	return parseGPUDeviceIDs(stdout.String())
 }
 
 func countGPULines(output string) int {
@@ -141,6 +157,19 @@ func countGPULines(output string) int {
 		}
 	}
 	return count
+}
+
+func parseGPUDeviceIDs(output string) []string {
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	ids := make([]string, 0, len(lines))
+	for _, line := range lines {
+		id := strings.TrimSpace(line)
+		if id == "" {
+			continue
+		}
+		ids = append(ids, id)
+	}
+	return ids
 }
 
 func ensureImagePresent(ctx context.Context, cli *client.Client, imageRef string) error {

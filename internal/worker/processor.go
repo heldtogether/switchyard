@@ -48,6 +48,11 @@ func (p *Processor) SetSecretCodec(codec *registrysecrets.Codec) {
 
 // Process executes a single job from start to finish
 func (p *Processor) Process(ctx context.Context, jobID uuid.UUID) error {
+	return p.ProcessWithAllocation(ctx, jobID, nil)
+}
+
+// ProcessWithAllocation executes a job using a pre-claimed GPU device set.
+func (p *Processor) ProcessWithAllocation(ctx context.Context, jobID uuid.UUID, gpuDeviceIDs []string) error {
 	logger := p.logger.With("job_id", jobID)
 	logger.Info("starting job processing")
 
@@ -126,6 +131,7 @@ func (p *Processor) Process(ctx context.Context, jobID uuid.UUID) error {
 		CPU:               stringPtrValue(job.CPULimit),
 		Memory:            stringPtrValue(job.MemoryLimit),
 		GPUCount:          job.GPUCount,
+		GPUDeviceIDs:      gpuDeviceIDs,
 		Timeout:           time.Duration(job.TimeoutSecs) * time.Second,
 		RegistryAuth:      registryAuth,
 		CreatedAt:         job.CreatedAt,

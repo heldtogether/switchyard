@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -13,6 +14,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func makeGPUDeviceIDs(total int) []string {
+	ids := make([]string, 0, total)
+	for i := 0; i < total; i++ {
+		ids = append(ids, fmt.Sprintf("%d", i))
+	}
+	return ids
+}
+
 func TestClaimGPUAllocation_HappyPath(t *testing.T) {
 	store, cleanup := setupTestDB(t)
 	defer cleanup()
@@ -21,10 +30,11 @@ func TestClaimGPUAllocation_HappyPath(t *testing.T) {
 	_, _, run := setupTestHierarchy(t, store, ctx)
 
 	node := &domain.Node{
-		ID:       "node-1",
-		Hostname: "node-1",
-		Executor: domain.ExecutorTypeSwarm,
-		GPUTotal: 2,
+		ID:           "node-1",
+		Hostname:     "node-1",
+		Executor:     domain.ExecutorTypeSwarm,
+		GPUTotal:     2,
+		GPUDeviceIDs: makeGPUDeviceIDs(2),
 	}
 	require.NoError(t, store.UpsertNode(ctx, node))
 
@@ -45,6 +55,7 @@ func TestClaimGPUAllocation_HappyPath(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, alloc.GPUCount)
 	require.Equal(t, node.ID, alloc.NodeID)
+	require.Equal(t, []string{"0"}, alloc.DeviceIDs)
 
 	updated, err := store.GetJob(ctx, job.ID)
 	require.NoError(t, err)
@@ -60,10 +71,11 @@ func TestClaimGPUAllocation_Insufficient(t *testing.T) {
 	_, _, run := setupTestHierarchy(t, store, ctx)
 
 	node := &domain.Node{
-		ID:       "node-2",
-		Hostname: "node-2",
-		Executor: domain.ExecutorTypeSwarm,
-		GPUTotal: 1,
+		ID:           "node-2",
+		Hostname:     "node-2",
+		Executor:     domain.ExecutorTypeSwarm,
+		GPUTotal:     1,
+		GPUDeviceIDs: makeGPUDeviceIDs(1),
 	}
 	require.NoError(t, store.UpsertNode(ctx, node))
 
@@ -106,10 +118,11 @@ func TestClaimGPUAllocation_NodeInactive(t *testing.T) {
 	_, _, run := setupTestHierarchy(t, store, ctx)
 
 	node := &domain.Node{
-		ID:       "node-3",
-		Hostname: "node-3",
-		Executor: domain.ExecutorTypeSwarm,
-		GPUTotal: 2,
+		ID:           "node-3",
+		Hostname:     "node-3",
+		Executor:     domain.ExecutorTypeSwarm,
+		GPUTotal:     2,
+		GPUDeviceIDs: makeGPUDeviceIDs(2),
 	}
 	require.NoError(t, store.UpsertNode(ctx, node))
 
@@ -140,10 +153,11 @@ func TestMarkStaleNodes(t *testing.T) {
 	ctx := context.Background()
 
 	node := &domain.Node{
-		ID:       "node-4",
-		Hostname: "node-4",
-		Executor: domain.ExecutorTypeSwarm,
-		GPUTotal: 1,
+		ID:           "node-4",
+		Hostname:     "node-4",
+		Executor:     domain.ExecutorTypeSwarm,
+		GPUTotal:     1,
+		GPUDeviceIDs: makeGPUDeviceIDs(1),
 	}
 	require.NoError(t, store.UpsertNode(ctx, node))
 
@@ -171,10 +185,11 @@ func TestClaimGPUAllocation_Concurrent(t *testing.T) {
 	_, _, run := setupTestHierarchy(t, store, ctx)
 
 	node := &domain.Node{
-		ID:       "node-concurrent",
-		Hostname: "node-concurrent",
-		Executor: domain.ExecutorTypeSwarm,
-		GPUTotal: 2,
+		ID:           "node-concurrent",
+		Hostname:     "node-concurrent",
+		Executor:     domain.ExecutorTypeSwarm,
+		GPUTotal:     2,
+		GPUDeviceIDs: makeGPUDeviceIDs(2),
 	}
 	require.NoError(t, store.UpsertNode(ctx, node))
 
@@ -247,10 +262,11 @@ func TestClaimGPUAllocation_Idempotent(t *testing.T) {
 	_, _, run := setupTestHierarchy(t, store, ctx)
 
 	node := &domain.Node{
-		ID:       "node-idempotent",
-		Hostname: "node-idempotent",
-		Executor: domain.ExecutorTypeSwarm,
-		GPUTotal: 2,
+		ID:           "node-idempotent",
+		Hostname:     "node-idempotent",
+		Executor:     domain.ExecutorTypeSwarm,
+		GPUTotal:     2,
+		GPUDeviceIDs: makeGPUDeviceIDs(2),
 	}
 	require.NoError(t, store.UpsertNode(ctx, node))
 
@@ -273,6 +289,7 @@ func TestClaimGPUAllocation_Idempotent(t *testing.T) {
 	alloc2, err := store.ClaimGPUAllocation(ctx, job.ID, node.ID)
 	require.NoError(t, err)
 	require.Equal(t, alloc1.ID, alloc2.ID)
+	require.Equal(t, alloc1.DeviceIDs, alloc2.DeviceIDs)
 }
 
 func TestUpdateNodeHeartbeat_Reactivates(t *testing.T) {
@@ -282,17 +299,18 @@ func TestUpdateNodeHeartbeat_Reactivates(t *testing.T) {
 	ctx := context.Background()
 
 	node := &domain.Node{
-		ID:       "node-reactivate",
-		Hostname: "node-reactivate",
-		Executor: domain.ExecutorTypeSwarm,
-		GPUTotal: 1,
+		ID:           "node-reactivate",
+		Hostname:     "node-reactivate",
+		Executor:     domain.ExecutorTypeSwarm,
+		GPUTotal:     1,
+		GPUDeviceIDs: makeGPUDeviceIDs(1),
 	}
 	require.NoError(t, store.UpsertNode(ctx, node))
 
 	_, err := store.db.ExecContext(ctx, `UPDATE nodes SET is_active = false, stale_at = NOW() WHERE node_id = $1`, node.ID)
 	require.NoError(t, err)
 
-	require.NoError(t, store.UpdateNodeHeartbeat(ctx, node.ID, 1))
+	require.NoError(t, store.UpdateNodeHeartbeat(ctx, node.ID, 1, makeGPUDeviceIDs(1)))
 
 	var isActive bool
 	var staleAt *time.Time
@@ -310,10 +328,11 @@ func TestReleaseGPUAllocation_Reenable(t *testing.T) {
 	_, _, run := setupTestHierarchy(t, store, ctx)
 
 	node := &domain.Node{
-		ID:       "node-release",
-		Hostname: "node-release",
-		Executor: domain.ExecutorTypeSwarm,
-		GPUTotal: 1,
+		ID:           "node-release",
+		Hostname:     "node-release",
+		Executor:     domain.ExecutorTypeSwarm,
+		GPUTotal:     1,
+		GPUDeviceIDs: makeGPUDeviceIDs(1),
 	}
 	require.NoError(t, store.UpsertNode(ctx, node))
 
@@ -329,8 +348,9 @@ func TestReleaseGPUAllocation_Reenable(t *testing.T) {
 		GPUCount:    1,
 	}
 	require.NoError(t, store.CreateJob(ctx, jobA))
-	_, err := store.ClaimGPUAllocation(ctx, jobA.ID, node.ID)
+	allocA, err := store.ClaimGPUAllocation(ctx, jobA.ID, node.ID)
 	require.NoError(t, err)
+	require.Equal(t, []string{"0"}, allocA.DeviceIDs)
 
 	require.NoError(t, store.ReleaseGPUAllocation(ctx, jobA.ID, node.ID))
 
@@ -346,6 +366,7 @@ func TestReleaseGPUAllocation_Reenable(t *testing.T) {
 		GPUCount:    1,
 	}
 	require.NoError(t, store.CreateJob(ctx, jobB))
-	_, err = store.ClaimGPUAllocation(ctx, jobB.ID, node.ID)
+	allocB, err := store.ClaimGPUAllocation(ctx, jobB.ID, node.ID)
 	require.NoError(t, err)
+	require.Equal(t, []string{"0"}, allocB.DeviceIDs)
 }

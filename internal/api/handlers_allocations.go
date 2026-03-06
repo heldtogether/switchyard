@@ -61,6 +61,7 @@ func (a *API) HandleClaimAllocation(w http.ResponseWriter, r *http.Request) {
 		AllocationID: allocation.ID,
 		NodeID:       allocation.NodeID,
 		GPUCount:     allocation.GPUCount,
+		DeviceIDs:    allocation.DeviceIDs,
 	})
 }
 

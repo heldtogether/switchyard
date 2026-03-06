@@ -19,28 +19,29 @@ import (
 
 // Worker polls for jobs and executes them
 type Worker struct {
-	cfg         *config.Config
-	queue       queue.Consumer
-	store       *postgres.Store
-	executor    executor.Executor
-	storage     *objectstore.S3Store
-	logger      *slog.Logger
-	api         *APIClient
-	nodeID      string
-	hostname    string
-	gpuTotal    int
-	cleanup     config.CleanupConfig
-	secretCodec *registrysecrets.Codec
-	wg          sync.WaitGroup
-	ctx         context.Context
-	cancel      context.CancelFunc
+	cfg          *config.Config
+	queue        queue.Consumer
+	store        *postgres.Store
+	executor     executor.Executor
+	storage      *objectstore.S3Store
+	logger       *slog.Logger
+	api          *APIClient
+	nodeID       string
+	hostname     string
+	gpuTotal     int
+	gpuDeviceIDs []string
+	cleanup      config.CleanupConfig
+	secretCodec  *registrysecrets.Codec
+	wg           sync.WaitGroup
+	ctx          context.Context
+	cancel       context.CancelFunc
 
 	attempts   map[string]int
 	attemptsMu sync.Mutex
 }
 
 // New creates a new Worker
-func New(cfg *config.Config, q queue.Consumer, store *postgres.Store, exec executor.Executor, storage *objectstore.S3Store, logger *slog.Logger, api *APIClient, nodeID, hostname string, gpuTotal int, secretCodec *registrysecrets.Codec) *Worker {
+func New(cfg *config.Config, q queue.Consumer, store *postgres.Store, exec executor.Executor, storage *objectstore.S3Store, logger *slog.Logger, api *APIClient, nodeID, hostname string, gpuTotal int, gpuDeviceIDs []string, secretCodec *registrysecrets.Codec) *Worker {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	cleanup := cfg.Executor.Swarm.Cleanup
@@ -49,21 +50,22 @@ func New(cfg *config.Config, q queue.Consumer, store *postgres.Store, exec execu
 	}
 
 	return &Worker{
-		cfg:         cfg,
-		queue:       q,
-		store:       store,
-		executor:    exec,
-		storage:     storage,
-		logger:      logger,
-		api:         api,
-		nodeID:      nodeID,
-		hostname:    hostname,
-		gpuTotal:    gpuTotal,
-		cleanup:     cleanup,
-		secretCodec: secretCodec,
-		ctx:         ctx,
-		cancel:      cancel,
-		attempts:    make(map[string]int),
+		cfg:          cfg,
+		queue:        q,
+		store:        store,
+		executor:     exec,
+		storage:      storage,
+		logger:       logger,
+		api:          api,
+		nodeID:       nodeID,
+		hostname:     hostname,
+		gpuTotal:     gpuTotal,
+		gpuDeviceIDs: gpuDeviceIDs,
+		cleanup:      cleanup,
+		secretCodec:  secretCodec,
+		ctx:          ctx,
+		cancel:       cancel,
+		attempts:     make(map[string]int),
 	}
 }
 
@@ -73,10 +75,11 @@ func (w *Worker) Start() error {
 
 	if w.api != nil {
 		if err := w.api.RegisterWorker(w.ctx, RegisterWorkerRequest{
-			NodeID:   w.nodeID,
-			Hostname: w.hostname,
-			Executor: w.cfg.Executor.Type,
-			GPUTotal: w.gpuTotal,
+			NodeID:       w.nodeID,
+			Hostname:     w.hostname,
+			Executor:     w.cfg.Executor.Type,
+			GPUTotal:     w.gpuTotal,
+			GPUDeviceIDs: w.gpuDeviceIDs,
 		}); err != nil {
 			w.logger.Error("failed to register worker", "error", err)
 		}
@@ -159,7 +162,8 @@ func (w *Worker) workerLoop(workerID int) {
 			}
 
 			if w.api != nil {
-				_, err = w.api.ClaimAllocation(w.ctx, AllocationClaimRequest{JobID: jobID, NodeID: w.nodeID})
+				claimResp, claimErr := w.api.ClaimAllocation(w.ctx, AllocationClaimRequest{JobID: jobID, NodeID: w.nodeID})
+				err = claimErr
 				if err != nil {
 					if err == ErrInsufficientGPU {
 						retryAt := time.Now().Add(w.nextRetryDelay(jobIDStr))
@@ -175,6 +179,31 @@ func (w *Worker) workerLoop(workerID int) {
 					_ = msg.Nack(false)
 					continue
 				}
+				if claimResp == nil {
+					logger.Error("missing allocation claim response", "job_id", jobIDStr)
+					_ = msg.Nack(false)
+					continue
+				}
+
+				if err := msg.Ack(); err != nil {
+					logger.Error("failed to ack message", "job_id", jobIDStr, "error", err)
+					continue
+				}
+
+				w.resetRetry(jobIDStr)
+
+				// Process the job
+				logger.Info("processing job", "job_id", jobIDStr)
+				if err := w.processJob(w.ctx, jobIDStr, claimResp.DeviceIDs); err != nil {
+					logger.Error("failed to process job", "job_id", jobIDStr, "error", err)
+				}
+
+				if w.api != nil {
+					if err := w.api.ReleaseAllocation(w.ctx, AllocationReleaseRequest{JobID: jobID, NodeID: w.nodeID}); err != nil {
+						logger.Error("failed to release allocation", "job_id", jobIDStr, "error", err)
+					}
+				}
+				continue
 			}
 
 			if err := msg.Ack(); err != nil {
@@ -186,7 +215,7 @@ func (w *Worker) workerLoop(workerID int) {
 
 			// Process the job
 			logger.Info("processing job", "job_id", jobIDStr)
-			if err := w.processJob(w.ctx, jobIDStr); err != nil {
+			if err := w.processJob(w.ctx, jobIDStr, nil); err != nil {
 				logger.Error("failed to process job", "job_id", jobIDStr, "error", err)
 			}
 
@@ -200,7 +229,7 @@ func (w *Worker) workerLoop(workerID int) {
 }
 
 // processJob handles a single job execution
-func (w *Worker) processJob(ctx context.Context, jobIDStr string) error {
+func (w *Worker) processJob(ctx context.Context, jobIDStr string, gpuDeviceIDs []string) error {
 	jobID, err := uuid.Parse(jobIDStr)
 	if err != nil {
 		return fmt.Errorf("invalid job ID: %w", err)
@@ -210,7 +239,7 @@ func (w *Worker) processJob(ctx context.Context, jobIDStr string) error {
 	storageAdapter := &s3StorageAdapter{store: w.storage}
 	processor := NewProcessor(w.store, w.executor, storageAdapter, w.logger, w.cfg.API.BaseURL, w.cfg.Storage.Bucket, w.nodeID, w.cleanup)
 	processor.SetSecretCodec(w.secretCodec)
-	return processor.Process(ctx, jobID)
+	return processor.ProcessWithAllocation(ctx, jobID, gpuDeviceIDs)
 }
 
 func (w *Worker) heartbeatLoop() {
@@ -224,7 +253,7 @@ func (w *Worker) heartbeatLoop() {
 		case <-w.ctx.Done():
 			return
 		case <-ticker.C:
-			if err := w.api.Heartbeat(w.ctx, WorkerHeartbeatRequest{NodeID: w.nodeID, GPUTotal: w.gpuTotal}); err != nil {
+			if err := w.api.Heartbeat(w.ctx, WorkerHeartbeatRequest{NodeID: w.nodeID, GPUTotal: w.gpuTotal, GPUDeviceIDs: w.gpuDeviceIDs}); err != nil {
 				w.logger.Error("failed to send heartbeat", "error", err)
 			}
 		}

@@ -43,6 +43,7 @@ type RunSpec struct {
 	CPU          string
 	Memory       string
 	GPUCount     int
+	GPUDeviceIDs []string
 	Timeout      time.Duration
 	RegistryAuth *domain.RegistryAuth
 

@@ -3,12 +3,15 @@ package postgres
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/heldtogether/switchyard/internal/domain"
+	"github.com/lib/pq"
 )
 
 var (
@@ -19,13 +22,19 @@ var (
 
 // UpsertNode inserts or updates a node record.
 func (s *Store) UpsertNode(ctx context.Context, node *domain.Node) error {
+	deviceIDsJSON, err := json.Marshal(node.GPUDeviceIDs)
+	if err != nil {
+		return fmt.Errorf("marshal gpu_device_ids: %w", err)
+	}
+
 	query := `
-		INSERT INTO nodes (node_id, hostname, executor, gpu_total, last_heartbeat, is_active, stale_at)
-		VALUES ($1, $2, $3, $4, NOW(), true, NULL)
+		INSERT INTO nodes (node_id, hostname, executor, gpu_total, gpu_device_ids, last_heartbeat, is_active, stale_at)
+		VALUES ($1, $2, $3, $4, $5, NOW(), true, NULL)
 		ON CONFLICT (node_id) DO UPDATE
 		SET hostname = EXCLUDED.hostname,
 		    executor = EXCLUDED.executor,
 		    gpu_total = EXCLUDED.gpu_total,
+		    gpu_device_ids = EXCLUDED.gpu_device_ids,
 		    last_heartbeat = NOW(),
 		    is_active = true,
 		    stale_at = NULL,
@@ -34,17 +43,23 @@ func (s *Store) UpsertNode(ctx context.Context, node *domain.Node) error {
 	`
 
 	return s.db.QueryRowContext(ctx, query,
-		node.ID, node.Hostname, node.Executor, node.GPUTotal,
+		node.ID, node.Hostname, node.Executor, node.GPUTotal, deviceIDsJSON,
 	).Scan(&node.CreatedAt, &node.UpdatedAt, &node.LastHeartbeat, &node.IsActive, &node.StaleAt)
 }
 
 // UpdateNodeHeartbeat updates last_heartbeat and GPU total for a node.
-func (s *Store) UpdateNodeHeartbeat(ctx context.Context, nodeID string, gpuTotal int) error {
+func (s *Store) UpdateNodeHeartbeat(ctx context.Context, nodeID string, gpuTotal int, gpuDeviceIDs []string) error {
+	deviceIDsJSON, err := json.Marshal(gpuDeviceIDs)
+	if err != nil {
+		return fmt.Errorf("marshal gpu_device_ids: %w", err)
+	}
+
 	query := `
-		UPDATE nodes SET gpu_total = $1, last_heartbeat = NOW(), is_active = true, stale_at = NULL, updated_at = NOW()
-		WHERE node_id = $2
+		UPDATE nodes
+		SET gpu_total = $1, gpu_device_ids = $2, last_heartbeat = NOW(), is_active = true, stale_at = NULL, updated_at = NOW()
+		WHERE node_id = $3
 	`
-	res, err := s.db.ExecContext(ctx, query, gpuTotal, nodeID)
+	res, err := s.db.ExecContext(ctx, query, gpuTotal, deviceIDsJSON, nodeID)
 	if err != nil {
 		return err
 	}
@@ -92,14 +107,22 @@ func (s *Store) ClaimGPUAllocation(ctx context.Context, jobID uuid.UUID, nodeID 
 
 	// Lock node row
 	var nodeTotal int
+	var nodeDeviceIDsJSON []byte
 	if err := tx.QueryRowContext(ctx,
-		`SELECT gpu_total FROM nodes WHERE node_id = $1 AND is_active = true FOR UPDATE`, nodeID,
-	).Scan(&nodeTotal); err != nil {
+		`SELECT gpu_total, gpu_device_ids FROM nodes WHERE node_id = $1 AND is_active = true FOR UPDATE`, nodeID,
+	).Scan(&nodeTotal, &nodeDeviceIDsJSON); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, ErrNodeNotFound
 		}
 		return nil, fmt.Errorf("lock node: %w", err)
 	}
+	nodeDeviceIDs := make([]string, 0, nodeTotal)
+	if len(nodeDeviceIDsJSON) > 0 {
+		if err := json.Unmarshal(nodeDeviceIDsJSON, &nodeDeviceIDs); err != nil {
+			return nil, fmt.Errorf("decode node gpu_device_ids: %w", err)
+		}
+	}
+	sort.Strings(nodeDeviceIDs)
 
 	// Lock job row and read gpu_count
 	var jobGPU int
@@ -115,13 +138,13 @@ func (s *Store) ClaimGPUAllocation(ctx context.Context, jobID uuid.UUID, nodeID 
 	// Check for existing allocation
 	existing := &domain.GPUAllocation{}
 	existingQuery := `
-		SELECT id, job_id, node_id, gpu_count, allocated_at, released_at
+		SELECT id, job_id, node_id, gpu_count, device_ids, allocated_at, released_at
 		FROM gpu_allocations
 		WHERE job_id = $1 AND released_at IS NULL
 		FOR UPDATE
 	`
 	switch err := tx.QueryRowContext(ctx, existingQuery, jobID).Scan(
-		&existing.ID, &existing.JobID, &existing.NodeID, &existing.GPUCount,
+		&existing.ID, &existing.JobID, &existing.NodeID, &existing.GPUCount, pq.Array(&existing.DeviceIDs),
 		&existing.AllocatedAt, &existing.ReleasedAt,
 	); err {
 	case nil:
@@ -142,16 +165,17 @@ func (s *Store) ClaimGPUAllocation(ctx context.Context, jobID uuid.UUID, nodeID 
 		// No allocation needed; create a zero allocation record for visibility
 		alloc := &domain.GPUAllocation{}
 		insertQuery := `
-			INSERT INTO gpu_allocations (job_id, node_id, gpu_count)
-			VALUES ($1, $2, $3)
+			INSERT INTO gpu_allocations (job_id, node_id, gpu_count, device_ids)
+			VALUES ($1, $2, $3, $4)
 			RETURNING id, allocated_at
 		`
-		if err := tx.QueryRowContext(ctx, insertQuery, jobID, nodeID, 0).Scan(&alloc.ID, &alloc.AllocatedAt); err != nil {
+		if err := tx.QueryRowContext(ctx, insertQuery, jobID, nodeID, 0, pq.Array([]string{})).Scan(&alloc.ID, &alloc.AllocatedAt); err != nil {
 			return nil, fmt.Errorf("insert allocation (zero): %w", err)
 		}
 		alloc.JobID = jobID
 		alloc.NodeID = nodeID
 		alloc.GPUCount = 0
+		alloc.DeviceIDs = []string{}
 		if _, err := tx.ExecContext(ctx,
 			`UPDATE jobs SET assigned_node_id = COALESCE(assigned_node_id, $1) WHERE id = $2`, nodeID, jobID,
 		); err != nil {
@@ -165,7 +189,7 @@ func (s *Store) ClaimGPUAllocation(ctx context.Context, jobID uuid.UUID, nodeID 
 
 	// Lock and sum allocations for node (row-level locks, no aggregate FOR UPDATE)
 	rows, err := tx.QueryContext(ctx,
-		`SELECT gpu_count FROM gpu_allocations WHERE node_id = $1 AND released_at IS NULL FOR UPDATE`, nodeID,
+		`SELECT gpu_count, device_ids FROM gpu_allocations WHERE node_id = $1 AND released_at IS NULL FOR UPDATE`, nodeID,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("sum allocations: %w", err)
@@ -173,12 +197,17 @@ func (s *Store) ClaimGPUAllocation(ctx context.Context, jobID uuid.UUID, nodeID 
 	defer rows.Close()
 
 	allocated := 0
+	usedIDs := make(map[string]struct{})
 	for rows.Next() {
 		var count int
-		if err := rows.Scan(&count); err != nil {
+		var deviceIDs []string
+		if err := rows.Scan(&count, pq.Array(&deviceIDs)); err != nil {
 			return nil, fmt.Errorf("sum allocations: %w", err)
 		}
 		allocated += count
+		for _, id := range deviceIDs {
+			usedIDs[id] = struct{}{}
+		}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("sum allocations: %w", err)
@@ -187,20 +216,38 @@ func (s *Store) ClaimGPUAllocation(ctx context.Context, jobID uuid.UUID, nodeID 
 	if allocated+jobGPU > nodeTotal {
 		return nil, ErrInsufficientGPU
 	}
+	if len(nodeDeviceIDs) < nodeTotal {
+		return nil, fmt.Errorf("node gpu inventory missing: node=%s expected=%d got=%d", nodeID, nodeTotal, len(nodeDeviceIDs))
+	}
+
+	selectedDeviceIDs := make([]string, 0, jobGPU)
+	for _, id := range nodeDeviceIDs {
+		if _, inUse := usedIDs[id]; inUse {
+			continue
+		}
+		selectedDeviceIDs = append(selectedDeviceIDs, id)
+		if len(selectedDeviceIDs) == jobGPU {
+			break
+		}
+	}
+	if len(selectedDeviceIDs) < jobGPU {
+		return nil, ErrInsufficientGPU
+	}
 
 	alloc := &domain.GPUAllocation{}
 	insertQuery := `
-		INSERT INTO gpu_allocations (job_id, node_id, gpu_count)
-		VALUES ($1, $2, $3)
+		INSERT INTO gpu_allocations (job_id, node_id, gpu_count, device_ids)
+		VALUES ($1, $2, $3, $4)
 		RETURNING id, allocated_at
 	`
-	if err := tx.QueryRowContext(ctx, insertQuery, jobID, nodeID, jobGPU).Scan(&alloc.ID, &alloc.AllocatedAt); err != nil {
+	if err := tx.QueryRowContext(ctx, insertQuery, jobID, nodeID, jobGPU, pq.Array(selectedDeviceIDs)).Scan(&alloc.ID, &alloc.AllocatedAt); err != nil {
 		return nil, fmt.Errorf("insert allocation: %w", err)
 	}
 
 	alloc.JobID = jobID
 	alloc.NodeID = nodeID
 	alloc.GPUCount = jobGPU
+	alloc.DeviceIDs = selectedDeviceIDs
 
 	if _, err := tx.ExecContext(ctx,
 		`UPDATE jobs SET assigned_node_id = COALESCE(assigned_node_id, $1) WHERE id = $2`, nodeID, jobID,

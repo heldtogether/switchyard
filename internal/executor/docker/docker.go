@@ -71,13 +71,19 @@ func (e *DockerExecutor) CreateRun(ctx context.Context, spec executor.RunSpec) (
 		resources.Memory = executor.ParseMemory(spec.Memory)
 	}
 	if spec.GPUCount > 0 {
-		resources.DeviceRequests = []container.DeviceRequest{
-			{
-				Driver:       "nvidia",
-				Count:        spec.GPUCount,
-				Capabilities: [][]string{{"gpu"}},
-			},
+		request := container.DeviceRequest{
+			Driver:       "nvidia",
+			Capabilities: [][]string{{"gpu"}},
 		}
+		if len(spec.GPUDeviceIDs) > 0 {
+			if len(spec.GPUDeviceIDs) != spec.GPUCount {
+				return executor.RunRef{}, fmt.Errorf("gpu device id count mismatch: gpu_count=%d device_ids=%d", spec.GPUCount, len(spec.GPUDeviceIDs))
+			}
+			request.DeviceIDs = append([]string(nil), spec.GPUDeviceIDs...)
+		} else {
+			request.Count = spec.GPUCount
+		}
+		resources.DeviceRequests = []container.DeviceRequest{request}
 	}
 
 	hostCfg := &container.HostConfig{
