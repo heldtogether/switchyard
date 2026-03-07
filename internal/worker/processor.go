@@ -7,25 +7,30 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/docker/docker/client"
 	"github.com/google/uuid"
 	"github.com/heldtogether/switchyard/internal/config"
 	"github.com/heldtogether/switchyard/internal/domain"
 	"github.com/heldtogether/switchyard/internal/executor"
+	dockerexec "github.com/heldtogether/switchyard/internal/executor/docker"
+	"github.com/heldtogether/switchyard/internal/metrics"
 	"github.com/heldtogether/switchyard/internal/registrysecrets"
 	"github.com/heldtogether/switchyard/internal/version"
 )
 
 // Processor handles individual job execution
 type Processor struct {
-	store       JobStore
-	executor    executor.Executor
-	storage     ObjectStorage
-	logger      *slog.Logger
-	apiBaseURL  string
-	bucket      string
-	nodeID      string
-	cleanup     config.CleanupConfig
-	secretCodec *registrysecrets.Codec
+	store        JobStore
+	executor     executor.Executor
+	storage      ObjectStorage
+	logger       *slog.Logger
+	apiBaseURL   string
+	bucket       string
+	nodeID       string
+	cleanup      config.CleanupConfig
+	billingCfg   config.BillingConfig
+	billingStore billingStore
+	secretCodec  *registrysecrets.Codec
 }
 
 // NewProcessor creates a new job processor
@@ -44,6 +49,11 @@ func NewProcessor(store JobStore, exec executor.Executor, storage ObjectStorage,
 
 func (p *Processor) SetSecretCodec(codec *registrysecrets.Codec) {
 	p.secretCodec = codec
+}
+
+func (p *Processor) ConfigureBilling(cfg config.BillingConfig, store billingStore) {
+	p.billingCfg = cfg
+	p.billingStore = store
 }
 
 // Process executes a single job from start to finish
@@ -151,6 +161,26 @@ func (p *Processor) ProcessWithAllocation(ctx context.Context, jobID uuid.UUID, 
 
 	logger.Info("executor run created", "executor_ref", ref.Reference)
 
+	usageResultCh := make(chan *metrics.UsageSummary, 1)
+	usageErrCh := make(chan error, 1)
+	billingEnabled := p.billingCfg.Enabled
+	trackerStarted := false
+	if billingEnabled {
+		if dockerClient := dockerClientFromExecutor(p.executor); dockerClient != nil {
+			trackerStarted = true
+			go func() {
+				summary, err := metrics.TrackContainerUsage(ctx, dockerClient, ref.Reference, p.billingCfg.UsageSampleInterval)
+				if err != nil {
+					usageErrCh <- err
+					return
+				}
+				usageResultCh <- summary
+			}()
+		} else {
+			logger.Warn("billing enabled but docker client unavailable; persisting zero usage")
+		}
+	}
+
 	// 8. Update job with executor reference
 	job.ExecutorRef = &ref.Reference
 	if err := p.store.UpdateJob(ctx, job); err != nil {
@@ -252,6 +282,37 @@ func (p *Processor) ProcessWithAllocation(ctx context.Context, jobID uuid.UUID, 
 		return err
 	}
 
+	if billingEnabled && p.billingStore != nil {
+		usageSummary := &metrics.UsageSummary{}
+		if trackerStarted {
+			select {
+			case usageSummary = <-usageResultCh:
+			case usageErr := <-usageErrCh:
+				logger.Warn("usage tracker failed; persisting zero usage", "error", usageErr)
+			case <-time.After(2 * time.Second):
+				logger.Warn("usage tracker timeout; persisting zero usage")
+			}
+		}
+		if usageSummary.DurationSeconds <= 0 && job.StartedAt != nil && job.FinishedAt != nil {
+			usageSummary.DurationSeconds = job.FinishedAt.Sub(*job.StartedAt).Seconds()
+		}
+
+		usageEvent, ledgerEntry, stripeEvents, billingErr := buildBillingRecords(
+			p.billingCfg,
+			workspace.ID,
+			project.ID,
+			job,
+			ref.Reference,
+			usageSummary,
+		)
+		if billingErr != nil {
+			return fmt.Errorf("build billing records: %w", billingErr)
+		}
+		if err := p.billingStore.RecordUsageLedgerAndStripeEvents(ctx, usageEvent, ledgerEntry, stripeEvents); err != nil {
+			return fmt.Errorf("persist billing records: %w", err)
+		}
+	}
+
 	logger.Info("job processing complete", "status", job.Status, "duration", job.FinishedAt.Sub(*job.StartedAt))
 
 	// 13. Cleanup executor resources
@@ -306,4 +367,11 @@ func shouldCleanup(cfg config.CleanupConfig, status domain.JobStatus) bool {
 	default:
 		return true
 	}
+}
+
+func dockerClientFromExecutor(exec executor.Executor) *client.Client {
+	if dockerExec, ok := exec.(*dockerexec.DockerExecutor); ok {
+		return dockerExec.DockerClient()
+	}
+	return nil
 }

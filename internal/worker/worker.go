@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	billingclient "github.com/heldtogether/switchyard/internal/billing"
 	"github.com/heldtogether/switchyard/internal/config"
 	"github.com/heldtogether/switchyard/internal/executor"
 	"github.com/heldtogether/switchyard/internal/registrysecrets"
@@ -19,22 +20,23 @@ import (
 
 // Worker polls for jobs and executes them
 type Worker struct {
-	cfg          *config.Config
-	queue        queue.Consumer
-	store        *postgres.Store
-	executor     executor.Executor
-	storage      *objectstore.S3Store
-	logger       *slog.Logger
-	api          *APIClient
-	nodeID       string
-	hostname     string
-	gpuTotal     int
-	gpuDeviceIDs []string
-	cleanup      config.CleanupConfig
-	secretCodec  *registrysecrets.Codec
-	wg           sync.WaitGroup
-	ctx          context.Context
-	cancel       context.CancelFunc
+	cfg           *config.Config
+	queue         queue.Consumer
+	store         *postgres.Store
+	executor      executor.Executor
+	storage       *objectstore.S3Store
+	logger        *slog.Logger
+	api           *APIClient
+	nodeID        string
+	hostname      string
+	gpuTotal      int
+	gpuDeviceIDs  []string
+	cleanup       config.CleanupConfig
+	secretCodec   *registrysecrets.Codec
+	stripeEmitter billingclient.StripeMeterEmitter
+	wg            sync.WaitGroup
+	ctx           context.Context
+	cancel        context.CancelFunc
 
 	attempts   map[string]int
 	attemptsMu sync.Mutex
@@ -46,23 +48,29 @@ func New(cfg *config.Config, q queue.Consumer, store *postgres.Store, exec execu
 
 	cleanup := cfg.Executor.Docker.Cleanup
 
+	var emitter billingclient.StripeMeterEmitter
+	if cfg.Billing.Enabled && cfg.Billing.InvoicesEnabled && cfg.Billing.Stripe.APIKey != "" {
+		emitter = billingclient.NewStripeSDKMeterEmitter(cfg.Billing.Stripe.APIKey)
+	}
+
 	return &Worker{
-		cfg:          cfg,
-		queue:        q,
-		store:        store,
-		executor:     exec,
-		storage:      storage,
-		logger:       logger,
-		api:          api,
-		nodeID:       nodeID,
-		hostname:     hostname,
-		gpuTotal:     gpuTotal,
-		gpuDeviceIDs: gpuDeviceIDs,
-		cleanup:      cleanup,
-		secretCodec:  secretCodec,
-		ctx:          ctx,
-		cancel:       cancel,
-		attempts:     make(map[string]int),
+		cfg:           cfg,
+		queue:         q,
+		store:         store,
+		executor:      exec,
+		storage:       storage,
+		logger:        logger,
+		api:           api,
+		nodeID:        nodeID,
+		hostname:      hostname,
+		gpuTotal:      gpuTotal,
+		gpuDeviceIDs:  gpuDeviceIDs,
+		cleanup:       cleanup,
+		secretCodec:   secretCodec,
+		stripeEmitter: emitter,
+		ctx:           ctx,
+		cancel:        cancel,
+		attempts:      make(map[string]int),
 	}
 }
 
@@ -88,6 +96,14 @@ func (w *Worker) Start() error {
 	// Start Redis delay requeue loop (no-op for RabbitMQ)
 	w.wg.Add(1)
 	go w.requeueLoop()
+
+	if w.cfg.Billing.Enabled && w.cfg.Billing.InvoicesEnabled && w.stripeEmitter != nil {
+		w.wg.Add(1)
+		go func() {
+			defer w.wg.Done()
+			runStripeMeterRetryLoop(w.ctx, w.store, w.stripeEmitter, w.cfg.Billing)
+		}()
+	}
 
 	// Recover any orphaned running jobs on startup
 	if err := w.recoverOrphanedJobs(); err != nil {
@@ -236,6 +252,7 @@ func (w *Worker) processJob(ctx context.Context, jobIDStr string, gpuDeviceIDs [
 	storageAdapter := &s3StorageAdapter{store: w.storage}
 	processor := NewProcessor(w.store, w.executor, storageAdapter, w.logger, w.cfg.API.BaseURL, w.cfg.Storage.Bucket, w.nodeID, w.cleanup)
 	processor.SetSecretCodec(w.secretCodec)
+	processor.ConfigureBilling(w.cfg.Billing, w.store)
 	return processor.ProcessWithAllocation(ctx, jobID, gpuDeviceIDs)
 }
 

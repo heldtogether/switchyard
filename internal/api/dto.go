@@ -204,6 +204,43 @@ type ListArtefactsResponse struct {
 	Artefacts []ArtefactResponse `json:"artefacts"`
 }
 
+type WorkspaceMonthToDateBillingResponse struct {
+	WorkspaceID              uuid.UUID `json:"workspace_id"`
+	MonthKey                 string    `json:"month_key"`
+	CPUSeconds               float64   `json:"cpu_seconds"`
+	MemoryGBSeconds          float64   `json:"memory_gb_seconds"`
+	EstimatedTotalMinor      int64     `json:"estimated_total_minor"`
+	EstimatedTotalMinorExact float64   `json:"estimated_total_minor_exact"`
+	Currency                 string    `json:"currency"`
+}
+
+type RunBillingLineItemResponse struct {
+	JobID                     uuid.UUID `json:"job_id"`
+	CPUSeconds                float64   `json:"cpu_seconds"`
+	MemoryGBSeconds           float64   `json:"memory_gb_seconds"`
+	EstimatedCPUMinor         int64     `json:"estimated_cpu_minor"`
+	EstimatedMemoryMinor      int64     `json:"estimated_memory_minor"`
+	EstimatedTotalMinor       int64     `json:"estimated_total_minor"`
+	EstimatedCPUMinorExact    float64   `json:"estimated_cpu_minor_exact"`
+	EstimatedMemoryMinorExact float64   `json:"estimated_memory_minor_exact"`
+	EstimatedTotalMinorExact  float64   `json:"estimated_total_minor_exact"`
+	PricingVersion            string    `json:"pricing_version"`
+	Currency                  string    `json:"currency"`
+	CreatedAt                 time.Time `json:"created_at"`
+}
+
+type RunBillingBreakdownResponse struct {
+	WorkspaceID              uuid.UUID                    `json:"workspace_id"`
+	ProjectID                uuid.UUID                    `json:"project_id"`
+	RunID                    uuid.UUID                    `json:"run_id"`
+	CPUSeconds               float64                      `json:"cpu_seconds"`
+	MemoryGBSeconds          float64                      `json:"memory_gb_seconds"`
+	EstimatedTotalMinor      int64                        `json:"estimated_total_minor"`
+	EstimatedTotalMinorExact float64                      `json:"estimated_total_minor_exact"`
+	Currency                 string                       `json:"currency"`
+	Items                    []RunBillingLineItemResponse `json:"items"`
+}
+
 // ErrorResponse is a standard error response
 type ErrorResponse struct {
 	Error   string `json:"error"`

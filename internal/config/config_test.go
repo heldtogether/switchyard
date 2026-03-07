@@ -134,3 +134,92 @@ func TestRegistrySecretEncryptionValidate_InvalidKeyLength(t *testing.T) {
 		t.Fatalf("expected invalid key length error")
 	}
 }
+
+func TestValidate_BillingDefaults(t *testing.T) {
+	cfg := &Config{
+		API: APIConfig{
+			Port: 8080,
+			Auth: AuthConfig{
+				Mode: "disabled",
+			},
+		},
+		Database: DatabaseConfig{
+			URL: "postgres://u:p@localhost:5432/db?sslmode=disable",
+		},
+		Queue: QueueConfig{
+			Type:            "redis",
+			URL:             "redis://localhost:6379/0",
+			RequeueBatch:    0,
+			RequeueInterval: 0,
+		},
+		Storage: StorageConfig{
+			Type:      "s3",
+			Endpoint:  "http://minio:9000",
+			Bucket:    "bucket",
+			AccessKey: "key",
+			SecretKey: "secret",
+		},
+		Executor: ExecutorConfig{
+			Type: "docker",
+			Docker: DockerConfig{
+				NFSBasePath: "/tmp",
+				DockerHost:  "unix:///var/run/docker.sock",
+			},
+		},
+		Worker: WorkerConfig{
+			Concurrency: 1,
+		},
+	}
+
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("expected config to validate, got: %v", err)
+	}
+	if cfg.Billing.UsageSampleInterval == 0 {
+		t.Fatalf("expected billing usage sample interval default")
+	}
+	if cfg.Billing.Stripe.Meters.CPUSeconds == "" || cfg.Billing.Stripe.Meters.MemoryGBSeconds == "" {
+		t.Fatalf("expected default billing meter names")
+	}
+}
+
+func TestValidate_BillingEnabledRequiresPricing(t *testing.T) {
+	cfg := &Config{
+		API: APIConfig{
+			Port: 8080,
+			Auth: AuthConfig{
+				Mode: "disabled",
+			},
+		},
+		Database: DatabaseConfig{
+			URL: "postgres://u:p@localhost:5432/db?sslmode=disable",
+		},
+		Queue: QueueConfig{
+			Type: "redis",
+			URL:  "redis://localhost:6379/0",
+		},
+		Storage: StorageConfig{
+			Type:      "s3",
+			Endpoint:  "http://minio:9000",
+			Bucket:    "bucket",
+			AccessKey: "key",
+			SecretKey: "secret",
+		},
+		Executor: ExecutorConfig{
+			Type: "docker",
+			Docker: DockerConfig{
+				NFSBasePath: "/tmp",
+				DockerHost:  "unix:///var/run/docker.sock",
+			},
+		},
+		Worker: WorkerConfig{
+			Concurrency: 1,
+		},
+		Billing: BillingConfig{
+			Enabled: true,
+		},
+	}
+
+	if err := cfg.Validate(); err == nil {
+		t.Fatalf("expected validation error when billing enabled without pricing")
+	}
+}

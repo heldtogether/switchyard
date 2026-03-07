@@ -19,6 +19,7 @@ type Config struct {
 	Queue     QueueConfig     `yaml:"queue"`
 	Storage   StorageConfig   `yaml:"storage"`
 	Executor  ExecutorConfig  `yaml:"executor"`
+	Billing   BillingConfig   `yaml:"billing"`
 	Scheduler SchedulerConfig `yaml:"scheduler"`
 	Logging   LoggingConfig   `yaml:"logging"`
 }
@@ -131,6 +132,36 @@ type QueueConfig struct {
 	MaxPriority     int           `yaml:"max_priority"`
 	RequeueInterval time.Duration `yaml:"requeue_interval"`
 	RequeueBatch    int           `yaml:"requeue_batch"`
+}
+
+// BillingConfig controls internal usage billing and Stripe invoice emission.
+type BillingConfig struct {
+	Enabled             bool                `yaml:"enabled"`
+	InvoicesEnabled     bool                `yaml:"invoices_enabled"`
+	UsageSampleInterval time.Duration       `yaml:"usage_sample_interval"`
+	RetryInterval       time.Duration       `yaml:"retry_interval"`
+	RetryBatchSize      int                 `yaml:"retry_batch_size"`
+	Pricing             BillingPricing      `yaml:"pricing"`
+	Stripe              BillingStripeConfig `yaml:"stripe"`
+}
+
+type BillingPricing struct {
+	Version                 string `yaml:"version"`
+	Currency                string `yaml:"currency"`
+	UnitPriceCPUSecondMinor int64  `yaml:"unit_price_cpu_second_minor"`
+	UnitPriceMemoryGBSMinor int64  `yaml:"unit_price_memory_gb_second_minor"`
+	StripeCPUPriceID        string `yaml:"stripe_cpu_price_id"`
+	StripeMemoryGBSPriceID  string `yaml:"stripe_memory_gb_second_price_id"`
+}
+
+type BillingStripeConfig struct {
+	APIKey string             `yaml:"api_key"`
+	Meters BillingMeterConfig `yaml:"meters"`
+}
+
+type BillingMeterConfig struct {
+	CPUSeconds      string `yaml:"cpu_seconds"`
+	MemoryGBSeconds string `yaml:"memory_gb_seconds"`
 }
 
 // SchedulerConfig holds scheduler/reaper configuration
@@ -451,6 +482,57 @@ func applyEnvOverrides(cfg *Config) {
 		fmt.Sscanf(v, "%f", &cfg.Worker.RetryJitter)
 	}
 
+	// Billing
+	if v := os.Getenv("BILLING_ENABLED"); v != "" {
+		cfg.Billing.Enabled = v == "true" || v == "1"
+	}
+	if v := os.Getenv("BILLING_INVOICES_ENABLED"); v != "" {
+		cfg.Billing.InvoicesEnabled = v == "true" || v == "1"
+	}
+	if v := os.Getenv("BILLING_USAGE_SAMPLE_INTERVAL"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			cfg.Billing.UsageSampleInterval = d
+		}
+	}
+	if v := os.Getenv("BILLING_RETRY_INTERVAL"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			cfg.Billing.RetryInterval = d
+		}
+	}
+	if v := os.Getenv("BILLING_RETRY_BATCH_SIZE"); v != "" {
+		fmt.Sscanf(v, "%d", &cfg.Billing.RetryBatchSize)
+	}
+	if v := os.Getenv("BILLING_PRICING_VERSION"); v != "" {
+		cfg.Billing.Pricing.Version = v
+	}
+	if v := os.Getenv("BILLING_CURRENCY"); v != "" {
+		cfg.Billing.Pricing.Currency = strings.ToUpper(v)
+	}
+	if v := os.Getenv("BILLING_UNIT_PRICE_CPU_SECOND_MINOR"); v != "" {
+		fmt.Sscanf(v, "%d", &cfg.Billing.Pricing.UnitPriceCPUSecondMinor)
+	}
+	if v := os.Getenv("BILLING_UNIT_PRICE_MEMORY_GB_SECOND_MINOR"); v != "" {
+		fmt.Sscanf(v, "%d", &cfg.Billing.Pricing.UnitPriceMemoryGBSMinor)
+	}
+	if v := os.Getenv("BILLING_STRIPE_CPU_PRICE_ID"); v != "" {
+		cfg.Billing.Pricing.StripeCPUPriceID = v
+	}
+	if v := os.Getenv("BILLING_STRIPE_MEMORY_GB_SECOND_PRICE_ID"); v != "" {
+		cfg.Billing.Pricing.StripeMemoryGBSPriceID = v
+	}
+	if v := os.Getenv("BILLING_STRIPE_API_KEY"); v != "" {
+		cfg.Billing.Stripe.APIKey = v
+	}
+	if v := getEnvFromFile("BILLING_STRIPE_API_KEY_FILE"); v != "" {
+		cfg.Billing.Stripe.APIKey = v
+	}
+	if v := os.Getenv("BILLING_STRIPE_METER_CPU_SECONDS"); v != "" {
+		cfg.Billing.Stripe.Meters.CPUSeconds = v
+	}
+	if v := os.Getenv("BILLING_STRIPE_METER_MEMORY_GB_SECONDS"); v != "" {
+		cfg.Billing.Stripe.Meters.MemoryGBSeconds = v
+	}
+
 	// Logging
 	if v := os.Getenv("LOG_LEVEL"); v != "" {
 		cfg.Logging.Level = v
@@ -601,6 +683,38 @@ func (c *Config) Validate() error {
 	}
 	if c.Worker.RetryJitter == 0 {
 		c.Worker.RetryJitter = 0.2
+	}
+
+	if c.Billing.UsageSampleInterval == 0 {
+		c.Billing.UsageSampleInterval = 10 * time.Second
+	}
+	if c.Billing.RetryInterval == 0 {
+		c.Billing.RetryInterval = 15 * time.Second
+	}
+	if c.Billing.RetryBatchSize == 0 {
+		c.Billing.RetryBatchSize = 50
+	}
+	if c.Billing.Stripe.Meters.CPUSeconds == "" {
+		c.Billing.Stripe.Meters.CPUSeconds = "switchyard_cpu_seconds"
+	}
+	if c.Billing.Stripe.Meters.MemoryGBSeconds == "" {
+		c.Billing.Stripe.Meters.MemoryGBSeconds = "switchyard_memory_gb_seconds"
+	}
+	if c.Billing.Enabled {
+		if c.Billing.Pricing.Version == "" {
+			return fmt.Errorf("billing.pricing.version is required when billing is enabled")
+		}
+		if c.Billing.Pricing.Currency == "" {
+			return fmt.Errorf("billing.pricing.currency is required when billing is enabled")
+		}
+		if len(c.Billing.Pricing.Currency) != 3 {
+			return fmt.Errorf("billing.pricing.currency must be a 3-letter ISO code")
+		}
+	}
+	if c.Billing.Enabled && c.Billing.InvoicesEnabled {
+		if c.Billing.Stripe.APIKey == "" {
+			return fmt.Errorf("billing.stripe.api_key is required when invoices are enabled")
+		}
 	}
 
 	if c.Scheduler.ReaperInterval == 0 {

@@ -11,6 +11,7 @@ import (
 	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/api/types/network"
+	"github.com/docker/docker/client"
 
 	"github.com/heldtogether/switchyard/internal/domain"
 	"github.com/heldtogether/switchyard/internal/executor"
@@ -18,6 +19,10 @@ import (
 
 type DockerExecutor struct {
 	*executor.BaseExecutor
+}
+
+func (e *DockerExecutor) DockerClient() *client.Client {
+	return e.Client
 }
 
 func New(dockerHost, nfsBasePath string, networkIsolated bool) (*DockerExecutor, error) {

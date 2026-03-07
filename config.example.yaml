@@ -172,6 +172,39 @@ scheduler:
   heartbeat_timeout: 30s
 
 # ==============================================================================
+# Billing & Invoicing
+# ==============================================================================
+billing:
+  # Enables internal usage metering and immutable billing ledger entries.
+  enabled: true
+
+  # Enables Stripe meter event emission and retries.
+  # Set false to keep internal usage accounting without Stripe invoicing.
+  invoices_enabled: true
+
+  # Docker stats sampling interval for memory working-set integration.
+  usage_sample_interval: 10s
+
+  # Retry loop for failed/blocked Stripe meter events.
+  retry_interval: 15s
+  retry_batch_size: 50
+
+  pricing:
+    version: "2026-03-01"
+    currency: "USD"
+    unit_price_cpu_second_minor: 1
+    unit_price_memory_gb_second_minor: 1
+    # Optional snapshot fields copied into ledger entries.
+    stripe_cpu_price_id: ""
+    stripe_memory_gb_second_price_id: ""
+
+  stripe:
+    api_key: "${STRIPE_API_KEY}"
+    meters:
+      cpu_seconds: "switchyard_cpu_seconds"
+      memory_gb_seconds: "switchyard_memory_gb_seconds"
+
+# ==============================================================================
 # Object Storage Configuration (S3-compatible)
 # ==============================================================================
 storage:
