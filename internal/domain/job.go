@@ -10,12 +10,13 @@ import (
 type JobStatus string
 
 const (
-	JobStatusPending   JobStatus = "PENDING"
-	JobStatusRunning   JobStatus = "RUNNING"
-	JobStatusSucceeded JobStatus = "SUCCEEDED"
-	JobStatusFailed    JobStatus = "FAILED"
-	JobStatusCancelled JobStatus = "CANCELLED"
-	JobStatusTimeout   JobStatus = "TIMEOUT"
+	JobStatusPending    JobStatus = "PENDING"
+	JobStatusCancelling JobStatus = "CANCELLING"
+	JobStatusRunning    JobStatus = "RUNNING"
+	JobStatusSucceeded  JobStatus = "SUCCEEDED"
+	JobStatusFailed     JobStatus = "FAILED"
+	JobStatusCancelled  JobStatus = "CANCELLED"
+	JobStatusTimeout    JobStatus = "TIMEOUT"
 )
 
 // IsTerminal returns true if the status is a final state

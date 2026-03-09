@@ -11,6 +11,7 @@ import (
 	"syscall"
 
 	"github.com/heldtogether/switchyard/internal/config"
+	"github.com/heldtogether/switchyard/internal/control"
 	"github.com/heldtogether/switchyard/internal/executor"
 	dockerexec "github.com/heldtogether/switchyard/internal/executor/docker"
 	"github.com/heldtogether/switchyard/internal/registrysecrets"
@@ -130,6 +131,13 @@ func main() {
 	defer consumer.Close()
 	logger.Info("queue connected")
 
+	cancelSubscriber, err := control.NewSubscriber(cfg.Queue.Type, cfg.Queue.URL, cfg.Queue.Exchange, cfg.Queue.QueueName)
+	if err != nil {
+		logger.Error("failed to connect cancel control", "error", err)
+		os.Exit(1)
+	}
+	defer cancelSubscriber.Close()
+
 	// Initialize S3 storage
 	logger.Info("connecting to s3 storage")
 	s3Store, err := objectstore.NewS3(
@@ -191,7 +199,7 @@ func main() {
 	}
 
 	// Create worker
-	w := worker.New(cfg, consumer, store, exec, s3Store, logger, apiClient, nodeID, hostname, gpuTotal, gpuDeviceIDs, secretCodec)
+	w := worker.New(cfg, consumer, store, exec, s3Store, logger, apiClient, nodeID, hostname, gpuTotal, gpuDeviceIDs, secretCodec, cancelSubscriber)
 
 	// Start worker
 	if err := w.Start(); err != nil {

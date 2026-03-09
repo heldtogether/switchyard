@@ -4,6 +4,7 @@ export const STATUS_LABELS: Record<Status, string> = {
   SUCCEEDED: "Succeeded",
   FAILED: "Failed",
   RUNNING: "Running",
+  CANCELLING: "Cancelling",
   PENDING: "Pending",
   CANCELLED: "Cancelled",
   TIMEOUT: "Timeout",
@@ -18,6 +19,8 @@ export function statusTone(status: Status) {
       return "bg-danger/10 text-danger border-danger/30";
     case "RUNNING":
       return "bg-info/10 text-info border-info/30";
+    case "CANCELLING":
+      return "bg-warning/10 text-warning border-warning/30";
     case "TIMEOUT":
       return "bg-warning/10 text-warning border-warning/30";
     case "CANCELLED":

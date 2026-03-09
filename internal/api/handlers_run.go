@@ -9,7 +9,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/heldtogether/switchyard/internal/control"
 	"github.com/heldtogether/switchyard/internal/domain"
+	"github.com/heldtogether/switchyard/internal/storage/postgres"
 )
 
 // HandleCreateRun handles POST /v1/workspaces/{workspace_slug}/projects/{project_slug}/runs
@@ -379,6 +381,183 @@ func (a *API) HandleRerunRun(w http.ResponseWriter, r *http.Request) {
 		SourceRunID: sourceRun.ID,
 		Mode:        mode,
 	})
+}
+
+// HandleCancelRun handles POST /v1/workspaces/{workspace_slug}/projects/{project_slug}/runs/{run_slug}/cancel
+func (a *API) HandleCancelRun(w http.ResponseWriter, r *http.Request) {
+	workspaceSlug := r.PathValue("workspace_slug")
+	projectSlug := r.PathValue("project_slug")
+	runSlug := r.PathValue("run_slug")
+
+	workspace, err := a.store.GetWorkspaceBySlug(r.Context(), workspaceSlug)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, ErrorResponse{
+			Error:   "not_found",
+			Message: "Workspace not found",
+			Code:    http.StatusNotFound,
+		})
+		return
+	}
+	if _, ok := a.requireWorkspaceAccess(w, r, workspace, false); !ok {
+		return
+	}
+
+	project, err := a.store.GetProjectBySlug(r.Context(), workspace.ID, projectSlug)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, ErrorResponse{
+			Error:   "not_found",
+			Message: "Project not found",
+			Code:    http.StatusNotFound,
+		})
+		return
+	}
+	if _, ok := a.requireProjectAccess(w, r, workspace, project); !ok {
+		return
+	}
+
+	run, err := a.store.GetRunBySlug(r.Context(), project.ID, runSlug)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, ErrorResponse{
+			Error:   "not_found",
+			Message: "Run not found",
+			Code:    http.StatusNotFound,
+		})
+		return
+	}
+
+	jobs, err := a.store.ListJobs(r.Context(), &run.ID, nil, nil, 1000, 0)
+	if err != nil {
+		a.logger.Error("failed to list run jobs for cancel", "run_id", run.ID, "error", err)
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{
+			Error:   "internal_error",
+			Message: "Failed to list run jobs",
+			Code:    http.StatusInternalServerError,
+		})
+		return
+	}
+
+	actor := ActorFromRequest(r)
+	resp := CancelRunResponse{RunID: run.ID}
+	dispatchError := false
+
+	for _, job := range jobs {
+		if job.Status.IsTerminal() {
+			resp.AlreadyTerminal++
+			continue
+		}
+		resp.TotalTargeted++
+
+		if job.Status == domain.JobStatusPending {
+			message := "Job cancelled before execution"
+			if err := a.store.UpdateJobStatus(r.Context(), job.ID, domain.JobStatusCancelled, &message); err != nil {
+				a.logger.Error("failed to cancel pending run job", "job_id", job.ID, "error", err)
+				dispatchError = true
+				continue
+			}
+			resp.PendingCancelled++
+			_ = a.store.CreateJobCancellationEvent(r.Context(), postgres.JobCancellationEvent{
+				JobID:       job.ID,
+				EventType:   "requested",
+				RequestedBy: actor,
+				Message:     strPtr("run cancel requested for pending job"),
+			})
+			_ = a.store.CreateJobCancellationEvent(r.Context(), postgres.JobCancellationEvent{
+				JobID:       job.ID,
+				EventType:   "completed",
+				RequestedBy: actor,
+				Message:     strPtr("run cancel completed for pending job"),
+			})
+			continue
+		}
+
+		if (job.Status == domain.JobStatusRunning || job.Status == domain.JobStatusCancelling) &&
+			a.cancelPub != nil && job.AssignedNodeID != nil && *job.AssignedNodeID != "" {
+			message := "Job cancellation requested"
+			if err := a.store.MarkJobCancelling(r.Context(), job.ID, actor, "run_cancel_requested", &message); err != nil {
+				a.logger.Error("failed to mark run job cancelling", "job_id", job.ID, "error", err)
+				dispatchError = true
+				continue
+			}
+			_ = a.store.CreateJobCancellationEvent(r.Context(), postgres.JobCancellationEvent{
+				JobID:       job.ID,
+				EventType:   "requested",
+				RequestedBy: actor,
+				NodeID:      job.AssignedNodeID,
+				ExecutorRef: job.ExecutorRef,
+				Message:     strPtr("run cancellation requested"),
+			})
+			signal := control.CancelSignal{
+				JobID:       job.ID,
+				RunID:       job.RunID,
+				RequestedBy: actor,
+				RequestedAt: time.Now().UTC(),
+			}
+			if err := a.cancelPub.PublishJobCancel(r.Context(), *job.AssignedNodeID, signal); err != nil {
+				a.logger.Error("failed to publish run cancel signal", "job_id", job.ID, "node_id", *job.AssignedNodeID, "error", err)
+				dispatchError = true
+				_ = a.store.CreateJobCancellationEvent(r.Context(), postgres.JobCancellationEvent{
+					JobID:       job.ID,
+					EventType:   "failed",
+					RequestedBy: actor,
+					NodeID:      job.AssignedNodeID,
+					ExecutorRef: job.ExecutorRef,
+					Message:     strPtr(fmt.Sprintf("failed to dispatch run cancellation: %v", err)),
+				})
+				continue
+			}
+			resp.RunningMarkedCancelling++
+			_ = a.store.CreateJobCancellationEvent(r.Context(), postgres.JobCancellationEvent{
+				JobID:       job.ID,
+				EventType:   "dispatched",
+				RequestedBy: actor,
+				NodeID:      job.AssignedNodeID,
+				ExecutorRef: job.ExecutorRef,
+				Message:     strPtr("run cancellation dispatched to worker"),
+			})
+			continue
+		}
+
+		// Fallback behaviour when push control channel is unavailable.
+		msg := "Job cancelled by user"
+		if err := a.store.UpdateJobStatus(r.Context(), job.ID, domain.JobStatusCancelled, &msg); err != nil {
+			a.logger.Error("failed to fallback-cancel job from run cancel", "job_id", job.ID, "error", err)
+			dispatchError = true
+			continue
+		}
+		resp.PendingCancelled++
+		_ = a.store.CreateJobCancellationEvent(r.Context(), postgres.JobCancellationEvent{
+			JobID:       job.ID,
+			EventType:   "completed",
+			RequestedBy: actor,
+			NodeID:      job.AssignedNodeID,
+			ExecutorRef: job.ExecutorRef,
+			Message:     strPtr("run cancellation completed via fallback"),
+		})
+	}
+
+	if err := a.store.RecomputeRunStatus(r.Context(), run.ID); err != nil {
+		a.logger.Error("failed to recompute run status after run cancel", "run_id", run.ID, "error", err)
+		dispatchError = true
+	}
+
+	if resp.TotalTargeted == 0 {
+		writeJSON(w, http.StatusConflict, ErrorResponse{
+			Error:   "cannot_cancel",
+			Message: "All jobs are already terminal",
+			Code:    http.StatusConflict,
+		})
+		return
+	}
+
+	if dispatchError {
+		writeJSON(w, http.StatusAccepted, resp)
+		return
+	}
+	if resp.RunningMarkedCancelling > 0 {
+		writeJSON(w, http.StatusAccepted, resp)
+		return
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 func filterRerunJobs(jobs []*domain.Job, mode string) []*domain.Job {

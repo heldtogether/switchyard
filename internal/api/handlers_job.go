@@ -7,10 +7,13 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/heldtogether/switchyard/internal/control"
 	"github.com/heldtogether/switchyard/internal/domain"
 	"github.com/heldtogether/switchyard/internal/executor"
+	"github.com/heldtogether/switchyard/internal/storage/postgres"
 )
 
 // HandleCreateJob handles POST /v1/workspaces/{workspace_slug}/projects/{project_slug}/runs/{run_slug}/jobs
@@ -592,6 +595,12 @@ func (a *API) HandleCancelJob(w http.ResponseWriter, r *http.Request) {
 
 	// Check if job is in a cancellable state
 	if job.Status.IsTerminal() {
+		_ = a.store.CreateJobCancellationEvent(r.Context(), postgres.JobCancellationEvent{
+			JobID:       job.ID,
+			EventType:   "skipped_terminal",
+			RequestedBy: ActorFromRequest(r),
+			Message:     strPtr("job already in terminal state"),
+		})
 		writeJSON(w, http.StatusConflict, ErrorResponse{
 			Error:   "cannot_cancel",
 			Message: fmt.Sprintf("Job is already in terminal state: %s", job.Status),
@@ -600,7 +609,156 @@ func (a *API) HandleCancelJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Cancel the job via executor if it's running
+	actor := ActorFromRequest(r)
+
+	// Pending jobs are immediately cancellable.
+	if job.Status == domain.JobStatusPending {
+		message := "Job cancelled before execution"
+		if err := a.store.UpdateJobStatus(r.Context(), id, domain.JobStatusCancelled, &message); err != nil {
+			a.logger.Error("failed to update job status", "error", err)
+			writeJSON(w, http.StatusInternalServerError, ErrorResponse{
+				Error:   "internal_error",
+				Message: "Failed to cancel job",
+				Code:    http.StatusInternalServerError,
+			})
+			return
+		}
+		if err := a.store.RecomputeRunStatus(r.Context(), job.RunID); err != nil {
+			a.logger.Error("failed to update run status after cancel", "error", err)
+			writeJSON(w, http.StatusInternalServerError, ErrorResponse{
+				Error:   "internal_error",
+				Message: "Failed to update run status",
+				Code:    http.StatusInternalServerError,
+			})
+			return
+		}
+		_ = a.store.CreateJobCancellationEvent(r.Context(), postgres.JobCancellationEvent{
+			JobID:       job.ID,
+			EventType:   "requested",
+			RequestedBy: actor,
+			Message:     strPtr("pending job cancellation requested"),
+		})
+		_ = a.store.CreateJobCancellationEvent(r.Context(), postgres.JobCancellationEvent{
+			JobID:       job.ID,
+			EventType:   "completed",
+			RequestedBy: actor,
+			Message:     strPtr("pending job cancellation completed"),
+		})
+		updatedJob, err := a.store.GetJob(r.Context(), id)
+		if err != nil {
+			a.logger.Error("failed to get updated job", "error", err)
+			writeJSON(w, http.StatusInternalServerError, ErrorResponse{
+				Error:   "internal_error",
+				Message: "Failed to retrieve cancelled job",
+				Code:    http.StatusInternalServerError,
+			})
+			return
+		}
+		run, err := a.store.GetRun(r.Context(), updatedJob.RunID)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "internal_error", Message: "Failed to retrieve run", Code: http.StatusInternalServerError})
+			return
+		}
+		project, err := a.store.GetProject(r.Context(), run.ProjectID)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "internal_error", Message: "Failed to retrieve project", Code: http.StatusInternalServerError})
+			return
+		}
+		workspace, err := a.store.GetWorkspace(r.Context(), project.WorkspaceID)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "internal_error", Message: "Failed to retrieve workspace", Code: http.StatusInternalServerError})
+			return
+		}
+		writeJSON(w, http.StatusOK, toJobResponse(updatedJob, a.baseURL, workspace.Slug, project.Slug, run.Slug))
+		return
+	}
+
+	// Push-based async cancellation for running jobs when node affinity and control publisher are available.
+	if (job.Status == domain.JobStatusRunning || job.Status == domain.JobStatusCancelling) &&
+		a.cancelPub != nil && job.AssignedNodeID != nil && *job.AssignedNodeID != "" {
+		message := "Job cancellation requested"
+		if err := a.store.MarkJobCancelling(r.Context(), job.ID, actor, "user_requested", &message); err != nil {
+			a.logger.Error("failed to mark job cancelling", "job_id", job.ID, "error", err)
+			writeJSON(w, http.StatusInternalServerError, ErrorResponse{
+				Error:   "cancel_failed",
+				Message: "Failed to request job cancellation",
+				Code:    http.StatusInternalServerError,
+			})
+			return
+		}
+		if err := a.store.RecomputeRunStatus(r.Context(), job.RunID); err != nil {
+			a.logger.Error("failed to recompute run status after cancelling", "job_id", job.ID, "error", err)
+		}
+		_ = a.store.CreateJobCancellationEvent(r.Context(), postgres.JobCancellationEvent{
+			JobID:       job.ID,
+			EventType:   "requested",
+			RequestedBy: actor,
+			NodeID:      job.AssignedNodeID,
+			ExecutorRef: job.ExecutorRef,
+			Message:     strPtr("running job cancellation requested"),
+		})
+
+		signal := control.CancelSignal{
+			JobID:       job.ID,
+			RunID:       job.RunID,
+			RequestedBy: actor,
+			RequestedAt: time.Now().UTC(),
+		}
+		if err := a.cancelPub.PublishJobCancel(r.Context(), *job.AssignedNodeID, signal); err != nil {
+			_ = a.store.CreateJobCancellationEvent(r.Context(), postgres.JobCancellationEvent{
+				JobID:       job.ID,
+				EventType:   "failed",
+				RequestedBy: actor,
+				NodeID:      job.AssignedNodeID,
+				ExecutorRef: job.ExecutorRef,
+				Message:     strPtr(fmt.Sprintf("failed to dispatch cancellation signal: %v", err)),
+			})
+			writeJSON(w, http.StatusInternalServerError, ErrorResponse{
+				Error:   "cancel_failed",
+				Message: "Failed to dispatch cancellation request",
+				Code:    http.StatusInternalServerError,
+			})
+			return
+		}
+		_ = a.store.CreateJobCancellationEvent(r.Context(), postgres.JobCancellationEvent{
+			JobID:       job.ID,
+			EventType:   "dispatched",
+			RequestedBy: actor,
+			NodeID:      job.AssignedNodeID,
+			ExecutorRef: job.ExecutorRef,
+			Message:     strPtr("cancellation signal dispatched to worker"),
+		})
+
+		updatedJob, err := a.store.GetJob(r.Context(), id)
+		if err != nil {
+			a.logger.Error("failed to get updated job", "error", err)
+			writeJSON(w, http.StatusInternalServerError, ErrorResponse{
+				Error:   "internal_error",
+				Message: "Failed to retrieve cancelled job",
+				Code:    http.StatusInternalServerError,
+			})
+			return
+		}
+		run, err := a.store.GetRun(r.Context(), updatedJob.RunID)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "internal_error", Message: "Failed to retrieve run", Code: http.StatusInternalServerError})
+			return
+		}
+		project, err := a.store.GetProject(r.Context(), run.ProjectID)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "internal_error", Message: "Failed to retrieve project", Code: http.StatusInternalServerError})
+			return
+		}
+		workspace, err := a.store.GetWorkspace(r.Context(), project.WorkspaceID)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "internal_error", Message: "Failed to retrieve workspace", Code: http.StatusInternalServerError})
+			return
+		}
+		writeJSON(w, http.StatusAccepted, toJobResponse(updatedJob, a.baseURL, workspace.Slug, project.Slug, run.Slug))
+		return
+	}
+
+	// Fallback to in-process executor cancellation when no control publisher is configured.
 	if job.Status == domain.JobStatusRunning {
 		// Running job must have an executor reference
 		if job.ExecutorRef == nil || *job.ExecutorRef == "" {
@@ -628,13 +786,7 @@ func (a *API) HandleCancelJob(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Determine the cancellation message based on current status
-	var message string
-	if job.Status == domain.JobStatusPending {
-		message = "Job cancelled before execution"
-	} else {
-		message = "Job cancelled by user"
-	}
+	message := "Job cancelled by user"
 
 	// Update job status
 	if err := a.store.UpdateJobStatus(r.Context(), id, domain.JobStatusCancelled, &message); err != nil {
@@ -655,6 +807,14 @@ func (a *API) HandleCancelJob(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	_ = a.store.CreateJobCancellationEvent(r.Context(), postgres.JobCancellationEvent{
+		JobID:       job.ID,
+		EventType:   "completed",
+		RequestedBy: actor,
+		NodeID:      job.AssignedNodeID,
+		ExecutorRef: job.ExecutorRef,
+		Message:     strPtr("job cancelled via synchronous fallback"),
+	})
 
 	// Get updated job to return full details
 	updatedJob, err := a.store.GetJob(r.Context(), id)

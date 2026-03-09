@@ -10,12 +10,13 @@ import (
 type RunStatus string
 
 const (
-	RunStatusPending   RunStatus = "PENDING"   // Run created, jobs not yet started
-	RunStatusRunning   RunStatus = "RUNNING"   // At least one job running
-	RunStatusSucceeded RunStatus = "SUCCEEDED" // All jobs succeeded
-	RunStatusFailed    RunStatus = "FAILED"    // At least one job failed
-	RunStatusCancelled RunStatus = "CANCELLED" // Run was cancelled
-	RunStatusPartial   RunStatus = "PARTIAL"   // Some jobs succeeded, some failed
+	RunStatusPending    RunStatus = "PENDING"    // Run created, jobs not yet started
+	RunStatusCancelling RunStatus = "CANCELLING" // Cancellation requested, jobs are stopping
+	RunStatusRunning    RunStatus = "RUNNING"    // At least one job running
+	RunStatusSucceeded  RunStatus = "SUCCEEDED"  // All jobs succeeded
+	RunStatusFailed     RunStatus = "FAILED"     // At least one job failed
+	RunStatusCancelled  RunStatus = "CANCELLED"  // Run was cancelled
+	RunStatusPartial    RunStatus = "PARTIAL"    // Some jobs succeeded, some failed
 )
 
 // IsTerminal returns true if the status is a final state

@@ -1,4 +1,4 @@
-export type Status = "SUCCEEDED" | "FAILED" | "RUNNING" | "PENDING" | "CANCELLED" | "TIMEOUT" | "PARTIAL";
+export type Status = "SUCCEEDED" | "FAILED" | "RUNNING" | "PENDING" | "CANCELLING" | "CANCELLED" | "TIMEOUT" | "PARTIAL";
 
 export interface Project {
   id: string;
@@ -120,6 +120,14 @@ export interface RunBillingBreakdown {
   estimated_total_minor_exact: number;
   currency: string;
   items: RunBillingLineItem[];
+}
+
+export interface CancelRunResponse {
+  run_id: string;
+  total_targeted: number;
+  pending_cancelled: number;
+  running_marked_cancelling: number;
+  already_terminal: number;
 }
 
 export type PromotionChannel = "dev" | "staging" | "prod" | "validated";

@@ -78,6 +78,11 @@ func (m *MockStore) UpdateJob(ctx context.Context, job *domain.Job) error {
 	return args.Error(0)
 }
 
+func (m *MockStore) UpdateJobStatus(ctx context.Context, id uuid.UUID, status domain.JobStatus, message *string) error {
+	args := m.Called(ctx, id, status, message)
+	return args.Error(0)
+}
+
 func (m *MockStore) SaveArtefacts(ctx context.Context, jobID uuid.UUID, artefacts []domain.Artefact) error {
 	args := m.Called(ctx, jobID, artefacts)
 	return args.Error(0)

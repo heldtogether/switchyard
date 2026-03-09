@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	billingclient "github.com/heldtogether/switchyard/internal/billing"
 	"github.com/heldtogether/switchyard/internal/config"
+	"github.com/heldtogether/switchyard/internal/control"
 	"github.com/heldtogether/switchyard/internal/executor"
 	"github.com/heldtogether/switchyard/internal/registrysecrets"
 	"github.com/heldtogether/switchyard/internal/storage/objectstore"
@@ -34,16 +35,22 @@ type Worker struct {
 	cleanup       config.CleanupConfig
 	secretCodec   *registrysecrets.Codec
 	stripeEmitter billingclient.StripeMeterEmitter
+	cancelSub     control.Subscriber
 	wg            sync.WaitGroup
 	ctx           context.Context
 	cancel        context.CancelFunc
 
 	attempts   map[string]int
 	attemptsMu sync.Mutex
+
+	runningMu      sync.Mutex
+	runningJobs    map[uuid.UUID]executor.RunRef
+	pendingCancels map[uuid.UUID]control.CancelSignal
+	cancellationBy string
 }
 
 // New creates a new Worker
-func New(cfg *config.Config, q queue.Consumer, store *postgres.Store, exec executor.Executor, storage *objectstore.S3Store, logger *slog.Logger, api *APIClient, nodeID, hostname string, gpuTotal int, gpuDeviceIDs []string, secretCodec *registrysecrets.Codec) *Worker {
+func New(cfg *config.Config, q queue.Consumer, store *postgres.Store, exec executor.Executor, storage *objectstore.S3Store, logger *slog.Logger, api *APIClient, nodeID, hostname string, gpuTotal int, gpuDeviceIDs []string, secretCodec *registrysecrets.Codec, cancelSub control.Subscriber) *Worker {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	cleanup := cfg.Executor.Docker.Cleanup
@@ -54,23 +61,27 @@ func New(cfg *config.Config, q queue.Consumer, store *postgres.Store, exec execu
 	}
 
 	return &Worker{
-		cfg:           cfg,
-		queue:         q,
-		store:         store,
-		executor:      exec,
-		storage:       storage,
-		logger:        logger,
-		api:           api,
-		nodeID:        nodeID,
-		hostname:      hostname,
-		gpuTotal:      gpuTotal,
-		gpuDeviceIDs:  gpuDeviceIDs,
-		cleanup:       cleanup,
-		secretCodec:   secretCodec,
-		stripeEmitter: emitter,
-		ctx:           ctx,
-		cancel:        cancel,
-		attempts:      make(map[string]int),
+		cfg:            cfg,
+		queue:          q,
+		store:          store,
+		executor:       exec,
+		storage:        storage,
+		logger:         logger,
+		api:            api,
+		nodeID:         nodeID,
+		hostname:       hostname,
+		gpuTotal:       gpuTotal,
+		gpuDeviceIDs:   gpuDeviceIDs,
+		cleanup:        cleanup,
+		secretCodec:    secretCodec,
+		stripeEmitter:  emitter,
+		cancelSub:      cancelSub,
+		ctx:            ctx,
+		cancel:         cancel,
+		attempts:       make(map[string]int),
+		runningJobs:    make(map[uuid.UUID]executor.RunRef),
+		pendingCancels: make(map[uuid.UUID]control.CancelSignal),
+		cancellationBy: "worker",
 	}
 }
 
@@ -103,6 +114,11 @@ func (w *Worker) Start() error {
 			defer w.wg.Done()
 			runStripeMeterRetryLoop(w.ctx, w.store, w.stripeEmitter, w.cfg.Billing)
 		}()
+	}
+
+	if w.cancelSub != nil {
+		w.wg.Add(1)
+		go w.cancelLoop()
 	}
 
 	// Recover any orphaned running jobs on startup
@@ -253,7 +269,89 @@ func (w *Worker) processJob(ctx context.Context, jobIDStr string, gpuDeviceIDs [
 	processor := NewProcessor(w.store, w.executor, storageAdapter, w.logger, w.cfg.API.BaseURL, w.cfg.Storage.Bucket, w.nodeID, w.cleanup)
 	processor.SetSecretCodec(w.secretCodec)
 	processor.ConfigureBilling(w.cfg.Billing, w.store)
+	processor.SetRunHooks(
+		func(jobID uuid.UUID, ref executor.RunRef) {
+			w.registerRunningJob(jobID, ref)
+		},
+		func(jobID uuid.UUID) {
+			w.unregisterRunningJob(jobID)
+		},
+	)
 	return processor.ProcessWithAllocation(ctx, jobID, gpuDeviceIDs)
+}
+
+func (w *Worker) cancelLoop() {
+	defer w.wg.Done()
+	logger := w.logger.With("component", "cancel_loop")
+	err := w.cancelSub.ConsumeJobCancels(w.ctx, w.nodeID, func(ctx context.Context, signal control.CancelSignal) error {
+		if err := w.store.CreateJobCancellationEvent(ctx, postgres.JobCancellationEvent{
+			JobID:       signal.JobID,
+			EventType:   "acknowledged",
+			RequestedBy: signal.RequestedBy,
+			NodeID:      &w.nodeID,
+			Message:     stringPtr("worker received cancellation signal"),
+		}); err != nil {
+			logger.Warn("failed to record cancellation ack event", "job_id", signal.JobID, "error", err)
+		}
+		return w.cancelRunningJob(ctx, signal)
+	})
+	if err != nil && err != context.Canceled {
+		logger.Error("cancel loop stopped with error", "error", err)
+	}
+}
+
+func (w *Worker) registerRunningJob(jobID uuid.UUID, ref executor.RunRef) {
+	w.runningMu.Lock()
+	w.runningJobs[jobID] = ref
+	pending, hasPending := w.pendingCancels[jobID]
+	if hasPending {
+		delete(w.pendingCancels, jobID)
+	}
+	w.runningMu.Unlock()
+
+	if hasPending {
+		_ = w.cancelRunningJob(w.ctx, pending)
+	}
+}
+
+func (w *Worker) unregisterRunningJob(jobID uuid.UUID) {
+	w.runningMu.Lock()
+	defer w.runningMu.Unlock()
+	delete(w.runningJobs, jobID)
+	delete(w.pendingCancels, jobID)
+}
+
+func (w *Worker) cancelRunningJob(ctx context.Context, signal control.CancelSignal) error {
+	w.runningMu.Lock()
+	ref, ok := w.runningJobs[signal.JobID]
+	if !ok {
+		w.pendingCancels[signal.JobID] = signal
+		w.runningMu.Unlock()
+		return nil
+	}
+	w.runningMu.Unlock()
+
+	if err := w.executor.Cancel(ctx, ref); err != nil {
+		_ = w.store.CreateJobCancellationEvent(ctx, postgres.JobCancellationEvent{
+			JobID:       signal.JobID,
+			EventType:   "failed",
+			RequestedBy: signal.RequestedBy,
+			NodeID:      &w.nodeID,
+			ExecutorRef: &ref.Reference,
+			Message:     stringPtr(fmt.Sprintf("executor cancel failed: %v", err)),
+		})
+		return err
+	}
+
+	_ = w.store.CreateJobCancellationEvent(ctx, postgres.JobCancellationEvent{
+		JobID:       signal.JobID,
+		EventType:   "completed",
+		RequestedBy: signal.RequestedBy,
+		NodeID:      &w.nodeID,
+		ExecutorRef: &ref.Reference,
+		Message:     stringPtr("executor cancel issued by worker"),
+	})
+	return nil
 }
 
 func (w *Worker) heartbeatLoop() {
@@ -320,6 +418,10 @@ func (w *Worker) resetRetry(jobID string) {
 	w.attemptsMu.Lock()
 	defer w.attemptsMu.Unlock()
 	delete(w.attempts, jobID)
+}
+
+func stringPtr(v string) *string {
+	return &v
 }
 
 // s3StorageAdapter adapts *objectstore.S3Store to ObjectStorage interface

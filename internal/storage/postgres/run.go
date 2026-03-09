@@ -155,6 +155,7 @@ func (s *Store) RecomputeRunStatus(ctx context.Context, id uuid.UUID) error {
 	query := `
 		SELECT
 			COUNT(*) FILTER (WHERE status = 'PENDING'),
+			COUNT(*) FILTER (WHERE status = 'CANCELLING'),
 			COUNT(*) FILTER (WHERE status = 'RUNNING'),
 			COUNT(*) FILTER (WHERE status = 'SUCCEEDED'),
 			COUNT(*) FILTER (WHERE status = 'FAILED'),
@@ -167,12 +168,13 @@ func (s *Store) RecomputeRunStatus(ctx context.Context, id uuid.UUID) error {
 		WHERE run_id = $1
 	`
 
-	var pendingCount, runningCount, succeededCount, failedCount, cancelledCount, timeoutCount, totalCount int
+	var pendingCount, cancellingCount, runningCount, succeededCount, failedCount, cancelledCount, timeoutCount, totalCount int
 	var minStartedAt sql.NullTime
 	var maxFinishedAt sql.NullTime
 
 	if err := s.db.QueryRowContext(ctx, query, id).Scan(
 		&pendingCount,
+		&cancellingCount,
 		&runningCount,
 		&succeededCount,
 		&failedCount,
@@ -189,6 +191,8 @@ func (s *Store) RecomputeRunStatus(ctx context.Context, id uuid.UUID) error {
 	switch {
 	case totalCount == 0:
 		newStatus = domain.RunStatusPending
+	case cancellingCount > 0:
+		newStatus = domain.RunStatusCancelling
 	case runningCount > 0:
 		newStatus = domain.RunStatusRunning
 	case cancelledCount > 0:

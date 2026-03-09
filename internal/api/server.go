@@ -65,6 +65,7 @@ func (s *Server) Start() error {
 	mux.HandleFunc("GET /v1/workspaces/{workspace_slug}/projects/{project_slug}/runs", s.api.HandleListRuns)
 	mux.HandleFunc("GET /v1/workspaces/{workspace_slug}/projects/{project_slug}/runs/{run_slug}", s.api.HandleGetRun)
 	mux.HandleFunc("POST /v1/workspaces/{workspace_slug}/projects/{project_slug}/runs/{run_slug}/rerun", s.api.HandleRerunRun)
+	mux.HandleFunc("POST /v1/workspaces/{workspace_slug}/projects/{project_slug}/runs/{run_slug}/cancel", s.api.HandleCancelRun)
 	mux.HandleFunc("GET /v1/workspaces/{workspace_slug}/projects/{project_slug}/runs/{run_slug}/billing", s.api.HandleRunBillingBreakdown)
 	mux.HandleFunc("POST /v1/workspaces/{workspace_slug}/projects/{project_slug}/promotions", s.api.HandleCreatePromotion)
 	mux.HandleFunc("GET /v1/workspaces/{workspace_slug}/projects/{project_slug}/promotions", s.api.HandleListCurrentPromotions)

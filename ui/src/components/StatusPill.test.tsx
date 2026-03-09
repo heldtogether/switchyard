@@ -9,6 +9,7 @@ describe("StatusPill", () => {
         <StatusPill status="SUCCEEDED" />
         <StatusPill status="FAILED" />
         <StatusPill status="RUNNING" />
+        <StatusPill status="CANCELLING" />
         <StatusPill status="PENDING" />
         <StatusPill status="CANCELLED" />
         <StatusPill status="TIMEOUT" />
@@ -19,6 +20,7 @@ describe("StatusPill", () => {
     expect(screen.getByText("Succeeded")).toBeInTheDocument();
     expect(screen.getByText("Failed")).toBeInTheDocument();
     expect(screen.getByText("Running")).toBeInTheDocument();
+    expect(screen.getByText("Cancelling")).toBeInTheDocument();
     expect(screen.getByText("Pending")).toBeInTheDocument();
     expect(screen.getByText("Cancelled")).toBeInTheDocument();
     expect(screen.getByText("Timeout")).toBeInTheDocument();

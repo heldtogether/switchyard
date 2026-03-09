@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/heldtogether/switchyard/internal/config"
+	"github.com/heldtogether/switchyard/internal/control"
 	"github.com/heldtogether/switchyard/internal/executor"
 	"github.com/heldtogether/switchyard/internal/registrysecrets"
 	"github.com/heldtogether/switchyard/internal/storage/objectstore"
@@ -27,6 +28,7 @@ type API struct {
 	baseURL     string
 	auth        *AuthManager
 	secretCodec *registrysecrets.Codec
+	cancelPub   control.Publisher
 }
 
 // New creates a new API instance
@@ -50,6 +52,10 @@ func New(cfg *config.Config, store *postgres.Store, q queue.Producer, storage *o
 
 func (a *API) SetAuthManager(auth *AuthManager) {
 	a.auth = auth
+}
+
+func (a *API) SetCancelPublisher(p control.Publisher) {
+	a.cancelPub = p
 }
 
 // writeJSON writes a JSON response

@@ -101,6 +101,14 @@ type RerunRunResponse struct {
 	Mode        string      `json:"mode"`
 }
 
+type CancelRunResponse struct {
+	RunID                   uuid.UUID `json:"run_id"`
+	TotalTargeted           int       `json:"total_targeted"`
+	PendingCancelled        int       `json:"pending_cancelled"`
+	RunningMarkedCancelling int       `json:"running_marked_cancelling"`
+	AlreadyTerminal         int       `json:"already_terminal"`
+}
+
 // ========== Job DTOs ==========
 
 // CreateJobRequest is the request to create a new job

@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
-import { getJob, getJobLogs, getProject, getRun, listArtefacts } from "../api";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { cancelJob, getJob, getJobLogs, getProject, getRun, listArtefacts } from "../api";
 import { PageHeader } from "../components/PageHeader";
 import { StatusPill } from "../components/StatusPill";
 import { Tabs } from "../components/Tabs";
@@ -15,8 +15,10 @@ import { Breadcrumbs } from "../components/Breadcrumbs";
 
 export function JobDetailPage() {
   const { workspace = "", projectSlug = "", runSlug = "", jobId = "" } = useParams();
+  const queryClient = useQueryClient();
   const [tab, setTab] = useState("logs");
   const [autoScroll, setAutoScroll] = useState(true);
+  const [cancelError, setCancelError] = useState<string | null>(null);
 
   const jobQuery = useQuery({
     queryKey: ["job", projectSlug, runSlug, jobId],
@@ -44,6 +46,20 @@ export function JobDetailPage() {
     queryFn: () => listArtefacts(projectSlug, runSlug, jobId)
   });
 
+  const cancelMutation = useMutation({
+    mutationFn: () => cancelJob(projectSlug, runSlug, jobId),
+    onSuccess: async () => {
+      setCancelError(null);
+      await queryClient.invalidateQueries({ queryKey: ["job", projectSlug, runSlug, jobId] });
+      await queryClient.invalidateQueries({ queryKey: ["jobs", projectSlug, runSlug] });
+      await queryClient.invalidateQueries({ queryKey: ["run", projectSlug, runSlug] });
+      await queryClient.invalidateQueries({ queryKey: ["runs", projectSlug] });
+    },
+    onError: (error) => {
+      setCancelError((error as Error).message ?? "Failed to cancel job");
+    }
+  });
+
   const specPayload = useMemo(() => ({ job: jobQuery.data }), [jobQuery.data]);
 
   if (jobQuery.error) {
@@ -55,6 +71,7 @@ export function JobDetailPage() {
 
   return (
     <div className="space-y-6">
+      {cancelError && <ErrorBanner message={cancelError} onRetry={() => setCancelError(null)} />}
       <PageHeader
         breadcrumbs={
           <Breadcrumbs
@@ -79,7 +96,14 @@ export function JobDetailPage() {
           <div className="flex flex-wrap gap-2">
             <StatusPill status={jobQuery.data?.status ?? "PENDING"} />
             <button className="rounded-full border border-ink-200 px-3 py-1 text-sm text-ink-500">Retry</button>
-            <button className="rounded-full border border-ink-200 px-3 py-1 text-sm text-ink-500">Cancel</button>
+            <button
+              type="button"
+              onClick={() => cancelMutation.mutate()}
+              disabled={cancelMutation.isPending || jobQuery.data?.status === "CANCELLED" || jobQuery.data?.status === "CANCELLING" || jobQuery.data?.status === "SUCCEEDED" || jobQuery.data?.status === "FAILED" || jobQuery.data?.status === "TIMEOUT"}
+              className="rounded-full border border-ink-200 px-3 py-1 text-sm text-ink-500 disabled:opacity-60"
+            >
+              {cancelMutation.isPending ? "Cancelling..." : "Cancel"}
+            </button>
           </div>
         }
       />

@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { createPromotion, getProject, getRun, listCurrentPromotions, listJobs, listArtefacts, rerunRun, getRunBillingBreakdown } from "../api";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { cancelRun, createPromotion, getProject, getRun, listCurrentPromotions, listJobs, listArtefacts, rerunRun, getRunBillingBreakdown } from "../api";
 import { PageHeader } from "../components/PageHeader";
 import { StatusPill } from "../components/StatusPill";
 import { Tabs } from "../components/Tabs";
@@ -32,6 +32,8 @@ export function RunDetailPage() {
   const [rerunOpen, setRerunOpen] = useState(false);
   const [rerunSubmitting, setRerunSubmitting] = useState(false);
   const [rerunError, setRerunError] = useState<string | null>(null);
+  const [cancelError, setCancelError] = useState<string | null>(null);
+  const [cancelResult, setCancelResult] = useState<string | null>(null);
 
   const runQuery = useQuery({
     queryKey: ["run", projectSlug, runSlug],
@@ -54,6 +56,22 @@ export function RunDetailPage() {
   const promotionsQuery = useQuery({
     queryKey: ["promotions", projectSlug],
     queryFn: () => listCurrentPromotions(projectSlug)
+  });
+
+  const cancelRunMutation = useMutation({
+    mutationFn: () => cancelRun(projectSlug, runSlug),
+    onSuccess: async (res) => {
+      setCancelError(null);
+      setCancelResult(
+        `Requested ${res.running_marked_cancelling} running cancellations, cancelled ${res.pending_cancelled} pending jobs.`
+      );
+      await queryClient.invalidateQueries({ queryKey: ["run", projectSlug, runSlug] });
+      await queryClient.invalidateQueries({ queryKey: ["jobs", projectSlug, runSlug] });
+      await queryClient.invalidateQueries({ queryKey: ["runs", projectSlug] });
+    },
+    onError: (error) => {
+      setCancelError((error as Error).message ?? "Failed to cancel run");
+    }
   });
 
   const artefactsQuery = useQuery({
@@ -119,6 +137,12 @@ export function RunDetailPage() {
     <div className="space-y-6">
       {rerunError && <ErrorBanner message={rerunError} onRetry={() => setRerunError(null)} />}
       {promoError && <ErrorBanner message={promoError} onRetry={() => setPromoError(null)} />}
+      {cancelError && <ErrorBanner message={cancelError} onRetry={() => setCancelError(null)} />}
+      {cancelResult && (
+        <div className="rounded-xl border border-info/30 bg-info/10 px-4 py-3 text-sm text-info">
+          {cancelResult}
+        </div>
+      )}
       <PageHeader
         breadcrumbs={
           <Breadcrumbs
@@ -179,7 +203,14 @@ export function RunDetailPage() {
                 </div>
               )}
             </div>
-            <button className="rounded-full border border-ink-200 px-3 py-1 text-sm text-ink-500">Cancel</button>
+            <button
+              type="button"
+              onClick={() => cancelRunMutation.mutate()}
+              disabled={cancelRunMutation.isPending || runQuery.data?.status === "CANCELLED" || runQuery.data?.status === "CANCELLING" || runQuery.data?.status === "SUCCEEDED" || runQuery.data?.status === "FAILED" || runQuery.data?.status === "TIMEOUT" || runQuery.data?.status === "PARTIAL"}
+              className="rounded-full border border-ink-200 px-3 py-1 text-sm text-ink-500 disabled:opacity-60"
+            >
+              {cancelRunMutation.isPending ? "Cancelling..." : "Cancel"}
+            </button>
             <button
               className="rounded-full bg-ink-900 px-3 py-1 text-sm font-semibold text-white"
               onClick={() => setPromoOpen(true)}

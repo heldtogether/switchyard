@@ -20,6 +20,7 @@ import (
 
 	"github.com/heldtogether/switchyard/internal/api"
 	"github.com/heldtogether/switchyard/internal/config"
+	"github.com/heldtogether/switchyard/internal/control"
 	"github.com/heldtogether/switchyard/internal/executor"
 	dockerexec "github.com/heldtogether/switchyard/internal/executor/docker"
 	"github.com/heldtogether/switchyard/internal/registrysecrets"
@@ -159,6 +160,13 @@ func main() {
 
 	// Create API
 	apiInstance := api.New(cfg, store, producer, s3Store, exec, logger, baseURL, secretCodec)
+	cancelPublisher, err := control.NewPublisher(cfg.Queue.Type, cfg.Queue.URL, cfg.Queue.Exchange, cfg.Queue.QueueName)
+	if err != nil {
+		logger.Error("failed to initialize cancel control publisher", "error", err)
+		os.Exit(1)
+	}
+	defer cancelPublisher.Close()
+	apiInstance.SetCancelPublisher(cancelPublisher)
 
 	// Create and start server
 	server := api.NewServer(cfg, apiInstance, logger)

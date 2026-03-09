@@ -13,6 +13,7 @@ import (
 type JobStore interface {
 	GetJob(ctx context.Context, id uuid.UUID) (*domain.Job, error)
 	UpdateJob(ctx context.Context, job *domain.Job) error
+	UpdateJobStatus(ctx context.Context, id uuid.UUID, status domain.JobStatus, message *string) error
 	SaveArtefacts(ctx context.Context, jobID uuid.UUID, artefacts []domain.Artefact) error
 	GetRun(ctx context.Context, id uuid.UUID) (*domain.Run, error)
 	GetProject(ctx context.Context, id uuid.UUID) (*domain.Project, error)

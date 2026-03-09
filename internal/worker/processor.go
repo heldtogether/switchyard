@@ -31,6 +31,8 @@ type Processor struct {
 	billingCfg   config.BillingConfig
 	billingStore billingStore
 	secretCodec  *registrysecrets.Codec
+	onRunStarted func(jobID uuid.UUID, ref executor.RunRef)
+	onRunDone    func(jobID uuid.UUID)
 }
 
 // NewProcessor creates a new job processor
@@ -56,6 +58,11 @@ func (p *Processor) ConfigureBilling(cfg config.BillingConfig, store billingStor
 	p.billingStore = store
 }
 
+func (p *Processor) SetRunHooks(onStarted func(jobID uuid.UUID, ref executor.RunRef), onDone func(jobID uuid.UUID)) {
+	p.onRunStarted = onStarted
+	p.onRunDone = onDone
+}
+
 // Process executes a single job from start to finish
 func (p *Processor) Process(ctx context.Context, jobID uuid.UUID) error {
 	return p.ProcessWithAllocation(ctx, jobID, nil)
@@ -70,6 +77,22 @@ func (p *Processor) ProcessWithAllocation(ctx context.Context, jobID uuid.UUID, 
 	job, err := p.store.GetJob(ctx, jobID)
 	if err != nil {
 		return fmt.Errorf("failed to fetch job: %w", err)
+	}
+
+	if job.Status == domain.JobStatusCancelled {
+		logger.Info("job already cancelled before execution")
+		return nil
+	}
+	if job.Status == domain.JobStatusCancelling {
+		msg := "Job cancelled before execution"
+		if err := p.store.UpdateJobStatus(ctx, job.ID, domain.JobStatusCancelled, &msg); err != nil {
+			return fmt.Errorf("mark job cancelled from cancelling state: %w", err)
+		}
+		if err := p.store.RecomputeRunStatus(ctx, job.RunID); err != nil {
+			return fmt.Errorf("recompute run status after cancellation: %w", err)
+		}
+		logger.Info("job cancellation finalized before execution")
+		return nil
 	}
 
 	// 2. Load run context
@@ -157,6 +180,12 @@ func (p *Processor) ProcessWithAllocation(ctx context.Context, jobID uuid.UUID, 
 	ref, err := p.executor.CreateRun(ctx, spec)
 	if err != nil {
 		return p.failJob(ctx, job, fmt.Errorf("failed to create executor run: %w", err))
+	}
+	if p.onRunStarted != nil {
+		p.onRunStarted(job.ID, ref)
+	}
+	if p.onRunDone != nil {
+		defer p.onRunDone(job.ID)
 	}
 
 	logger.Info("executor run created", "executor_ref", ref.Reference)

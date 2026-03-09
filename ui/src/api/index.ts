@@ -12,6 +12,7 @@ import {
   CreatePromotionRequest,
   CurrentPromotion,
   CreateInviteResponse,
+  CancelRunResponse,
   Job,
   Member,
   PromotionHistory,
@@ -651,6 +652,25 @@ export async function rerunRun(projectSlug: string, runSlug: string, payload: { 
     {
       method: "POST",
       body: JSON.stringify(payload)
+    }
+  );
+}
+
+export async function cancelJob(projectSlug: string, runSlug: string, jobId: string): Promise<Job> {
+  const res = await fetchJson<any>(
+    `/v1/workspaces/${activeWorkspaceSlug}/projects/${projectSlug}/runs/${runSlug}/jobs/${jobId}/cancel`,
+    {
+      method: "POST"
+    }
+  );
+  return mapJob(res, runSlug);
+}
+
+export async function cancelRun(projectSlug: string, runSlug: string): Promise<CancelRunResponse> {
+  return fetchJson<CancelRunResponse>(
+    `/v1/workspaces/${activeWorkspaceSlug}/projects/${projectSlug}/runs/${runSlug}/cancel`,
+    {
+      method: "POST"
     }
   );
 }
