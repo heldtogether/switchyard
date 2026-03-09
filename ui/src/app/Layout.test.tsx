@@ -83,6 +83,7 @@ describe("Layout workspace creation", () => {
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /default workspace/i })).toBeInTheDocument();
     });
+    expect(screen.getByRole("link", { name: "Billing" })).toHaveAttribute("href", "/default/billing");
 
     await user.click(screen.getByRole("button", { name: /default workspace/i }));
     await user.click(screen.getByRole("button", { name: /create workspace/i }));

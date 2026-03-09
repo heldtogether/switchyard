@@ -28,3 +28,18 @@ export function formatDurationMs(ms?: number | null) {
   if (mins > 0) return `${mins}m ${sec % 60}s`;
   return `${sec}s`;
 }
+
+export function formatCurrencyFromMinorExact(valueMinorExact?: number | null, currency = "USD") {
+  if (valueMinorExact === undefined || valueMinorExact === null) return "—";
+  const valueMajor = valueMinorExact / 100;
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 6
+    }).format(valueMajor);
+  } catch {
+    return `${currency} ${valueMajor.toFixed(6)}`;
+  }
+}

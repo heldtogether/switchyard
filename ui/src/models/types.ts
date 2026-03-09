@@ -80,6 +80,43 @@ export interface Artefact {
   download_url?: string;
 }
 
+export interface WorkspaceMonthToDateBilling {
+  workspace_id: string;
+  month_key: string;
+  cpu_seconds: number;
+  memory_gb_seconds: number;
+  estimated_total_minor: number;
+  estimated_total_minor_exact: number;
+  currency: string;
+}
+
+export interface RunBillingLineItem {
+  job_id: string;
+  cpu_seconds: number;
+  memory_gb_seconds: number;
+  estimated_cpu_minor: number;
+  estimated_memory_minor: number;
+  estimated_total_minor: number;
+  estimated_cpu_minor_exact: number;
+  estimated_memory_minor_exact: number;
+  estimated_total_minor_exact: number;
+  pricing_version: string;
+  currency: string;
+  created_at: string;
+}
+
+export interface RunBillingBreakdown {
+  workspace_id: string;
+  project_id: string;
+  run_id: string;
+  cpu_seconds: number;
+  memory_gb_seconds: number;
+  estimated_total_minor: number;
+  estimated_total_minor_exact: number;
+  currency: string;
+  items: RunBillingLineItem[];
+}
+
 export type PromotionChannel = "dev" | "staging" | "prod" | "validated";
 
 export interface Promotion {

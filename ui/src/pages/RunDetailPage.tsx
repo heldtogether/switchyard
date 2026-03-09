@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { getProject, getRun, listJobs, listArtefacts, savePromotion, listPromotions, rerunRun } from "../api";
+import { getProject, getRun, listJobs, listArtefacts, savePromotion, listPromotions, rerunRun, getRunBillingBreakdown } from "../api";
 import { PageHeader } from "../components/PageHeader";
 import { StatusPill } from "../components/StatusPill";
 import { Tabs } from "../components/Tabs";
@@ -14,6 +14,7 @@ import { ArtefactList } from "../components/ArtefactList";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { EmptyState } from "../components/EmptyState";
 import { Breadcrumbs } from "../components/Breadcrumbs";
+import { formatCurrencyFromMinorExact } from "../utils/format";
 
 export function RunDetailPage() {
   const { workspace = "", projectSlug = "", runSlug = "" } = useParams();
@@ -42,6 +43,10 @@ export function RunDetailPage() {
     queryKey: ["jobs", projectSlug, runSlug],
     queryFn: () => listJobs(projectSlug, runSlug)
   });
+  const runBillingQuery = useQuery({
+    queryKey: ["run-billing", projectSlug, runSlug],
+    queryFn: () => getRunBillingBreakdown(projectSlug, runSlug)
+  });
 
   const artefactsQuery = useQuery({
     queryKey: ["artefacts", projectSlug, runSlug],
@@ -66,6 +71,11 @@ export function RunDetailPage() {
     if (!artefactsQuery.data) return [];
     return Object.values(artefactsQuery.data as Record<string, any[]>).flat();
   }, [artefactsQuery.data]);
+
+  const billingByJobID = useMemo(() => {
+    const entries = runBillingQuery.data?.items ?? [];
+    return new Map(entries.map((item) => [item.job_id, item]));
+  }, [runBillingQuery.data]);
 
   const promotedArtefacts = useMemo(() => {
     if (!runQuery.data) return [];
@@ -204,6 +214,7 @@ export function RunDetailPage() {
                 <DataTableHeaderCell>Job</DataTableHeaderCell>
                 <DataTableHeaderCell>Status</DataTableHeaderCell>
                 <DataTableHeaderCell>Duration</DataTableHeaderCell>
+                <DataTableHeaderCell>Price</DataTableHeaderCell>
                 <DataTableHeaderCell>Executor</DataTableHeaderCell>
               </DataTableHeader>
               <DataTableBody>
@@ -223,6 +234,12 @@ export function RunDetailPage() {
                       <StatusPill status={job.status} />
                     </DataTableCell>
                     <DataTableCell>{formatDurationMs(job.duration)}</DataTableCell>
+                    <DataTableCell>
+                      {formatCurrencyFromMinorExact(
+                        billingByJobID.get(job.id)?.estimated_total_minor_exact,
+                        billingByJobID.get(job.id)?.currency ?? runBillingQuery.data?.currency ?? "USD"
+                      )}
+                    </DataTableCell>
                     <DataTableCell>{job.executor_type}</DataTableCell>
                   </tr>
                 ))}
@@ -242,6 +259,7 @@ export function RunDetailPage() {
                 <DataTableHeaderCell>Job</DataTableHeaderCell>
                 <DataTableHeaderCell>Status</DataTableHeaderCell>
                 <DataTableHeaderCell>Duration</DataTableHeaderCell>
+                <DataTableHeaderCell>Price</DataTableHeaderCell>
                 <DataTableHeaderCell>Executor</DataTableHeaderCell>
               </DataTableHeader>
               <DataTableBody>
@@ -261,6 +279,12 @@ export function RunDetailPage() {
                       <StatusPill status={job.status} />
                     </DataTableCell>
                     <DataTableCell>{formatDurationMs(job.duration)}</DataTableCell>
+                    <DataTableCell>
+                      {formatCurrencyFromMinorExact(
+                        billingByJobID.get(job.id)?.estimated_total_minor_exact,
+                        billingByJobID.get(job.id)?.currency ?? runBillingQuery.data?.currency ?? "USD"
+                      )}
+                    </DataTableCell>
                     <DataTableCell>{job.executor_type}</DataTableCell>
                   </tr>
                 ))}

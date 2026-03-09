@@ -7,7 +7,18 @@ import {
   mockPromotions,
   mockRuns
 } from "./mocks";
-import { Artefact, CreateInviteResponse, Job, Member, Project, Promotion, Run, Workspace } from "../models/types";
+import {
+  Artefact,
+  CreateInviteResponse,
+  Job,
+  Member,
+  Project,
+  Promotion,
+  Run,
+  RunBillingBreakdown,
+  Workspace,
+  WorkspaceMonthToDateBilling
+} from "../models/types";
 
 const runtimeEnv = (window as any).__ENV ?? {};
 const DEFAULT_WORKSPACE = runtimeEnv.WORKSPACE_SLUG ?? import.meta.env.VITE_WORKSPACE_SLUG ?? "default";
@@ -161,6 +172,65 @@ export async function getRun(projectSlug: string, runSlug: string): Promise<Run>
       const run = mockRuns.find((r) => r.slug === runSlug || r.id === runSlug);
       if (!run) throw error;
       return run;
+    }
+    throw error;
+  }
+}
+
+export async function getWorkspaceMonthToDateBilling(): Promise<WorkspaceMonthToDateBilling> {
+  try {
+    return await fetchJson<WorkspaceMonthToDateBilling>(
+      `/v1/workspaces/${activeWorkspaceSlug}/billing/month-to-date`
+    );
+  } catch (error) {
+    if (shouldUseMocks(error)) {
+      return {
+        workspace_id: activeWorkspaceSlug,
+        month_key: new Date().toISOString().slice(0, 7),
+        cpu_seconds: 0,
+        memory_gb_seconds: 0,
+        estimated_total_minor: 0,
+        estimated_total_minor_exact: 0,
+        currency: "USD"
+      };
+    }
+    throw error;
+  }
+}
+
+export async function getRunBillingBreakdown(projectSlug: string, runSlug: string): Promise<RunBillingBreakdown> {
+  try {
+    return await fetchJson<RunBillingBreakdown>(
+      `/v1/workspaces/${activeWorkspaceSlug}/projects/${projectSlug}/runs/${runSlug}/billing`
+    );
+  } catch (error) {
+    if (shouldUseMocks(error)) {
+      const run = mockRuns.find((r) => r.slug === runSlug || r.id === runSlug);
+      const jobs = mockJobs.filter((j) => j.run_id === (run?.id ?? runSlug));
+      return {
+        workspace_id: activeWorkspaceSlug,
+        project_id: run?.project_id ?? "",
+        run_id: run?.id ?? runSlug,
+        cpu_seconds: 0,
+        memory_gb_seconds: 0,
+        estimated_total_minor: 0,
+        estimated_total_minor_exact: 0,
+        currency: "USD",
+        items: jobs.map((job) => ({
+          job_id: job.id,
+          cpu_seconds: 0,
+          memory_gb_seconds: 0,
+          estimated_cpu_minor: 0,
+          estimated_memory_minor: 0,
+          estimated_total_minor: 0,
+          estimated_cpu_minor_exact: 0,
+          estimated_memory_minor_exact: 0,
+          estimated_total_minor_exact: 0,
+          pricing_version: "mock",
+          currency: "USD",
+          created_at: new Date().toISOString()
+        }))
+      };
     }
     throw error;
   }

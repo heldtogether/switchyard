@@ -10,6 +10,7 @@ import { JobsListPage } from "../pages/JobsListPage";
 import { ArtefactsListPage } from "../pages/ArtefactsListPage";
 import { ExecutorsPage } from "../pages/ExecutorsPage";
 import { SettingsPage } from "../pages/SettingsPage";
+import { BillingPage } from "../pages/BillingPage";
 import { LoginPage } from "../pages/LoginPage";
 import { RequireAuth } from "../auth/RequireAuth";
 import { AcceptInvitePage } from "../pages/AcceptInvitePage";
@@ -37,6 +38,7 @@ export default function App() {
         <Route path="/:workspace/runs" element={<RunsListPage />} />
         <Route path="/:workspace/jobs" element={<JobsListPage />} />
         <Route path="/:workspace/artefacts" element={<ArtefactsListPage />} />
+        <Route path="/:workspace/billing" element={<BillingPage />} />
         <Route path="/:workspace/executors" element={<ExecutorsPage />} />
         <Route path="/:workspace/settings" element={<SettingsPage />} />
         <Route path="/:workspace/:projectSlug/:runSlug" element={<RunDetailPage />} />

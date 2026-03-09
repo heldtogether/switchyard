@@ -56,6 +56,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { label: "Runs", to: `/${workspace}/runs` },
     { label: "Jobs", to: `/${workspace}/jobs` },
     { label: "Artefacts", to: `/${workspace}/artefacts` },
+    { label: "Billing", to: `/${workspace}/billing` },
     { label: "Executors", to: `/${workspace}/executors` },
     { label: "Settings", to: `/${workspace}/settings` }
   ];
