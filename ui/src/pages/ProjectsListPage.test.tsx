@@ -5,17 +5,19 @@ import { vi } from "vitest";
 import { ProjectsListPage } from "./ProjectsListPage";
 import { renderWithProviders } from "../test/render";
 
+const createProjectMock = vi.fn(async () => ({
+  id: "p1",
+  slug: "my-cool-project",
+  name: "My Cool Project",
+  description: "",
+  created_at: new Date().toISOString(),
+  updated_at: new Date().toISOString()
+}));
+
 vi.mock("../api", () => ({
   listProjects: vi.fn(async () => []),
   listRuns: vi.fn(async () => []),
-  createProject: vi.fn(async () => ({
-    id: "p1",
-    slug: "my-cool-project",
-    name: "My Cool Project",
-    description: "",
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString()
-  }))
+  createProject: (payload: { name: string; slug: string; description?: string }) => createProjectMock(payload)
 }));
 
 vi.mock("react-router-dom", async () => {
@@ -28,6 +30,10 @@ vi.mock("react-router-dom", async () => {
 });
 
 describe("ProjectsListPage", () => {
+  beforeEach(() => {
+    createProjectMock.mockClear();
+  });
+
   it("keeps slug synced with typed project name", async () => {
     const user = userEvent.setup();
     renderWithProviders(<ProjectsListPage />);
@@ -44,5 +50,25 @@ describe("ProjectsListPage", () => {
         "my-cool-project"
       );
     });
+  });
+
+  it("blocks reserved slugs before submit", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<ProjectsListPage />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /create project/i })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: /create project/i }));
+    await user.type(screen.getByPlaceholderText("Vision Core"), "Reserved");
+    await user.clear(screen.getByPlaceholderText("vision-core"));
+    await user.type(screen.getByPlaceholderText("vision-core"), "runs");
+    await user.click(screen.getByRole("button", { name: "Create" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Slug is reserved for system routes.")).toBeInTheDocument();
+    });
+    expect(createProjectMock).not.toHaveBeenCalled();
   });
 });

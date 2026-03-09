@@ -100,4 +100,25 @@ describe("Layout workspace creation", () => {
       });
     });
   });
+
+  it("blocks reserved workspace slug before submit", async () => {
+    const user = userEvent.setup();
+    renderLayout();
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /default workspace/i })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: /default workspace/i }));
+    await user.click(screen.getByRole("button", { name: /create workspace/i }));
+    await user.type(screen.getByPlaceholderText("Acme"), "Reserved Workspace");
+    await user.clear(screen.getByPlaceholderText("acme"));
+    await user.type(screen.getByPlaceholderText("acme"), "runs");
+    await user.click(screen.getByRole("button", { name: "Create" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Slug is reserved for system routes.")).toBeInTheDocument();
+    });
+    expect(createWorkspaceMock).not.toHaveBeenCalled();
+  });
 });

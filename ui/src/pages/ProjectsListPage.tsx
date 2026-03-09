@@ -10,6 +10,7 @@ import { Skeleton } from "../components/Skeleton";
 import { RelativeTime } from "../components/RelativeTime";
 import { Modal } from "../components/Modal";
 import { useNavigate, useParams } from "react-router-dom";
+import { isReservedSlug } from "../utils/reservedSlugs";
 
 export function ProjectsListPage() {
   const navigate = useNavigate();
@@ -55,6 +56,10 @@ export function ProjectsListPage() {
   async function onCreateProject() {
     if (!name.trim() || !slug.trim()) {
       setCreateError("Name and slug are required.");
+      return;
+    }
+    if (isReservedSlug(slug)) {
+      setCreateError("Slug is reserved for system routes.");
       return;
     }
     setCreating(true);

@@ -45,6 +45,14 @@ func (a *API) HandleCreateWorkspace(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	if isReservedSlug(req.Slug) {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{
+			Error:   "validation_error",
+			Message: "slug is reserved for system routes",
+			Code:    http.StatusBadRequest,
+		})
+		return
+	}
 
 	req.Name = strings.TrimSpace(req.Name)
 	if req.Name == "" {

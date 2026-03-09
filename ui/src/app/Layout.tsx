@@ -6,6 +6,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createWorkspace, listWorkspaces, setWorkspaceSlug } from "../api";
 import { Modal } from "../components/Modal";
 import { slugify } from "../utils/slug";
+import { isReservedSlug } from "../utils/reservedSlugs";
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
@@ -75,6 +76,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
     const slug = workspaceSlugInput.trim();
     if (!name || !slug) {
       setWorkspaceCreateError("Name and slug are required.");
+      return;
+    }
+    if (isReservedSlug(slug)) {
+      setWorkspaceCreateError("Slug is reserved for system routes.");
       return;
     }
     setWorkspaceCreating(true);

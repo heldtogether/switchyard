@@ -69,6 +69,33 @@ func TestHandleCreateWorkspace_InvalidSlug(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, w.Code)
 }
 
+func TestHandleCreateWorkspace_ReservedSlug(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	store, cleanup := setupTestPostgres(t)
+	defer cleanup()
+
+	api := &API{
+		cfg:    &config.Config{},
+		store:  store,
+		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
+	mux := setupWorkspaceRouter(api)
+
+	body := bytes.NewBufferString(`{"slug":"runs","name":"Reserved Slug Workspace"}`)
+	req := httptest.NewRequest(http.MethodPost, "/v1/workspaces", body)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusBadRequest, w.Code)
+	var response ErrorResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+	require.Equal(t, "validation_error", response.Error)
+	require.Equal(t, "slug is reserved for system routes", response.Message)
+}
+
 func TestHandleCreateWorkspace_DuplicateSlug(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/heldtogether/switchyard/internal/domain"
@@ -27,6 +28,14 @@ func (a *API) HandleCreateProject(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, ErrorResponse{
 			Error:   "validation_error",
 			Message: "slug is required",
+			Code:    http.StatusBadRequest,
+		})
+		return
+	}
+	if isReservedSlug(strings.ToLower(strings.TrimSpace(req.Slug))) {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{
+			Error:   "validation_error",
+			Message: "slug is reserved for system routes",
 			Code:    http.StatusBadRequest,
 		})
 		return
