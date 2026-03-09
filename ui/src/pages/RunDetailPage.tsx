@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
-import { getProject, getRun, listJobs, listArtefacts, savePromotion, listPromotions, rerunRun, getRunBillingBreakdown } from "../api";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { createPromotion, getProject, getRun, listCurrentPromotions, listJobs, listArtefacts, rerunRun, getRunBillingBreakdown } from "../api";
 import { PageHeader } from "../components/PageHeader";
 import { StatusPill } from "../components/StatusPill";
 import { Tabs } from "../components/Tabs";
@@ -19,12 +19,16 @@ import { formatCurrencyFromMinorExact } from "../utils/format";
 export function RunDetailPage() {
   const { workspace = "", projectSlug = "", runSlug = "" } = useParams();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [tab, setTab] = useState("overview");
   const [promoOpen, setPromoOpen] = useState(false);
   const [promoChannel, setPromoChannel] = useState("dev");
   const [promoNote, setPromoNote] = useState("");
   const [promoMode, setPromoMode] = useState<"run" | "artefacts">("run");
   const [selectedArtefacts, setSelectedArtefacts] = useState<string[]>([]);
+  const [promoLogicalKeys, setPromoLogicalKeys] = useState<Record<string, string>>({});
+  const [promoError, setPromoError] = useState<string | null>(null);
+  const [promoSubmitting, setPromoSubmitting] = useState(false);
   const [rerunOpen, setRerunOpen] = useState(false);
   const [rerunSubmitting, setRerunSubmitting] = useState(false);
   const [rerunError, setRerunError] = useState<string | null>(null);
@@ -46,6 +50,10 @@ export function RunDetailPage() {
   const runBillingQuery = useQuery({
     queryKey: ["run-billing", projectSlug, runSlug],
     queryFn: () => getRunBillingBreakdown(projectSlug, runSlug)
+  });
+  const promotionsQuery = useQuery({
+    queryKey: ["promotions", projectSlug],
+    queryFn: () => listCurrentPromotions(projectSlug)
   });
 
   const artefactsQuery = useQuery({
@@ -78,12 +86,13 @@ export function RunDetailPage() {
   }, [runBillingQuery.data]);
 
   const promotedArtefacts = useMemo(() => {
-    if (!runQuery.data) return [];
-    const promos = listPromotions(runQuery.data.project_id);
-    const fromRun = promos.filter((promo) => promo.run_id === runQuery.data.id);
-    const keys = new Set(fromRun.flatMap((promo) => promo.artefact_keys ?? []));
-    return allArtefacts.filter((art: any) => keys.has(art.object_key));
-  }, [runQuery.data, allArtefacts]);
+    if (!runQuery.data || !promotionsQuery.data) return [];
+    const fromRun = promotionsQuery.data
+      .map((promo) => promo.event)
+      .filter((event) => event.run_id === runQuery.data.id);
+    const keys = new Set(fromRun.flatMap((event) => event.artefacts.map((artefact) => `${artefact.job_id}::${artefact.path}`)));
+    return allArtefacts.filter((art: any) => keys.has(`${art.job_id}::${art.path}`));
+  }, [runQuery.data, allArtefacts, promotionsQuery.data]);
 
   if (runQuery.error) {
     return <ErrorBanner message={(runQuery.error as Error).message} onRetry={() => runQuery.refetch()} />;
@@ -109,6 +118,7 @@ export function RunDetailPage() {
   return (
     <div className="space-y-6">
       {rerunError && <ErrorBanner message={rerunError} onRetry={() => setRerunError(null)} />}
+      {promoError && <ErrorBanner message={promoError} onRetry={() => setPromoError(null)} />}
       <PageHeader
         breadcrumbs={
           <Breadcrumbs
@@ -346,32 +356,84 @@ export function RunDetailPage() {
       <Modal
         open={promoOpen}
         title="Promote Run"
-        description="Promotions are stored locally until a backend endpoint is available."
-        onClose={() => setPromoOpen(false)}
+        description="Promotion updates shared channel state and appends an immutable audit event."
+        onClose={() => {
+          if (promoSubmitting) return;
+          setPromoOpen(false);
+          setPromoError(null);
+        }}
         footer={
           <div className="flex justify-end gap-2">
-            <button type="button" onClick={() => setPromoOpen(false)} className="text-sm text-ink-500">
+            <button
+              type="button"
+              disabled={promoSubmitting}
+              onClick={() => {
+                setPromoOpen(false);
+                setPromoError(null);
+              }}
+              className="text-sm text-ink-500 disabled:opacity-60"
+            >
               Cancel
             </button>
             <button
               type="button"
-              onClick={() => {
+              disabled={promoSubmitting}
+              onClick={async () => {
                 if (!runQuery.data) return;
-                savePromotion({
-                  id: `promo-${Date.now()}`,
-                  project_id: runQuery.data.project_id,
-                  channel: promoChannel as any,
-                  run_id: runQuery.data.id,
-                  promoted_at: new Date().toISOString(),
-                  promoted_by: "you",
-                  note: promoNote,
-                  artefact_keys: promoMode === "artefacts" ? selectedArtefacts : undefined
-                });
-                setPromoOpen(false);
+                setPromoError(null);
+
+                const selected = promoMode === "artefacts"
+                  ? allArtefacts.filter((art: any) => selectedArtefacts.includes(`${art.job_id}::${art.path}`))
+                  : [];
+                const seen = new Set<string>();
+                if (promoMode === "artefacts") {
+                  if (selected.length === 0) {
+                    setPromoError("Select at least one artefact or switch scope to Entire run.");
+                    return;
+                  }
+                  for (const art of selected) {
+                    const logicalKey = (promoLogicalKeys[`${art.job_id}::${art.path}`] ?? "").trim().toLowerCase();
+                    if (!logicalKey) {
+                      setPromoError("Every selected artefact needs a logical key.");
+                      return;
+                    }
+                    if (seen.has(logicalKey)) {
+                      setPromoError("Logical keys must be unique within the promotion.");
+                      return;
+                    }
+                    seen.add(logicalKey);
+                  }
+                }
+
+                setPromoSubmitting(true);
+                try {
+                  await createPromotion(projectSlug, {
+                    channel: promoChannel as any,
+                    run_id: runQuery.data.id,
+                    note: promoNote.trim() || undefined,
+                    artefacts:
+                      promoMode === "artefacts"
+                        ? selected.map((art: any) => ({
+                            logical_key: (promoLogicalKeys[`${art.job_id}::${art.path}`] ?? "").trim().toLowerCase(),
+                            job_id: art.job_id,
+                            path: art.path
+                          }))
+                        : undefined
+                  });
+                  await queryClient.invalidateQueries({ queryKey: ["promotions", projectSlug] });
+                  setPromoOpen(false);
+                  setSelectedArtefacts([]);
+                  setPromoLogicalKeys({});
+                  setPromoNote("");
+                } catch (error) {
+                  setPromoError((error as Error).message ?? "Failed to save promotion");
+                } finally {
+                  setPromoSubmitting(false);
+                }
               }}
-              className="rounded-full bg-ink-900 px-4 py-2 text-sm font-semibold text-white"
+              className="rounded-full bg-ink-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
             >
-              Confirm Promotion
+              {promoSubmitting ? "Promoting..." : "Confirm Promotion"}
             </button>
           </div>
         }
@@ -414,20 +476,43 @@ export function RunDetailPage() {
               <div className="mt-3 max-h-40 space-y-2 overflow-auto rounded-lg border border-ink-200 p-3 text-xs">
                 {allArtefacts.length === 0 && <div className="text-ink-400">No artefacts to select.</div>}
                 {allArtefacts.map((art: any) => (
-                  <label key={art.id} className="flex items-center gap-2">
+                  <div key={art.id} className="space-y-1">
+                    <label className="flex items-center gap-2">
                     <input
                       type="checkbox"
-                      checked={selectedArtefacts.includes(art.object_key)}
+                      checked={selectedArtefacts.includes(`${art.job_id}::${art.path}`)}
                       onChange={(event) => {
+                        const selector = `${art.job_id}::${art.path}`;
                         setSelectedArtefacts((prev) =>
                           event.target.checked
-                            ? [...prev, art.object_key]
-                            : prev.filter((key) => key !== art.object_key)
+                            ? [...prev, selector]
+                            : prev.filter((key) => key !== selector)
                         );
+                        if (!event.target.checked) {
+                          setPromoLogicalKeys((prev) => {
+                            const next = { ...prev };
+                            delete next[selector];
+                            return next;
+                          });
+                        }
                       }}
                     />
                     <span className="text-ink-700">{art.path}</span>
-                  </label>
+                    </label>
+                    {selectedArtefacts.includes(`${art.job_id}::${art.path}`) && (
+                      <input
+                        className="ml-6 w-[calc(100%-1.5rem)] rounded border border-ink-200 px-2 py-1 text-xs"
+                        placeholder="logical key (e.g. model)"
+                        value={promoLogicalKeys[`${art.job_id}::${art.path}`] ?? ""}
+                        onChange={(event) =>
+                          setPromoLogicalKeys((prev) => ({
+                            ...prev,
+                            [`${art.job_id}::${art.path}`]: event.target.value
+                          }))
+                        }
+                      />
+                    )}
+                  </div>
                 ))}
               </div>
             )}

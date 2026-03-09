@@ -64,8 +64,8 @@ vi.mock("../api", () => ({
     ]
   })),
   listArtefacts: vi.fn(async () => []),
-  savePromotion: vi.fn(),
-  listPromotions: vi.fn(() => []),
+  createPromotion: vi.fn(),
+  listCurrentPromotions: vi.fn(async () => []),
   rerunRun: rerunRunMock
 }));
 

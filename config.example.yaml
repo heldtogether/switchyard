@@ -83,6 +83,10 @@ api:
       previous_key_id: "${REGISTRY_SECRETS_PREVIOUS_KEY_ID}"
       previous_key: "${REGISTRY_SECRETS_PREVIOUS_KEY}"
 
+  promotions:
+    # Signed URL lifetime returned by promotion resolve endpoints for CI.
+    presigned_url_ttl: 15m
+
 # ==============================================================================
 # Worker Configuration
 # ==============================================================================

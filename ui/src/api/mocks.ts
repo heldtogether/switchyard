@@ -1,4 +1,4 @@
-import { Artefact, Job, Project, Promotion, Run } from "../models/types";
+import { Artefact, CurrentPromotion, Job, Project, Run } from "../models/types";
 
 const now = Date.now();
 
@@ -143,15 +143,21 @@ export const mockArtefacts: Artefact[] = [
   }
 ];
 
-export const mockPromotions: Promotion[] = [
+export const mockPromotions: CurrentPromotion[] = [
   {
-    id: "promo-1",
     project_id: "proj-1",
     channel: "dev",
-    run_id: "run-117",
-    promoted_at: new Date(now - 1000 * 60 * 60 * 2).toISOString(),
-    promoted_by: "alex",
-    note: "Stable baseline"
+    event: {
+      id: "promo-1",
+      workspace_id: "default",
+      project_id: "proj-1",
+      channel: "dev",
+      run_id: "run-117",
+      promoted_at: new Date(now - 1000 * 60 * 60 * 2).toISOString(),
+      promoted_by: "alex",
+      note: "Stable baseline",
+      artefacts: []
+    }
   }
 ];
 

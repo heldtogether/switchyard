@@ -35,6 +35,11 @@ type APIConfig struct {
 	Auth               AuthConfig            `yaml:"auth"`
 	RBAC               RBACConfig            `yaml:"rbac"`
 	RegistrySecrets    RegistrySecretsConfig `yaml:"registry_secrets"`
+	Promotions         PromotionAPIConfig    `yaml:"promotions"`
+}
+
+type PromotionAPIConfig struct {
+	PresignedURLTTL time.Duration `yaml:"presigned_url_ttl"`
 }
 
 // AuthConfig holds authentication configuration
@@ -341,6 +346,11 @@ func applyEnvOverrides(cfg *Config) {
 		}
 		cfg.API.CORSAllowedOrigins = origins
 	}
+	if v := os.Getenv("API_PROMOTIONS_PRESIGNED_URL_TTL"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			cfg.API.Promotions.PresignedURLTTL = d
+		}
+	}
 	if v := os.Getenv("REGISTRY_SECRETS_ENCRYPTION_ENABLED"); v != "" {
 		cfg.API.RegistrySecrets.Encryption.Enabled = v == "true" || v == "1"
 	}
@@ -606,6 +616,9 @@ func (c *Config) Validate() error {
 	}
 	if err := c.API.RegistrySecrets.Encryption.Validate(); err != nil {
 		return err
+	}
+	if c.API.Promotions.PresignedURLTTL == 0 {
+		c.API.Promotions.PresignedURLTTL = 15 * time.Minute
 	}
 
 	// Database validation

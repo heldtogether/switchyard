@@ -204,6 +204,76 @@ type ListArtefactsResponse struct {
 	Artefacts []ArtefactResponse `json:"artefacts"`
 }
 
+type PromotionArtefactInput struct {
+	LogicalKey string    `json:"logical_key"`
+	JobID      uuid.UUID `json:"job_id"`
+	Path       string    `json:"path"`
+}
+
+type CreatePromotionRequest struct {
+	Channel   string                   `json:"channel"`
+	RunID     *uuid.UUID               `json:"run_id,omitempty"`
+	RunSlug   string                   `json:"run_slug,omitempty"`
+	Note      *string                  `json:"note,omitempty"`
+	Artefacts []PromotionArtefactInput `json:"artefacts,omitempty"`
+}
+
+type PromotionArtefactResponse struct {
+	LogicalKey  string    `json:"logical_key"`
+	JobID       uuid.UUID `json:"job_id"`
+	Path        string    `json:"path"`
+	ObjectKey   string    `json:"object_key"`
+	SizeBytes   int64     `json:"size_bytes"`
+	ContentType string    `json:"content_type,omitempty"`
+}
+
+type PromotionEventResponse struct {
+	ID                    uuid.UUID                   `json:"id"`
+	WorkspaceID           uuid.UUID                   `json:"workspace_id"`
+	ProjectID             uuid.UUID                   `json:"project_id"`
+	Channel               string                      `json:"channel"`
+	RunID                 uuid.UUID                   `json:"run_id"`
+	Note                  *string                     `json:"note,omitempty"`
+	PromotedBy            string                      `json:"promoted_by"`
+	PromotedByPrincipalID *uuid.UUID                  `json:"promoted_by_principal_id,omitempty"`
+	CreatedAt             time.Time                   `json:"created_at"`
+	Artefacts             []PromotionArtefactResponse `json:"artefacts"`
+}
+
+type CurrentPromotionResponse struct {
+	ProjectID uuid.UUID              `json:"project_id"`
+	Channel   string                 `json:"channel"`
+	Event     PromotionEventResponse `json:"event"`
+}
+
+type ListCurrentPromotionsResponse struct {
+	ProjectID  uuid.UUID                  `json:"project_id"`
+	Promotions []CurrentPromotionResponse `json:"promotions"`
+}
+
+type PromotionHistoryResponse struct {
+	Events []PromotionEventResponse `json:"events"`
+	Total  int                      `json:"total"`
+	Limit  int                      `json:"limit"`
+	Offset int                      `json:"offset"`
+}
+
+type ResolvedPromotedArtefactResponse struct {
+	Channel              string    `json:"channel"`
+	LogicalKey           string    `json:"logical_key"`
+	PromotionEventID     uuid.UUID `json:"promotion_event_id"`
+	RunID                uuid.UUID `json:"run_id"`
+	JobID                uuid.UUID `json:"job_id"`
+	Path                 string    `json:"path"`
+	ObjectKey            string    `json:"object_key"`
+	SizeBytes            int64     `json:"size_bytes"`
+	ContentType          string    `json:"content_type,omitempty"`
+	PromotedAt           time.Time `json:"promoted_at"`
+	PromotedBy           string    `json:"promoted_by"`
+	DownloadURL          string    `json:"download_url"`
+	DownloadURLExpiresAt time.Time `json:"download_url_expires_at"`
+}
+
 type WorkspaceMonthToDateBillingResponse struct {
 	WorkspaceID              uuid.UUID `json:"workspace_id"`
 	MonthKey                 string    `json:"month_key"`

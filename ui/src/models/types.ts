@@ -124,13 +124,65 @@ export interface RunBillingBreakdown {
 
 export type PromotionChannel = "dev" | "staging" | "prod" | "validated";
 
-export interface Promotion {
+export interface PromotionArtefact {
+  logical_key: string;
+  job_id: string;
+  path: string;
+  object_key: string;
+  size_bytes: number;
+  content_type?: string;
+}
+
+export interface PromotionEvent {
   id: string;
+  workspace_id: string;
   project_id: string;
   channel: PromotionChannel;
   run_id: string;
   promoted_at: string;
   promoted_by: string;
+  promoted_by_principal_id?: string;
   note?: string;
-  artefact_keys?: string[];
+  artefacts: PromotionArtefact[];
+}
+
+export interface CurrentPromotion {
+  project_id: string;
+  channel: PromotionChannel;
+  event: PromotionEvent;
+}
+
+export interface PromotionHistory {
+  events: PromotionEvent[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface CreatePromotionRequest {
+  channel: PromotionChannel;
+  run_id?: string;
+  run_slug?: string;
+  note?: string;
+  artefacts?: Array<{
+    logical_key: string;
+    job_id: string;
+    path: string;
+  }>;
+}
+
+export interface ResolvedPromotedArtefact {
+  channel: PromotionChannel;
+  logical_key: string;
+  promotion_event_id: string;
+  run_id: string;
+  job_id: string;
+  path: string;
+  object_key: string;
+  size_bytes: number;
+  content_type?: string;
+  promoted_at: string;
+  promoted_by: string;
+  download_url: string;
+  download_url_expires_at: string;
 }

@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { getProject, listRuns, listPromotions } from "../api";
+import { getProject, listCurrentPromotions, listRuns } from "../api";
 import { PageHeader } from "../components/PageHeader";
 import { DataTable, DataTableBody, DataTableCell, DataTableHeader, DataTableHeaderCell } from "../components/DataTable";
 import { StatusPill } from "../components/StatusPill";
@@ -28,10 +28,10 @@ export function ProjectRunsPage() {
     queryFn: () => listRuns(projectSlug)
   });
 
-  const promotions = useMemo(() => {
-    if (!projectQuery.data) return [];
-    return listPromotions(projectQuery.data.id);
-  }, [projectQuery.data]);
+  const promotionsQuery = useQuery({
+    queryKey: ["promotions", projectSlug],
+    queryFn: () => listCurrentPromotions(projectSlug)
+  });
 
   const filteredRuns = useMemo(() => {
     if (!runsQuery.data) return [];
@@ -85,11 +85,11 @@ export function ProjectRunsPage() {
         <div className="card p-4">
           <p className="text-xs uppercase tracking-[0.2em] text-ink-400">Current Promotions</p>
           <div className="mt-4 space-y-3">
-            {promotions.length === 0 && <p className="text-sm text-ink-500">No promotions yet.</p>}
-            {promotions.map((promo) => (
-              <div key={promo.id} className="flex items-center justify-between">
+            {(promotionsQuery.data ?? []).length === 0 && <p className="text-sm text-ink-500">No promotions yet.</p>}
+            {(promotionsQuery.data ?? []).map((promo) => (
+              <div key={promo.event.id} className="flex items-center justify-between">
                 <span className="text-sm font-semibold text-ink-900 capitalize">{promo.channel}</span>
-                <span className="text-xs text-ink-500">Run {promo.run_id}</span>
+                <span className="text-xs text-ink-500">Run {promo.event.run_id}</span>
               </div>
             ))}
           </div>

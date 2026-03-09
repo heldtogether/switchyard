@@ -9,11 +9,14 @@ import {
 } from "./mocks";
 import {
   Artefact,
+  CreatePromotionRequest,
+  CurrentPromotion,
   CreateInviteResponse,
   Job,
   Member,
+  PromotionHistory,
   Project,
-  Promotion,
+  ResolvedPromotedArtefact,
   Run,
   RunBillingBreakdown,
   Workspace,
@@ -97,6 +100,38 @@ function mapJob(job: any, runId?: string): Job {
       job.started_at && job.finished_at
         ? new Date(job.finished_at).getTime() - new Date(job.started_at).getTime()
         : undefined
+  };
+}
+
+function mapPromotionEvent(event: any) {
+  return {
+    id: event.id,
+    workspace_id: event.workspace_id,
+    project_id: event.project_id,
+    channel: event.channel,
+    run_id: event.run_id,
+    promoted_at: event.promoted_at ?? event.created_at,
+    promoted_by: event.promoted_by,
+    promoted_by_principal_id: event.promoted_by_principal_id,
+    note: event.note,
+    artefacts: Array.isArray(event.artefacts)
+      ? event.artefacts.map((art: any) => ({
+          logical_key: art.logical_key,
+          job_id: art.job_id,
+          path: art.path,
+          object_key: art.object_key,
+          size_bytes: art.size_bytes,
+          content_type: art.content_type
+        }))
+      : []
+  };
+}
+
+function mapCurrentPromotion(promo: any): CurrentPromotion {
+  return {
+    project_id: promo.project_id,
+    channel: promo.channel,
+    event: mapPromotionEvent(promo.event ?? promo)
   };
 }
 
@@ -304,19 +339,109 @@ export async function listArtefacts(projectSlug: string, runSlug: string, jobId:
   }
 }
 
-const PROMO_KEY = "switchyard.promotions";
-
-export function listPromotions(projectId: string): Promotion[] {
-  const raw = localStorage.getItem(PROMO_KEY);
-  const list = raw ? (JSON.parse(raw) as Promotion[]) : mockPromotions;
-  return list.filter((promo) => promo.project_id === projectId);
+export async function listCurrentPromotions(projectSlug: string): Promise<CurrentPromotion[]> {
+  try {
+    const res = await fetchJson<{ promotions: any[] }>(
+      `/v1/workspaces/${activeWorkspaceSlug}/projects/${projectSlug}/promotions`
+    );
+    return (res.promotions ?? []).map(mapCurrentPromotion);
+  } catch (error) {
+    if (shouldUseMocks(error)) {
+      const project = mockProjects.find((p) => p.slug === projectSlug);
+      return mockPromotions.filter((promo) => promo.project_id === (project?.id ?? projectSlug));
+    }
+    throw error;
+  }
 }
 
-export function savePromotion(promo: Promotion) {
-  const raw = localStorage.getItem(PROMO_KEY);
-  const list = raw ? (JSON.parse(raw) as Promotion[]) : mockPromotions;
-  const next = [promo, ...list.filter((p) => !(p.project_id === promo.project_id && p.channel === promo.channel))];
-  localStorage.setItem(PROMO_KEY, JSON.stringify(next));
+export async function createPromotion(projectSlug: string, promotion: CreatePromotionRequest) {
+  try {
+    const res = await fetchJson<any>(
+      `/v1/workspaces/${activeWorkspaceSlug}/projects/${projectSlug}/promotions`,
+      {
+        method: "POST",
+        body: JSON.stringify(promotion)
+      }
+    );
+    return mapPromotionEvent(res);
+  } catch (error) {
+    if (shouldUseMocks(error)) {
+      return {
+        id: `promo-${Date.now()}`,
+        workspace_id: activeWorkspaceSlug,
+        project_id: projectSlug,
+        channel: promotion.channel,
+        run_id: promotion.run_id ?? "",
+        promoted_at: new Date().toISOString(),
+        promoted_by: "mock-user",
+        note: promotion.note,
+        artefacts: (promotion.artefacts ?? []).map((art) => ({
+          logical_key: art.logical_key,
+          job_id: art.job_id,
+          path: art.path,
+          object_key: art.path,
+          size_bytes: 0,
+          content_type: ""
+        }))
+      };
+    }
+    throw error;
+  }
+}
+
+export async function listPromotionHistory(projectSlug: string, channel?: string): Promise<PromotionHistory> {
+  try {
+    const params = new URLSearchParams();
+    if (channel) params.set("channel", channel);
+    const suffix = params.toString() ? `?${params.toString()}` : "";
+    const res = await fetchJson<PromotionHistory>(
+      `/v1/workspaces/${activeWorkspaceSlug}/projects/${projectSlug}/promotions/history${suffix}`
+    );
+    return {
+      events: (res.events ?? []).map(mapPromotionEvent),
+      total: res.total ?? 0,
+      limit: res.limit ?? 50,
+      offset: res.offset ?? 0
+    };
+  } catch (error) {
+    if (shouldUseMocks(error)) {
+      const current = await listCurrentPromotions(projectSlug);
+      const events = current.map((promo) => promo.event);
+      return { events, total: events.length, limit: 50, offset: 0 };
+    }
+    throw error;
+  }
+}
+
+export async function resolvePromotedArtefact(
+  projectSlug: string,
+  channel: string,
+  logicalKey: string
+): Promise<ResolvedPromotedArtefact> {
+  try {
+    return await fetchJson<ResolvedPromotedArtefact>(
+      `/v1/workspaces/${activeWorkspaceSlug}/projects/${projectSlug}/promotions/${channel}/artefacts/${encodeURIComponent(logicalKey)}`
+    );
+  } catch (error) {
+    if (shouldUseMocks(error)) {
+      return {
+        channel: channel as any,
+        logical_key: logicalKey,
+        promotion_event_id: "promo-mock",
+        run_id: "run-117",
+        job_id: "job-1",
+        path: "outputs/mock.bin",
+        object_key: "outputs/mock.bin",
+        size_bytes: 0,
+        content_type: "application/octet-stream",
+        promoted_at: new Date().toISOString(),
+        promoted_by: "mock-user",
+        download_url: "https://example.com/mock.bin",
+        download_url_expires_at: new Date(Date.now() + 15 * 60_000).toISOString()
+      };
+    }
+    throw error;
+  }
 }
 
 export async function listAllRuns() {

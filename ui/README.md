@@ -66,10 +66,14 @@ UI_AGGREGATE_LIMIT=5
 - `GET /v1/workspaces/:workspace/projects/:projectSlug/runs/:runSlug/jobs/:jobId`
 - `GET /v1/workspaces/:workspace/projects/:projectSlug/runs/:runSlug/jobs/:jobId/logs`
 - `GET /v1/workspaces/:workspace/projects/:projectSlug/runs/:runSlug/jobs/:jobId/artefacts`
+- `POST /v1/workspaces/:workspace/projects/:projectSlug/promotions`
+- `GET /v1/workspaces/:workspace/projects/:projectSlug/promotions`
+- `GET /v1/workspaces/:workspace/projects/:projectSlug/promotions/history`
+- `GET /v1/workspaces/:workspace/projects/:projectSlug/promotions/:channel`
+- `GET /v1/workspaces/:workspace/projects/:projectSlug/promotions/:channel/artefacts/:logicalKey`
 - `GET /v1/workspaces/:workspace/registry-secrets`
 
 **Mocked / client-side only:**
-- Promotions (stored in `localStorage`)
 - Run tags, run number, triggers (read from `metadata` when present)
 
 **Write endpoints used:**

@@ -17,7 +17,7 @@ vi.mock("../api", async () => {
       updated_at: new Date().toISOString()
     })),
     listRuns: vi.fn(async () => []),
-    listPromotions: vi.fn(() => [])
+    listCurrentPromotions: vi.fn(async () => [])
   };
 });
 

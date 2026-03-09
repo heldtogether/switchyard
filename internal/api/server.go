@@ -66,6 +66,11 @@ func (s *Server) Start() error {
 	mux.HandleFunc("GET /v1/workspaces/{workspace_slug}/projects/{project_slug}/runs/{run_slug}", s.api.HandleGetRun)
 	mux.HandleFunc("POST /v1/workspaces/{workspace_slug}/projects/{project_slug}/runs/{run_slug}/rerun", s.api.HandleRerunRun)
 	mux.HandleFunc("GET /v1/workspaces/{workspace_slug}/projects/{project_slug}/runs/{run_slug}/billing", s.api.HandleRunBillingBreakdown)
+	mux.HandleFunc("POST /v1/workspaces/{workspace_slug}/projects/{project_slug}/promotions", s.api.HandleCreatePromotion)
+	mux.HandleFunc("GET /v1/workspaces/{workspace_slug}/projects/{project_slug}/promotions", s.api.HandleListCurrentPromotions)
+	mux.HandleFunc("GET /v1/workspaces/{workspace_slug}/projects/{project_slug}/promotions/history", s.api.HandleListPromotionHistory)
+	mux.HandleFunc("GET /v1/workspaces/{workspace_slug}/projects/{project_slug}/promotions/{channel}", s.api.HandleGetCurrentPromotionByChannel)
+	mux.HandleFunc("GET /v1/workspaces/{workspace_slug}/projects/{project_slug}/promotions/{channel}/artefacts/{logical_key}", s.api.HandleResolvePromotedArtefact)
 
 	// Job routes
 	mux.HandleFunc("POST /v1/workspaces/{workspace_slug}/projects/{project_slug}/runs/{run_slug}/jobs", s.api.HandleCreateJob)
