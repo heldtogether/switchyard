@@ -85,6 +85,7 @@ export interface WorkspaceMonthToDateBilling {
   month_key: string;
   cpu_seconds: number;
   memory_gb_seconds: number;
+  gpu_seconds: number;
   estimated_total_minor: number;
   estimated_total_minor_exact: number;
   currency: string;
@@ -94,11 +95,14 @@ export interface RunBillingLineItem {
   job_id: string;
   cpu_seconds: number;
   memory_gb_seconds: number;
+  gpu_seconds: number;
   estimated_cpu_minor: number;
   estimated_memory_minor: number;
+  estimated_gpu_minor: number;
   estimated_total_minor: number;
   estimated_cpu_minor_exact: number;
   estimated_memory_minor_exact: number;
+  estimated_gpu_minor_exact: number;
   estimated_total_minor_exact: number;
   pricing_version: string;
   currency: string;
@@ -111,6 +115,7 @@ export interface RunBillingBreakdown {
   run_id: string;
   cpu_seconds: number;
   memory_gb_seconds: number;
+  gpu_seconds: number;
   estimated_total_minor: number;
   estimated_total_minor_exact: number;
   currency: string;

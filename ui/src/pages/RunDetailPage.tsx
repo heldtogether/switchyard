@@ -235,10 +235,19 @@ export function RunDetailPage() {
                     </DataTableCell>
                     <DataTableCell>{formatDurationMs(job.duration)}</DataTableCell>
                     <DataTableCell>
-                      {formatCurrencyFromMinorExact(
-                        billingByJobID.get(job.id)?.estimated_total_minor_exact,
-                        billingByJobID.get(job.id)?.currency ?? runBillingQuery.data?.currency ?? "USD"
-                      )}
+                      <div>
+                        <div>
+                          {formatCurrencyFromMinorExact(
+                            billingByJobID.get(job.id)?.estimated_total_minor_exact,
+                            billingByJobID.get(job.id)?.currency ?? runBillingQuery.data?.currency ?? "USD"
+                          )}
+                        </div>
+                        {(billingByJobID.get(job.id)?.gpu_seconds ?? 0) > 0 && (
+                          <div className="text-xs text-ink-500">
+                            GPU s: {(billingByJobID.get(job.id)?.gpu_seconds ?? 0).toLocaleString(undefined, { maximumFractionDigits: 3 })}
+                          </div>
+                        )}
+                      </div>
                     </DataTableCell>
                     <DataTableCell>{job.executor_type}</DataTableCell>
                   </tr>
@@ -280,10 +289,19 @@ export function RunDetailPage() {
                     </DataTableCell>
                     <DataTableCell>{formatDurationMs(job.duration)}</DataTableCell>
                     <DataTableCell>
-                      {formatCurrencyFromMinorExact(
-                        billingByJobID.get(job.id)?.estimated_total_minor_exact,
-                        billingByJobID.get(job.id)?.currency ?? runBillingQuery.data?.currency ?? "USD"
-                      )}
+                      <div>
+                        <div>
+                          {formatCurrencyFromMinorExact(
+                            billingByJobID.get(job.id)?.estimated_total_minor_exact,
+                            billingByJobID.get(job.id)?.currency ?? runBillingQuery.data?.currency ?? "USD"
+                          )}
+                        </div>
+                        {(billingByJobID.get(job.id)?.gpu_seconds ?? 0) > 0 && (
+                          <div className="text-xs text-ink-500">
+                            GPU s: {(billingByJobID.get(job.id)?.gpu_seconds ?? 0).toLocaleString(undefined, { maximumFractionDigits: 3 })}
+                          </div>
+                        )}
+                      </div>
                     </DataTableCell>
                     <DataTableCell>{job.executor_type}</DataTableCell>
                   </tr>

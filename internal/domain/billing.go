@@ -18,6 +18,7 @@ type JobUsageEvent struct {
 	DurationSeconds   float64
 	CPUSeconds        float64
 	MemoryGBSeconds   float64
+	GPUSeconds        float64
 	MaxMemoryBytes    uint64
 	SampleIntervalSec int
 }
@@ -27,8 +28,10 @@ type LedgerPricingSnapshot struct {
 	Currency              string
 	CPUUnitPriceMinor     int64
 	MemoryUnitPriceMinor  int64
+	GPUUnitPriceMinor     int64
 	StripeCPUPriceID      string
 	StripeMemoryGBPriceID string
+	StripeGPUPriceID      string
 }
 
 type JobLedgerEntry struct {
@@ -41,12 +44,15 @@ type JobLedgerEntry struct {
 	MonthKey                  string
 	CPUSeconds                float64
 	MemoryGBSeconds           float64
+	GPUSeconds                float64
 	Pricing                   LedgerPricingSnapshot
 	EstimatedCPUMinor         int64
 	EstimatedMemoryMinor      int64
+	EstimatedGPUMinor         int64
 	EstimatedTotalMinor       int64
 	EstimatedCPUMinorExact    float64
 	EstimatedMemoryMinorExact float64
+	EstimatedGPUMinorExact    float64
 	EstimatedTotalMinorExact  float64
 }
 
@@ -90,6 +96,7 @@ type WorkspaceMonthToDateBilling struct {
 	MonthKey                 string
 	CPUSeconds               float64
 	MemoryGBSeconds          float64
+	GPUSeconds               float64
 	EstimatedTotalMinor      int64
 	EstimatedTotalMinorExact float64
 	Currency                 string
@@ -99,11 +106,14 @@ type RunBillingLineItem struct {
 	JobID                     uuid.UUID
 	CPUSeconds                float64
 	MemoryGBSeconds           float64
+	GPUSeconds                float64
 	EstimatedCPUMinor         int64
 	EstimatedMemoryMinor      int64
+	EstimatedGPUMinor         int64
 	EstimatedTotalMinor       int64
 	EstimatedCPUMinorExact    float64
 	EstimatedMemoryMinorExact float64
+	EstimatedGPUMinorExact    float64
 	EstimatedTotalMinorExact  float64
 	PricingVersion            string
 	Currency                  string
@@ -116,6 +126,7 @@ type RunBillingBreakdown struct {
 	RunID                    uuid.UUID
 	CPUSeconds               float64
 	MemoryGBSeconds          float64
+	GPUSeconds               float64
 	EstimatedTotalMinor      int64
 	EstimatedTotalMinorExact float64
 	Currency                 string

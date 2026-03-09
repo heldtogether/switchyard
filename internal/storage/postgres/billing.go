@@ -26,12 +26,12 @@ func (s *Store) RecordUsageLedgerAndStripeEvents(
 	if err := tx.QueryRowContext(ctx, `
 		INSERT INTO usage_events (
 			id, workspace_id, project_id, run_id, job_id, container_id,
-			started_at, finished_at, duration_seconds, cpu_seconds, memory_gb_seconds,
+			started_at, finished_at, duration_seconds, cpu_seconds, memory_gb_seconds, gpu_seconds,
 			max_memory_bytes, sample_interval_seconds, source
 		) VALUES (
 			$1, $2, $3, $4, $5, $6,
-			$7, $8, $9, $10, $11,
-			$12, $13, 'docker_stats'
+			$7, $8, $9, $10, $11, $12,
+			$13, $14, 'docker_stats'
 		)
 		ON CONFLICT (job_id) DO UPDATE
 		SET finished_at = EXCLUDED.finished_at
@@ -48,6 +48,7 @@ func (s *Store) RecordUsageLedgerAndStripeEvents(
 		usage.DurationSeconds,
 		usage.CPUSeconds,
 		usage.MemoryGBSeconds,
+		usage.GPUSeconds,
 		usage.MaxMemoryBytes,
 		usage.SampleIntervalSec,
 	).Scan(&usageID); err != nil {
@@ -57,18 +58,18 @@ func (s *Store) RecordUsageLedgerAndStripeEvents(
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO billing_ledger_entries (
 			id, usage_event_id, workspace_id, project_id, run_id, job_id, month_key,
-			cpu_seconds, memory_gb_seconds, pricing_version, currency,
-			cpu_unit_price_minor, memory_unit_price_minor,
-			stripe_cpu_price_id, stripe_memory_price_id,
-			estimated_cpu_minor, estimated_memory_minor, estimated_total_minor,
-			estimated_cpu_minor_exact, estimated_memory_minor_exact, estimated_total_minor_exact
+			cpu_seconds, memory_gb_seconds, gpu_seconds, pricing_version, currency,
+			cpu_unit_price_minor, memory_unit_price_minor, gpu_unit_price_minor,
+			stripe_cpu_price_id, stripe_memory_price_id, stripe_gpu_price_id,
+			estimated_cpu_minor, estimated_memory_minor, estimated_gpu_minor, estimated_total_minor,
+			estimated_cpu_minor_exact, estimated_memory_minor_exact, estimated_gpu_minor_exact, estimated_total_minor_exact
 		) VALUES (
 			$1, $2, $3, $4, $5, $6, $7,
-			$8, $9, $10, $11,
-			$12, $13,
-			$14, $15,
+			$8, $9, $10, $11, $12,
+			$13, $14, $15,
 			$16, $17, $18,
-			$19, $20, $21
+			$19, $20, $21, $22,
+			$23, $24, $25, $26
 		)
 		ON CONFLICT (usage_event_id) DO NOTHING
 	`,
@@ -81,17 +82,22 @@ func (s *Store) RecordUsageLedgerAndStripeEvents(
 		ledger.MonthKey,
 		ledger.CPUSeconds,
 		ledger.MemoryGBSeconds,
+		ledger.GPUSeconds,
 		ledger.Pricing.Version,
 		ledger.Pricing.Currency,
 		ledger.Pricing.CPUUnitPriceMinor,
 		ledger.Pricing.MemoryUnitPriceMinor,
+		ledger.Pricing.GPUUnitPriceMinor,
 		nullIfEmpty(ledger.Pricing.StripeCPUPriceID),
 		nullIfEmpty(ledger.Pricing.StripeMemoryGBPriceID),
+		nullIfEmpty(ledger.Pricing.StripeGPUPriceID),
 		ledger.EstimatedCPUMinor,
 		ledger.EstimatedMemoryMinor,
+		ledger.EstimatedGPUMinor,
 		ledger.EstimatedTotalMinor,
 		ledger.EstimatedCPUMinorExact,
 		ledger.EstimatedMemoryMinorExact,
+		ledger.EstimatedGPUMinorExact,
 		ledger.EstimatedTotalMinorExact,
 	)
 	if err != nil {
@@ -260,13 +266,14 @@ func (s *Store) GetWorkspaceMonthToDateBilling(ctx context.Context, workspaceID 
 		SELECT
 			COALESCE(SUM(cpu_seconds), 0),
 			COALESCE(SUM(memory_gb_seconds), 0),
+			COALESCE(SUM(gpu_seconds), 0),
 			COALESCE(SUM(estimated_total_minor), 0),
 			COALESCE(SUM(estimated_total_minor_exact), 0),
 			COALESCE(MAX(currency), 'USD')
 		FROM billing_ledger_entries
 		WHERE workspace_id = $1
 		  AND month_key = $2
-	`, workspaceID, monthKey).Scan(&out.CPUSeconds, &out.MemoryGBSeconds, &out.EstimatedTotalMinor, &out.EstimatedTotalMinorExact, &out.Currency)
+	`, workspaceID, monthKey).Scan(&out.CPUSeconds, &out.MemoryGBSeconds, &out.GPUSeconds, &out.EstimatedTotalMinor, &out.EstimatedTotalMinorExact, &out.Currency)
 	if err != nil {
 		return nil, err
 	}
@@ -279,11 +286,14 @@ func (s *Store) GetRunBillingBreakdown(ctx context.Context, workspaceID, project
 			job_id,
 			cpu_seconds,
 			memory_gb_seconds,
+			gpu_seconds,
 			estimated_cpu_minor,
 			estimated_memory_minor,
+			estimated_gpu_minor,
 			estimated_total_minor,
 			estimated_cpu_minor_exact,
 			estimated_memory_minor_exact,
+			estimated_gpu_minor_exact,
 			estimated_total_minor_exact,
 			pricing_version,
 			currency,
@@ -311,11 +321,14 @@ func (s *Store) GetRunBillingBreakdown(ctx context.Context, workspaceID, project
 			&item.JobID,
 			&item.CPUSeconds,
 			&item.MemoryGBSeconds,
+			&item.GPUSeconds,
 			&item.EstimatedCPUMinor,
 			&item.EstimatedMemoryMinor,
+			&item.EstimatedGPUMinor,
 			&item.EstimatedTotalMinor,
 			&item.EstimatedCPUMinorExact,
 			&item.EstimatedMemoryMinorExact,
+			&item.EstimatedGPUMinorExact,
 			&item.EstimatedTotalMinorExact,
 			&item.PricingVersion,
 			&item.Currency,
@@ -325,6 +338,7 @@ func (s *Store) GetRunBillingBreakdown(ctx context.Context, workspaceID, project
 		}
 		out.CPUSeconds += item.CPUSeconds
 		out.MemoryGBSeconds += item.MemoryGBSeconds
+		out.GPUSeconds += item.GPUSeconds
 		out.EstimatedTotalMinor += item.EstimatedTotalMinor
 		out.EstimatedTotalMinorExact += item.EstimatedTotalMinorExact
 		if out.Currency == "" {

@@ -150,8 +150,10 @@ type BillingPricing struct {
 	Currency                string `yaml:"currency"`
 	UnitPriceCPUSecondMinor int64  `yaml:"unit_price_cpu_second_minor"`
 	UnitPriceMemoryGBSMinor int64  `yaml:"unit_price_memory_gb_second_minor"`
+	UnitPriceGPUSecondMinor int64  `yaml:"unit_price_gpu_second_minor"`
 	StripeCPUPriceID        string `yaml:"stripe_cpu_price_id"`
 	StripeMemoryGBSPriceID  string `yaml:"stripe_memory_gb_second_price_id"`
+	StripeGPUPriceID        string `yaml:"stripe_gpu_second_price_id"`
 }
 
 type BillingStripeConfig struct {
@@ -162,6 +164,7 @@ type BillingStripeConfig struct {
 type BillingMeterConfig struct {
 	CPUSeconds      string `yaml:"cpu_seconds"`
 	MemoryGBSeconds string `yaml:"memory_gb_seconds"`
+	GPUSeconds      string `yaml:"gpu_seconds"`
 }
 
 // SchedulerConfig holds scheduler/reaper configuration

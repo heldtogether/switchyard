@@ -42,6 +42,7 @@ func buildBillingRecords(
 	}
 
 	usageID := uuid.New()
+	gpuSeconds := float64(max(job.GPUCount, 0)) * usageSummary.DurationSeconds
 	usage := domain.JobUsageEvent{
 		ID:                usageID,
 		WorkspaceID:       workspaceID,
@@ -54,14 +55,17 @@ func buildBillingRecords(
 		DurationSeconds:   usageSummary.DurationSeconds,
 		CPUSeconds:        usageSummary.CPUSeconds,
 		MemoryGBSeconds:   usageSummary.MemoryGBSeconds,
+		GPUSeconds:        gpuSeconds,
 		MaxMemoryBytes:    usageSummary.MaxMemoryBytes,
 		SampleIntervalSec: int(cfg.UsageSampleInterval.Seconds()),
 	}
 
 	cpuMinor := estimateAmountMinor(usage.CPUSeconds, cfg.Pricing.UnitPriceCPUSecondMinor)
 	memMinor := estimateAmountMinor(usage.MemoryGBSeconds, cfg.Pricing.UnitPriceMemoryGBSMinor)
+	gpuMinor := estimateAmountMinor(usage.GPUSeconds, cfg.Pricing.UnitPriceGPUSecondMinor)
 	cpuMinorExact := estimateAmountMinorExact(usage.CPUSeconds, cfg.Pricing.UnitPriceCPUSecondMinor)
 	memMinorExact := estimateAmountMinorExact(usage.MemoryGBSeconds, cfg.Pricing.UnitPriceMemoryGBSMinor)
+	gpuMinorExact := estimateAmountMinorExact(usage.GPUSeconds, cfg.Pricing.UnitPriceGPUSecondMinor)
 
 	ledger := domain.JobLedgerEntry{
 		ID:              uuid.New(),
@@ -73,20 +77,25 @@ func buildBillingRecords(
 		MonthKey:        monthKeyUTC(usage.FinishedAt),
 		CPUSeconds:      usage.CPUSeconds,
 		MemoryGBSeconds: usage.MemoryGBSeconds,
+		GPUSeconds:      usage.GPUSeconds,
 		Pricing: domain.LedgerPricingSnapshot{
 			Version:               cfg.Pricing.Version,
 			Currency:              cfg.Pricing.Currency,
 			CPUUnitPriceMinor:     cfg.Pricing.UnitPriceCPUSecondMinor,
 			MemoryUnitPriceMinor:  cfg.Pricing.UnitPriceMemoryGBSMinor,
+			GPUUnitPriceMinor:     cfg.Pricing.UnitPriceGPUSecondMinor,
 			StripeCPUPriceID:      cfg.Pricing.StripeCPUPriceID,
 			StripeMemoryGBPriceID: cfg.Pricing.StripeMemoryGBSPriceID,
+			StripeGPUPriceID:      cfg.Pricing.StripeGPUPriceID,
 		},
 		EstimatedCPUMinor:         cpuMinor,
 		EstimatedMemoryMinor:      memMinor,
-		EstimatedTotalMinor:       cpuMinor + memMinor,
+		EstimatedGPUMinor:         gpuMinor,
+		EstimatedTotalMinor:       cpuMinor + memMinor + gpuMinor,
 		EstimatedCPUMinorExact:    cpuMinorExact,
 		EstimatedMemoryMinorExact: memMinorExact,
-		EstimatedTotalMinorExact:  cpuMinorExact + memMinorExact,
+		EstimatedGPUMinorExact:    gpuMinorExact,
+		EstimatedTotalMinorExact:  cpuMinorExact + memMinorExact + gpuMinorExact,
 	}
 
 	events := []domain.StripeMeterEvent{}
@@ -117,6 +126,21 @@ func buildBillingRecords(
 			MeterValue:     usage.MemoryGBSeconds,
 			EventTimestamp: usage.FinishedAt,
 			IdempotencyKey: billing.BuildMemoryMeterIdempotencyKey(workspaceID, job.RunID, job.ID),
+			Status:         domain.StripeMeterEventStatusPending,
+			AttemptCount:   0,
+			NextRetryAt:    time.Now().UTC(),
+		})
+		events = append(events, domain.StripeMeterEvent{
+			ID:             uuid.New(),
+			WorkspaceID:    workspaceID,
+			ProjectID:      projectID,
+			RunID:          job.RunID,
+			JobID:          job.ID,
+			UsageEventID:   usageID,
+			MeterName:      cfg.Stripe.Meters.GPUSeconds,
+			MeterValue:     usage.GPUSeconds,
+			EventTimestamp: usage.FinishedAt,
+			IdempotencyKey: billing.BuildGPUMeterIdempotencyKey(workspaceID, job.RunID, job.ID),
 			Status:         domain.StripeMeterEventStatusPending,
 			AttemptCount:   0,
 			NextRetryAt:    time.Now().UTC(),

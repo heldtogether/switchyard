@@ -67,6 +67,10 @@ func BuildMemoryMeterIdempotencyKey(workspaceID, runID, jobID uuid.UUID) string 
 	return fmt.Sprintf("org_%s_run_%s_job_%s_meter_memory_gb_seconds", workspaceID, runID, jobID)
 }
 
+func BuildGPUMeterIdempotencyKey(workspaceID, runID, jobID uuid.UUID) string {
+	return fmt.Sprintf("org_%s_run_%s_job_%s_meter_gpu_seconds", workspaceID, runID, jobID)
+}
+
 type MockStripeMeterEmitter struct {
 	EmitFn func(ctx context.Context, customerID string, meterName string, value float64, ts time.Time, idempotencyKey string) (string, error)
 }

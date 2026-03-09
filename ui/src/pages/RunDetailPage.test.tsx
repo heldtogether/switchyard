@@ -22,6 +22,7 @@ vi.mock("../api", () => ({
     run_id: "r1",
     cpu_seconds: 1,
     memory_gb_seconds: 1,
+    gpu_seconds: 3,
     estimated_total_minor: 3,
     estimated_total_minor_exact: 3.25,
     currency: "USD",
@@ -30,11 +31,14 @@ vi.mock("../api", () => ({
         job_id: "j1",
         cpu_seconds: 1,
         memory_gb_seconds: 1,
+        gpu_seconds: 3,
         estimated_cpu_minor: 1,
         estimated_memory_minor: 1,
+        estimated_gpu_minor: 1,
         estimated_total_minor: 2,
         estimated_cpu_minor_exact: 1.2,
         estimated_memory_minor_exact: 1.1,
+        estimated_gpu_minor_exact: 0.5,
         estimated_total_minor_exact: 2.3,
         pricing_version: "v1",
         currency: "USD",
@@ -44,11 +48,14 @@ vi.mock("../api", () => ({
         job_id: "j2",
         cpu_seconds: 1,
         memory_gb_seconds: 1,
+        gpu_seconds: 0,
         estimated_cpu_minor: 0,
         estimated_memory_minor: 1,
+        estimated_gpu_minor: 0,
         estimated_total_minor: 1,
         estimated_cpu_minor_exact: 0.1,
         estimated_memory_minor_exact: 0.6,
+        estimated_gpu_minor_exact: 0,
         estimated_total_minor_exact: 0.7,
         pricing_version: "v1",
         currency: "USD",
@@ -89,6 +96,7 @@ describe("RunDetailPage", () => {
 
     expect(screen.getByText("build-image")).toBeInTheDocument();
     expect(screen.getByText("$0.023")).toBeInTheDocument();
+    expect(screen.getByText("GPU s: 3")).toBeInTheDocument();
     const sameLabels = screen.getAllByText("same");
     expect(sameLabels.length).toBe(1);
   });
@@ -103,6 +111,7 @@ describe("RunDetailPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Jobs" }));
     expect(screen.getByText("build-image")).toBeInTheDocument();
     expect(screen.getByText("$0.023")).toBeInTheDocument();
+    expect(screen.getAllByText("GPU s: 3").length).toBeGreaterThan(0);
     const sameLabels = screen.getAllByText("same");
     expect(sameLabels.length).toBe(1);
   });

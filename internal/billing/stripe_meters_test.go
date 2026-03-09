@@ -14,7 +14,9 @@ func TestIdempotencyKeyGeneration(t *testing.T) {
 
 	cpu := BuildCPUMeterIdempotencyKey(workspaceID, runID, jobID)
 	mem := BuildMemoryMeterIdempotencyKey(workspaceID, runID, jobID)
+	gpu := BuildGPUMeterIdempotencyKey(workspaceID, runID, jobID)
 
 	require.Equal(t, "org_aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa_run_bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb_job_cccccccc-cccc-cccc-cccc-cccccccccccc_meter_cpu_seconds", cpu)
 	require.Equal(t, "org_aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa_run_bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb_job_cccccccc-cccc-cccc-cccc-cccccccccccc_meter_memory_gb_seconds", mem)
+	require.Equal(t, "org_aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa_run_bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb_job_cccccccc-cccc-cccc-cccc-cccccccccccc_meter_gpu_seconds", gpu)
 }

@@ -21,6 +21,6 @@ describe("BillingPage", () => {
     });
 
     expect(screen.getByText("No billed runs yet")).toBeInTheDocument();
+    expect(screen.getByText("GPU Seconds")).toBeInTheDocument();
   });
 });
-

@@ -78,6 +78,7 @@ func TestHandleWorkspaceMonthToDateBilling(t *testing.T) {
 		DurationSeconds:   60,
 		CPUSeconds:        12.5,
 		MemoryGBSeconds:   8.5,
+		GPUSeconds:        60,
 		MaxMemoryBytes:    1024,
 		SampleIntervalSec: 10,
 	}
@@ -91,18 +92,22 @@ func TestHandleWorkspaceMonthToDateBilling(t *testing.T) {
 		MonthKey:        time.Now().UTC().Format("2006-01"),
 		CPUSeconds:      usage.CPUSeconds,
 		MemoryGBSeconds: usage.MemoryGBSeconds,
+		GPUSeconds:      usage.GPUSeconds,
 		Pricing: domain.LedgerPricingSnapshot{
 			Version:              "2026-03-01",
 			Currency:             "USD",
 			CPUUnitPriceMinor:    1,
 			MemoryUnitPriceMinor: 1,
+			GPUUnitPriceMinor:    1,
 		},
 		EstimatedCPUMinor:         13,
 		EstimatedMemoryMinor:      9,
-		EstimatedTotalMinor:       22,
+		EstimatedGPUMinor:         60,
+		EstimatedTotalMinor:       82,
 		EstimatedCPUMinorExact:    12.5,
 		EstimatedMemoryMinorExact: 8.5,
-		EstimatedTotalMinorExact:  21.0,
+		EstimatedGPUMinorExact:    60.0,
+		EstimatedTotalMinorExact:  81.0,
 	}
 	require.NoError(t, store.RecordUsageLedgerAndStripeEvents(ctx, usage, ledger, nil))
 
@@ -121,8 +126,9 @@ func TestHandleWorkspaceMonthToDateBilling(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code)
 	var resp WorkspaceMonthToDateBillingResponse
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
-	require.Equal(t, int64(22), resp.EstimatedTotalMinor)
-	require.InDelta(t, 21.0, resp.EstimatedTotalMinorExact, 1e-9)
+	require.Equal(t, int64(82), resp.EstimatedTotalMinor)
+	require.InDelta(t, 81.0, resp.EstimatedTotalMinorExact, 1e-9)
+	require.InDelta(t, 60.0, resp.GPUSeconds, 1e-9)
 	require.Equal(t, "USD", resp.Currency)
 }
 
@@ -186,6 +192,7 @@ func TestHandleRunBillingBreakdown(t *testing.T) {
 		DurationSeconds:   60,
 		CPUSeconds:        5,
 		MemoryGBSeconds:   10,
+		GPUSeconds:        120,
 		MaxMemoryBytes:    1024,
 		SampleIntervalSec: 10,
 	}
@@ -199,18 +206,22 @@ func TestHandleRunBillingBreakdown(t *testing.T) {
 		MonthKey:        time.Now().UTC().Format("2006-01"),
 		CPUSeconds:      usage.CPUSeconds,
 		MemoryGBSeconds: usage.MemoryGBSeconds,
+		GPUSeconds:      usage.GPUSeconds,
 		Pricing: domain.LedgerPricingSnapshot{
 			Version:              "2026-03-01",
 			Currency:             "USD",
 			CPUUnitPriceMinor:    1,
 			MemoryUnitPriceMinor: 2,
+			GPUUnitPriceMinor:    1,
 		},
 		EstimatedCPUMinor:         5,
 		EstimatedMemoryMinor:      20,
-		EstimatedTotalMinor:       25,
+		EstimatedGPUMinor:         120,
+		EstimatedTotalMinor:       145,
 		EstimatedCPUMinorExact:    5.0,
 		EstimatedMemoryMinorExact: 20.0,
-		EstimatedTotalMinorExact:  25.0,
+		EstimatedGPUMinorExact:    120.0,
+		EstimatedTotalMinorExact:  145.0,
 	}
 	require.NoError(t, store.RecordUsageLedgerAndStripeEvents(ctx, usage, ledger, nil))
 
@@ -229,9 +240,11 @@ func TestHandleRunBillingBreakdown(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code)
 	var resp RunBillingBreakdownResponse
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
-	require.Equal(t, int64(25), resp.EstimatedTotalMinor)
-	require.InDelta(t, 25.0, resp.EstimatedTotalMinorExact, 1e-9)
+	require.Equal(t, int64(145), resp.EstimatedTotalMinor)
+	require.InDelta(t, 145.0, resp.EstimatedTotalMinorExact, 1e-9)
+	require.InDelta(t, 120.0, resp.GPUSeconds, 1e-9)
 	require.Len(t, resp.Items, 1)
 	require.Equal(t, job.ID, resp.Items[0].JobID)
-	require.InDelta(t, 25.0, resp.Items[0].EstimatedTotalMinorExact, 1e-9)
+	require.InDelta(t, 145.0, resp.Items[0].EstimatedTotalMinorExact, 1e-9)
+	require.InDelta(t, 120.0, resp.Items[0].GPUSeconds, 1e-9)
 }

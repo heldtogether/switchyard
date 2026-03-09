@@ -194,15 +194,18 @@ billing:
     currency: "USD"
     unit_price_cpu_second_minor: 1
     unit_price_memory_gb_second_minor: 1
+    unit_price_gpu_second_minor: 1
     # Optional snapshot fields copied into ledger entries.
     stripe_cpu_price_id: ""
     stripe_memory_gb_second_price_id: ""
+    stripe_gpu_second_price_id: ""
 
   stripe:
     api_key: "${STRIPE_API_KEY}"
     meters:
       cpu_seconds: "switchyard_cpu_seconds"
       memory_gb_seconds: "switchyard_memory_gb_seconds"
+      gpu_seconds: "switchyard_gpu_seconds"
 
 # ==============================================================================
 # Object Storage Configuration (S3-compatible)

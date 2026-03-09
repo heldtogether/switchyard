@@ -29,16 +29,20 @@ func TestBuildBillingRecords_EstimationAndPricingVersion(t *testing.T) {
 			Currency:                "USD",
 			UnitPriceCPUSecondMinor: 2,
 			UnitPriceMemoryGBSMinor: 3,
+			UnitPriceGPUSecondMinor: 4,
 			StripeCPUPriceID:        "price_cpu",
 			StripeMemoryGBSPriceID:  "price_mem",
+			StripeGPUPriceID:        "price_gpu",
 		},
 		Stripe: config.BillingStripeConfig{
 			Meters: config.BillingMeterConfig{
 				CPUSeconds:      "switchyard_cpu_seconds",
 				MemoryGBSeconds: "switchyard_memory_gb_seconds",
+				GPUSeconds:      "switchyard_gpu_seconds",
 			},
 		},
 	}
+	job.GPUCount = 2
 
 	summary := &metrics.UsageSummary{
 		CPUSeconds:      12.5,
@@ -52,12 +56,15 @@ func TestBuildBillingRecords_EstimationAndPricingVersion(t *testing.T) {
 	require.Equal(t, "2026-03-01", ledger.Pricing.Version)
 	require.Equal(t, int64(25), ledger.EstimatedCPUMinor)
 	require.Equal(t, int64(25), ledger.EstimatedMemoryMinor)
-	require.Equal(t, int64(50), ledger.EstimatedTotalMinor)
+	require.Equal(t, int64(240), ledger.EstimatedGPUMinor)
+	require.Equal(t, int64(290), ledger.EstimatedTotalMinor)
 	require.InDelta(t, 25.0, ledger.EstimatedCPUMinorExact, 1e-9)
 	require.InDelta(t, 24.6, ledger.EstimatedMemoryMinorExact, 1e-9)
-	require.InDelta(t, 49.6, ledger.EstimatedTotalMinorExact, 1e-9)
+	require.InDelta(t, 240.0, ledger.EstimatedGPUMinorExact, 1e-9)
+	require.InDelta(t, 289.6, ledger.EstimatedTotalMinorExact, 1e-9)
+	require.InDelta(t, 60.0, usage.GPUSeconds, 1e-9)
 	require.Equal(t, "2026-03", ledger.MonthKey)
-	require.Len(t, events, 2)
+	require.Len(t, events, 3)
 	require.Equal(t, usage.FinishedAt, events[0].EventTimestamp)
 }
 
@@ -78,6 +85,7 @@ func TestBuildBillingRecords_InvoicesDisabled_NoStripeEvents(t *testing.T) {
 			Currency:                "USD",
 			UnitPriceCPUSecondMinor: 1,
 			UnitPriceMemoryGBSMinor: 1,
+			UnitPriceGPUSecondMinor: 1,
 		},
 	}
 	summary := &metrics.UsageSummary{DurationSeconds: 10}

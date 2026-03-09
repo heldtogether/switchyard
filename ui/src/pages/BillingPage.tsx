@@ -87,7 +87,7 @@ export function BillingPage() {
         <ErrorBanner message={(runsQuery.error as Error).message} onRetry={() => runsQuery.refetch()} />
       )}
 
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-5">
         <div className="card p-4 md:col-span-2">
           <p className="text-xs uppercase tracking-[0.2em] text-ink-400">Estimated month-to-date</p>
           <p className="mt-3 text-2xl font-semibold text-ink-900">{totalEstimatedDisplay}</p>
@@ -103,6 +103,12 @@ export function BillingPage() {
           <p className="text-xs uppercase tracking-[0.2em] text-ink-400">Memory GB-seconds</p>
           <p className="mt-3 text-2xl font-semibold text-ink-900">
             {(mtdQuery.data?.memory_gb_seconds ?? 0).toLocaleString(undefined, { maximumFractionDigits: 3 })}
+          </p>
+        </div>
+        <div className="card p-4">
+          <p className="text-xs uppercase tracking-[0.2em] text-ink-400">GPU Seconds</p>
+          <p className="mt-3 text-2xl font-semibold text-ink-900">
+            {(mtdQuery.data?.gpu_seconds ?? 0).toLocaleString(undefined, { maximumFractionDigits: 3 })}
           </p>
         </div>
       </div>
@@ -144,4 +150,3 @@ export function BillingPage() {
     </div>
   );
 }
-

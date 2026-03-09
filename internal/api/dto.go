@@ -209,6 +209,7 @@ type WorkspaceMonthToDateBillingResponse struct {
 	MonthKey                 string    `json:"month_key"`
 	CPUSeconds               float64   `json:"cpu_seconds"`
 	MemoryGBSeconds          float64   `json:"memory_gb_seconds"`
+	GPUSeconds               float64   `json:"gpu_seconds"`
 	EstimatedTotalMinor      int64     `json:"estimated_total_minor"`
 	EstimatedTotalMinorExact float64   `json:"estimated_total_minor_exact"`
 	Currency                 string    `json:"currency"`
@@ -218,11 +219,14 @@ type RunBillingLineItemResponse struct {
 	JobID                     uuid.UUID `json:"job_id"`
 	CPUSeconds                float64   `json:"cpu_seconds"`
 	MemoryGBSeconds           float64   `json:"memory_gb_seconds"`
+	GPUSeconds                float64   `json:"gpu_seconds"`
 	EstimatedCPUMinor         int64     `json:"estimated_cpu_minor"`
 	EstimatedMemoryMinor      int64     `json:"estimated_memory_minor"`
+	EstimatedGPUMinor         int64     `json:"estimated_gpu_minor"`
 	EstimatedTotalMinor       int64     `json:"estimated_total_minor"`
 	EstimatedCPUMinorExact    float64   `json:"estimated_cpu_minor_exact"`
 	EstimatedMemoryMinorExact float64   `json:"estimated_memory_minor_exact"`
+	EstimatedGPUMinorExact    float64   `json:"estimated_gpu_minor_exact"`
 	EstimatedTotalMinorExact  float64   `json:"estimated_total_minor_exact"`
 	PricingVersion            string    `json:"pricing_version"`
 	Currency                  string    `json:"currency"`
@@ -235,6 +239,7 @@ type RunBillingBreakdownResponse struct {
 	RunID                    uuid.UUID                    `json:"run_id"`
 	CPUSeconds               float64                      `json:"cpu_seconds"`
 	MemoryGBSeconds          float64                      `json:"memory_gb_seconds"`
+	GPUSeconds               float64                      `json:"gpu_seconds"`
 	EstimatedTotalMinor      int64                        `json:"estimated_total_minor"`
 	EstimatedTotalMinorExact float64                      `json:"estimated_total_minor_exact"`
 	Currency                 string                       `json:"currency"`
