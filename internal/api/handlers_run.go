@@ -317,7 +317,7 @@ func (a *API) HandleRerunRun(w http.ResponseWriter, r *http.Request) {
 		if sourceName == "" {
 			sourceName = sourceRun.Slug
 		}
-		newRunName = fmt.Sprintf("%s (re-run)", sourceName)
+		newRunName = sourceName
 	}
 
 	metadata := mergeAnyMap(sourceRun.Metadata, map[string]any{
