@@ -151,7 +151,7 @@ func main() {
 	logger.Info("executor initialized")
 
 	// Build base URL
-	baseURL := fmt.Sprintf("http://%s:%d", cfg.API.Host, cfg.API.Port)
+	// baseURL := fmt.Sprintf("http://%s:%d", cfg.API.Host, cfg.API.Port)
 	secretCodec, err := registrysecrets.NewCodec(cfg.API.RegistrySecrets.Encryption)
 	if err != nil {
 		logger.Error("failed to initialize registry secret encryption", "error", err)
@@ -159,7 +159,7 @@ func main() {
 	}
 
 	// Create API
-	apiInstance := api.New(cfg, store, producer, s3Store, exec, logger, baseURL, secretCodec)
+	apiInstance := api.New(cfg, store, producer, s3Store, exec, logger, cfg.API.BaseURL, secretCodec)
 	cancelPublisher, err := control.NewPublisher(cfg.Queue.Type, cfg.Queue.URL, cfg.Queue.Exchange, cfg.Queue.QueueName)
 	if err != nil {
 		logger.Error("failed to initialize cancel control publisher", "error", err)
