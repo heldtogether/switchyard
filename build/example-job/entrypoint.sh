@@ -1,55 +1,32 @@
-#!/bin/bash
+#!/usr/bin/env bash
 set -euo pipefail
 
-echo "================================"
-echo "Switchyard Example Job"
-echo "================================"
-echo "Started at: $(date -Iseconds)"
-echo "Job ID: ${SWITCHYARD_JOB_ID:-unknown}"
-echo "Hostname: $(hostname)"
-echo ""
+NOTEBOOK_PATH="${NOTEBOOK_PATH:-/app/notebooks/job.ipynb}"
+OUTPUT_DIR="${OUTPUT_DIR:-/output}"
+EXECUTED_NOTEBOOK="${EXECUTED_NOTEBOOK:-${OUTPUT_DIR}/executed-notebook.ipynb}"
+HTML_EXPORT="${HTML_EXPORT:-${OUTPUT_DIR}/report.html}"
 
-# Simulate some work
-echo "Processing data..."
-for i in {1..5}; do
-    echo "  Step $i/5"
-    sleep 1
-done
+mkdir -p "${OUTPUT_DIR}"
 
-# Write outputs
-echo ""
-echo "Writing outputs..."
+if [[ ! -f "${NOTEBOOK_PATH}" ]]; then
+  echo "Notebook not found: ${NOTEBOOK_PATH}" >&2
+  exit 1
+fi
 
-cat > /outputs/result.txt <<EOF
-Job completed successfully!
-Timestamp: $(date -Iseconds)
-Hostname: $(hostname)
-Job ID: ${SWITCHYARD_JOB_ID:-unknown}
-EOF
+echo "Executing notebook: ${NOTEBOOK_PATH}"
+echo "Writing artefacts to: ${OUTPUT_DIR}"
 
-# Create nested structure
-mkdir -p /outputs/data
-cat > /outputs/data/metrics.json <<EOF
-{
-  "status": "success",
-  "items_processed": 42,
-  "duration_seconds": 5,
-  "timestamp": "$(date -Iseconds)"
-}
-EOF
+papermill \
+  "${NOTEBOOK_PATH}" \
+  "${EXECUTED_NOTEBOOK}" \
+  -k python3 \
+  -p output_dir "${OUTPUT_DIR}"
 
-cat > /outputs/data/summary.txt <<EOF
-=== Job Summary ===
-Status: SUCCESS
-Items: 42
-Duration: 5s
-Completed: $(date -Iseconds)
-EOF
+jupyter nbconvert \
+  --to html \
+  --output "$(basename "${HTML_EXPORT}")" \
+  --output-dir "$(dirname "${HTML_EXPORT}")" \
+  "${EXECUTED_NOTEBOOK}"
 
-echo ""
-echo "Output files created:"
-find /outputs -type f -exec ls -lh {} \;
-
-echo ""
-echo "Finished at: $(date -Iseconds)"
-echo "================================"
+echo "Done. Created:"
+ls -lah "${OUTPUT_DIR}"

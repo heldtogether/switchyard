@@ -1,0 +1,7 @@
+jupyter
+nbconvert
+papermill
+ipykernel
+pandas
+matplotlib
+openpyxl
