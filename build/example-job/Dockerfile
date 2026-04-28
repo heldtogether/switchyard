@@ -4,7 +4,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     NOTEBOOK_PATH=/app/notebooks/job.ipynb \
-    OUTPUT_DIR=/output
+    OUTPUT_DIR=/outputs
 
 WORKDIR /app
 
@@ -19,6 +19,6 @@ RUN pip install -r requirements.txt
 COPY entrypoint.sh /entrypoint.sh
 COPY notebooks /app/notebooks
 
-RUN chmod +x /entrypoint.sh && mkdir -p /output
+RUN chmod +x /entrypoint.sh && mkdir -p /outputs
 
 ENTRYPOINT ["/usr/bin/tini", "--", "/entrypoint.sh"]
