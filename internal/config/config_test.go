@@ -99,6 +99,7 @@ func TestOIDCValidate(t *testing.T) {
 		ClientSecret:      "secret",
 		RedirectURL:       "https://api.example.com/v1/auth/callback",
 		SessionSigningKey: "super-secret",
+		BearerTokenTTL:    15 * time.Minute,
 		Cookie: OIDCCookieConfig{
 			SameSite: "lax",
 			TTL:      time.Hour,

@@ -65,6 +65,7 @@ examples/       # Example jobs and helper scripts
 - Avoid committing secrets; use env vars or Docker secrets for credentials.
 - For OIDC with separate UI/API origins, set `api.auth.oidc.post_login_redirect` and `post_logout_redirect` to absolute UI URLs (for example `http://localhost:5173/` and `http://localhost:5173/login`).
 - `api.auth.oidc.logout_url` is optional. When set, `GET /v1/auth/logout` clears the local session and redirects to that IdP logout URL.
+- Preferred API auth is bearer token via `Authorization: Bearer <token>`. Obtain token from `GET /v1/auth/callback?format=json` after OIDC login; session cookie auth remains supported.
 - RBAC is configurable under `api.rbac` (workspace + project memberships, token invites, and service-account allowlists for API key auth).
 - Registry secret encryption is configured under `api.registry_secrets.encryption` (`REGISTRY_SECRETS_*` env vars, including `*_FILE` forms).
 - To backfill legacy plaintext secrets after enabling encryption metadata migration, run: `go run ./cmd/secretmigrate -config config.yaml` (use `-dry-run` first).
@@ -76,3 +77,24 @@ examples/       # Example jobs and helper scripts
 - `deployments/README.md`: deployment file index and quick ops notes
 - `deployments/DEPLOYMENT.md`: deployment guide
 - `build/README.md`: Docker image build details
+
+## OpenAPI Docs
+- Endpoint docs are generated from Go comment annotations under `internal/api/`.
+- Build specs:
+```bash
+make openapi
+```
+- Validate route coverage against `internal/api/server.go`:
+```bash
+make openapi-check
+```
+- Build the static ReDoc site:
+```bash
+make openapi-site
+```
+- Generated outputs:
+  - `docs/openapi/openapi.yaml`
+  - `docs/openapi/openapi.json`
+  - `docs/site/index.html`
+- GitHub Pages publishes the site from CI at:
+  - `https://heldtogether.github.io/switchyard/`

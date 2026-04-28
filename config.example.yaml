@@ -54,6 +54,7 @@ api:
       post_login_redirect: "/"
       post_logout_redirect: "/login"
       session_signing_key: "${OIDC_SESSION_SIGNING_KEY}"
+      bearer_token_ttl: 15m
       cookie:
         name: switchyard_session
         secure: false

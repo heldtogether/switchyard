@@ -67,6 +67,7 @@ type OIDCAuthConfig struct {
 	PostLoginRedirect  string           `yaml:"post_login_redirect"`
 	PostLogoutRedirect string           `yaml:"post_logout_redirect"`
 	SessionSigningKey  string           `yaml:"session_signing_key"`
+	BearerTokenTTL     time.Duration    `yaml:"bearer_token_ttl"`
 	Cookie             OIDCCookieConfig `yaml:"cookie"`
 }
 
@@ -317,6 +318,11 @@ func applyEnvOverrides(cfg *Config) {
 	}
 	if v := getEnvFromFile("OIDC_SESSION_SIGNING_KEY_FILE"); v != "" {
 		cfg.API.Auth.OIDC.SessionSigningKey = v
+	}
+	if v := os.Getenv("OIDC_BEARER_TOKEN_TTL"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			cfg.API.Auth.OIDC.BearerTokenTTL = d
+		}
 	}
 	if v := os.Getenv("OIDC_COOKIE_NAME"); v != "" {
 		cfg.API.Auth.OIDC.Cookie.Name = v
@@ -846,6 +852,9 @@ func (a *AuthConfig) Normalize() {
 	if a.OIDC.Cookie.TTL == 0 {
 		a.OIDC.Cookie.TTL = 24 * time.Hour
 	}
+	if a.OIDC.BearerTokenTTL == 0 {
+		a.OIDC.BearerTokenTTL = 15 * time.Minute
+	}
 	if a.OIDC.Cookie.SameSite == "" {
 		a.OIDC.Cookie.SameSite = "lax"
 	}
@@ -875,6 +884,9 @@ func (o *OIDCAuthConfig) Validate() error {
 	}
 	if o.SessionSigningKey == "" {
 		return fmt.Errorf("oidc session_signing_key is required")
+	}
+	if o.BearerTokenTTL <= 0 {
+		return fmt.Errorf("oidc bearer_token_ttl must be > 0")
 	}
 	if o.Cookie.TTL <= 0 {
 		return fmt.Errorf("oidc cookie ttl must be > 0")

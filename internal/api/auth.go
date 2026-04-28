@@ -43,6 +43,18 @@ type sessionClaims struct {
 	Exp       int64     `json:"exp"`
 }
 
+type jwtClaims struct {
+	Subject    string `json:"sub"`
+	Email      string `json:"email,omitempty"`
+	Name       string `json:"name,omitempty"`
+	PictureURL string `json:"picture_url,omitempty"`
+	Provider   string `json:"provider"`
+	AuthMethod string `json:"auth_method"`
+	IssuedAt   int64  `json:"iat"`
+	ExpiresAt  int64  `json:"exp"`
+	Issuer     string `json:"iss"`
+}
+
 type AuthManager struct {
 	mode               string
 	apiKeyEnabled      bool
@@ -60,6 +72,8 @@ type AuthManager struct {
 	postLoginRedirect  string
 	postLogoutRedirect string
 	providerLogoutURL  string
+	tokenIssuer        string
+	bearerTokenTTL     time.Duration
 	stateTTL           time.Duration
 	stateMu            sync.Mutex
 	states             map[string]oidcState
@@ -83,8 +97,13 @@ func NewAuthManager(cfg *config.Config, logger *slog.Logger) (*AuthManager, erro
 		postLoginRedirect:  auth.OIDC.PostLoginRedirect,
 		postLogoutRedirect: auth.OIDC.PostLogoutRedirect,
 		providerLogoutURL:  auth.OIDC.LogoutURL,
+		tokenIssuer:        strings.TrimSpace(cfg.API.BaseURL),
+		bearerTokenTTL:     auth.OIDC.BearerTokenTTL,
 		stateTTL:           10 * time.Minute,
 		states:             map[string]oidcState{},
+	}
+	if manager.tokenIssuer == "" {
+		manager.tokenIssuer = fmt.Sprintf("http://%s:%d", cfg.API.Host, cfg.API.Port)
 	}
 
 	if manager.oidcEnabled {
@@ -132,6 +151,11 @@ func (a *AuthManager) Middleware(next http.Handler) http.Handler {
 			return
 		}
 
+		if principal, ok := a.principalFromBearerToken(r); ok {
+			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), principalContextKey{}, principal)))
+			return
+		}
+
 		if principal, ok := a.principalFromAPIKey(r); ok {
 			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), principalContextKey{}, principal)))
 			return
@@ -144,6 +168,22 @@ func (a *AuthManager) Middleware(next http.Handler) http.Handler {
 			Code:    http.StatusUnauthorized,
 		})
 	})
+}
+
+func (a *AuthManager) principalFromBearerToken(r *http.Request) (Principal, bool) {
+	authz := strings.TrimSpace(r.Header.Get("Authorization"))
+	if !strings.HasPrefix(strings.ToLower(authz), "bearer ") {
+		return Principal{}, false
+	}
+	token := strings.TrimSpace(authz[7:])
+	if token == "" {
+		return Principal{}, false
+	}
+	principal, err := a.verifyBearerToken(token)
+	if err != nil {
+		return Principal{}, false
+	}
+	return principal, true
 }
 
 func (a *AuthManager) principalFromAPIKey(r *http.Request) (Principal, bool) {
@@ -328,6 +368,26 @@ func (a *AuthManager) CompleteLogin(w http.ResponseWriter, r *http.Request) {
 
 	a.setSessionCookie(w, session)
 
+	if strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("format")), "json") {
+		token, expiresAt, err := a.issueBearerToken(principal)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, ErrorResponse{
+				Error:   "internal_error",
+				Message: "Failed to create token",
+				Code:    http.StatusInternalServerError,
+			})
+			return
+		}
+		writeJSON(w, http.StatusOK, AuthCallbackTokenResponse{
+			AccessToken: token,
+			TokenType:   "Bearer",
+			ExpiresIn:   int(time.Until(expiresAt).Seconds()),
+			ExpiresAt:   expiresAt.UTC(),
+			User:        principal,
+		})
+		return
+	}
+
 	http.Redirect(w, r, stored.Next, http.StatusFound)
 }
 
@@ -475,6 +535,90 @@ func (a *AuthManager) verifySession(token string) (Principal, error) {
 		return Principal{}, errors.New("session expired")
 	}
 	return claims.Principal, nil
+}
+
+func (a *AuthManager) issueBearerToken(principal Principal) (string, time.Time, error) {
+	if len(a.signingKey) == 0 {
+		return "", time.Time{}, errors.New("missing signing key")
+	}
+	now := time.Now().UTC()
+	expiresAt := now.Add(a.bearerTokenTTL)
+	claims := jwtClaims{
+		Subject:    principal.Subject,
+		Email:      principal.Email,
+		Name:       principal.Name,
+		PictureURL: principal.PictureURL,
+		Provider:   principal.Provider,
+		AuthMethod: principal.AuthMethod,
+		IssuedAt:   now.Unix(),
+		ExpiresAt:  expiresAt.Unix(),
+		Issuer:     a.tokenIssuer,
+	}
+
+	header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"HS256","typ":"JWT"}`))
+	payloadBytes, err := json.Marshal(claims)
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	payload := base64.RawURLEncoding.EncodeToString(payloadBytes)
+	unsigned := header + "." + payload
+
+	mac := hmac.New(sha256.New, a.signingKey)
+	mac.Write([]byte(unsigned))
+	signature := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+
+	return unsigned + "." + signature, expiresAt, nil
+}
+
+func (a *AuthManager) verifyBearerToken(token string) (Principal, error) {
+	if len(a.signingKey) == 0 {
+		return Principal{}, errors.New("missing signing key")
+	}
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		return Principal{}, errors.New("invalid token format")
+	}
+
+	unsigned := parts[0] + "." + parts[1]
+	mac := hmac.New(sha256.New, a.signingKey)
+	mac.Write([]byte(unsigned))
+	expected := mac.Sum(nil)
+
+	actual, err := base64.RawURLEncoding.DecodeString(parts[2])
+	if err != nil {
+		return Principal{}, errors.New("invalid token signature encoding")
+	}
+	if !hmac.Equal(expected, actual) {
+		return Principal{}, errors.New("invalid token signature")
+	}
+
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return Principal{}, errors.New("invalid token payload encoding")
+	}
+
+	var claims jwtClaims
+	if err := json.Unmarshal(payload, &claims); err != nil {
+		return Principal{}, errors.New("invalid token payload")
+	}
+	if claims.Subject == "" {
+		return Principal{}, errors.New("missing subject")
+	}
+	if claims.ExpiresAt == 0 || time.Now().Unix() >= claims.ExpiresAt {
+		return Principal{}, errors.New("token expired")
+	}
+	if claims.Issuer != "" && a.tokenIssuer != "" && claims.Issuer != a.tokenIssuer {
+		return Principal{}, errors.New("invalid token issuer")
+	}
+
+	return Principal{
+		Subject:    claims.Subject,
+		Email:      claims.Email,
+		Name:       claims.Name,
+		PictureURL: claims.PictureURL,
+		Provider:   claims.Provider,
+		AuthMethod: claims.AuthMethod,
+	}, nil
 }
 
 func parseSameSite(value string) http.SameSite {

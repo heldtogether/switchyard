@@ -1,6 +1,7 @@
 package api
 
 import (
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -81,5 +82,87 @@ func TestLogoutRedirectUsesProviderLogoutURL(t *testing.T) {
 	}
 	if location := recorder.Header().Get("Location"); location != manager.providerLogoutURL {
 		t.Fatalf("expected redirect to provider logout URL, got %q", location)
+	}
+}
+
+func TestIssueAndVerifyBearerToken(t *testing.T) {
+	manager := &AuthManager{
+		signingKey:     []byte("test-signing-key"),
+		tokenIssuer:    "http://api.local",
+		bearerTokenTTL: 15 * time.Minute,
+	}
+
+	principal := Principal{
+		Subject:    "user-123",
+		Email:      "user@example.com",
+		Name:       "User",
+		PictureURL: "https://example.com/user.png",
+		Provider:   "oidc",
+		AuthMethod: "oidc",
+	}
+
+	token, _, err := manager.issueBearerToken(principal)
+	if err != nil {
+		t.Fatalf("issueBearerToken failed: %v", err)
+	}
+
+	got, err := manager.verifyBearerToken(token)
+	if err != nil {
+		t.Fatalf("verifyBearerToken failed: %v", err)
+	}
+	if got.Subject != principal.Subject || got.Email != principal.Email {
+		t.Fatalf("unexpected principal from token: %+v", got)
+	}
+}
+
+func TestVerifyBearerTokenRejectsExpired(t *testing.T) {
+	manager := &AuthManager{
+		signingKey:     []byte("test-signing-key"),
+		tokenIssuer:    "http://api.local",
+		bearerTokenTTL: -1 * time.Minute,
+	}
+
+	token, _, err := manager.issueBearerToken(Principal{Subject: "user-123", Provider: "oidc", AuthMethod: "oidc"})
+	if err != nil {
+		t.Fatalf("issueBearerToken failed: %v", err)
+	}
+
+	if _, err := manager.verifyBearerToken(token); err == nil {
+		t.Fatalf("expected expired token verification to fail")
+	}
+}
+
+func TestMiddlewareAcceptsBearerToken(t *testing.T) {
+	manager := &AuthManager{
+		mode:           "oidc",
+		signingKey:     []byte("test-signing-key"),
+		tokenIssuer:    "http://api.local",
+		bearerTokenTTL: 15 * time.Minute,
+	}
+
+	token, _, err := manager.issueBearerToken(Principal{
+		Subject:    "user-123",
+		Provider:   "oidc",
+		AuthMethod: "oidc",
+	})
+	if err != nil {
+		t.Fatalf("issueBearerToken failed: %v", err)
+	}
+
+	handler := manager.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		principal, ok := PrincipalFromContext(r.Context())
+		if !ok || principal.Subject != "user-123" {
+			t.Fatalf("expected principal in context, got %+v", principal)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/workspaces", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	recorder := httptest.NewRecorder()
+
+	handler.ServeHTTP(recorder, req)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", recorder.Code)
 	}
 }

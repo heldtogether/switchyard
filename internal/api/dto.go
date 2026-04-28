@@ -405,6 +405,15 @@ type MemberResponse struct {
 	AddedAt     time.Time `json:"added_at"`
 }
 
+// AuthCallbackTokenResponse is returned by GET /v1/auth/callback?format=json.
+type AuthCallbackTokenResponse struct {
+	AccessToken string    `json:"access_token"`
+	TokenType   string    `json:"token_type"`
+	ExpiresIn   int       `json:"expires_in"`
+	ExpiresAt   time.Time `json:"expires_at"`
+	User        Principal `json:"user"`
+}
+
 // toWorkspaceResponse converts a domain.Workspace to WorkspaceResponse
 func toWorkspaceResponse(workspace *domain.Workspace) WorkspaceResponse {
 	return WorkspaceResponse{
