@@ -52,6 +52,9 @@ func New(cfg *config.Config, store *postgres.Store, q queue.Producer, storage *o
 
 func (a *API) SetAuthManager(auth *AuthManager) {
 	a.auth = auth
+	if a.auth != nil {
+		a.auth.SetServiceAccountKeyResolver(a.resolveServiceAccountKey)
+	}
 }
 
 func (a *API) SetCancelPublisher(p control.Publisher) {
@@ -78,4 +81,25 @@ func validateEnvVars(env map[string]string) error {
 	}
 
 	return nil
+}
+
+func (a *API) resolveServiceAccountKey(ctx context.Context, token string) (Principal, bool) {
+	account, _, err := a.store.ResolveServiceAccountKey(ctx, hashServiceAccountToken(token))
+	if err != nil || account == nil || account.Principal == nil {
+		return Principal{}, false
+	}
+	name := account.Name
+	if account.Principal.DisplayName != nil && *account.Principal.DisplayName != "" {
+		name = *account.Principal.DisplayName
+	}
+	provider := "service_account"
+	if account.Principal.Provider != nil && *account.Principal.Provider != "" {
+		provider = *account.Principal.Provider
+	}
+	return Principal{
+		Subject:    account.Principal.Subject,
+		Name:       name,
+		Provider:   provider,
+		AuthMethod: "service_account",
+	}, true
 }

@@ -5,9 +5,14 @@ set -e
 
 API_URL="${API_URL:-http://localhost:8080}"
 API_KEY="${API_KEY:-your-api-key}"
+SWITCHYARD_SERVICE_ACCOUNT_KEY="${SWITCHYARD_SERVICE_ACCOUNT_KEY:-}"
 WORKSPACE_SLUG="${WORKSPACE_SLUG:-default}"
 PROJECT_SLUG="${PROJECT_SLUG:-test-project}"
 RUN_SLUG="${RUN_SLUG:-test-run}"
+AUTH_HEADER=("X-API-Key: $API_KEY")
+if [ -n "$SWITCHYARD_SERVICE_ACCOUNT_KEY" ]; then
+  AUTH_HEADER=("Authorization: Bearer $SWITCHYARD_SERVICE_ACCOUNT_KEY")
+fi
 
 echo "Submitting example job to $API_URL..."
 
@@ -16,7 +21,7 @@ echo "Submitting example job to $API_URL..."
 # SWITCHYARD_EXECUTOR_TYPE, SWITCHYARD_IMAGE, SWITCHYARD_OUTPUTS_DIR, SWITCHYARD_BUCKET,
 # SWITCHYARD_VERSION, SWITCHYARD_API_URL, and resource limits
 RESPONSE=$(curl -s -X POST "$API_URL/v1/workspaces/$WORKSPACE_SLUG/projects/$PROJECT_SLUG/runs/$RUN_SLUG/jobs" \
-  -H "X-API-Key: $API_KEY" \
+  -H "${AUTH_HEADER[0]}" \
   -H "Content-Type: application/json" \
   -d '{
     "image": "switchyard-example-job:latest",

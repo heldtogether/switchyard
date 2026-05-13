@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -164,5 +165,57 @@ func TestMiddlewareAcceptsBearerToken(t *testing.T) {
 	handler.ServeHTTP(recorder, req)
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("expected status 200, got %d", recorder.Code)
+	}
+}
+
+func TestMiddlewareAcceptsServiceAccountKey(t *testing.T) {
+	manager := &AuthManager{mode: "oidc"}
+	manager.SetServiceAccountKeyResolver(func(ctx context.Context, token string) (Principal, bool) {
+		if token != "swy_sa_test_secret" {
+			return Principal{}, false
+		}
+		return Principal{
+			Subject:    "service_account:123",
+			Name:       "CI",
+			Provider:   "service_account",
+			AuthMethod: "service_account",
+		}, true
+	})
+
+	handler := manager.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		principal, ok := PrincipalFromContext(r.Context())
+		if !ok || principal.Subject != "service_account:123" || principal.AuthMethod != "service_account" {
+			t.Fatalf("expected service account principal in context, got %+v", principal)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/workspaces/default/projects/proj/runs", nil)
+	req.Header.Set("Authorization", "Bearer swy_sa_test_secret")
+	recorder := httptest.NewRecorder()
+
+	handler.ServeHTTP(recorder, req)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", recorder.Code)
+	}
+}
+
+func TestMiddlewareRejectsInvalidServiceAccountKey(t *testing.T) {
+	manager := &AuthManager{mode: "oidc"}
+	manager.SetServiceAccountKeyResolver(func(ctx context.Context, token string) (Principal, bool) {
+		return Principal{}, false
+	})
+
+	handler := manager.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatalf("handler should not be called")
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/workspaces", nil)
+	req.Header.Set("X-API-Key", "swy_sa_bad_secret")
+	recorder := httptest.NewRecorder()
+
+	handler.ServeHTTP(recorder, req)
+	if recorder.Code != http.StatusUnauthorized {
+		t.Fatalf("expected status 401, got %d", recorder.Code)
 	}
 }
