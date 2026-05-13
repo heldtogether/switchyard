@@ -557,6 +557,90 @@ export async function rotateRegistrySecret(secretId: string, payload: { password
   });
 }
 
+export type ServiceAccountKey = {
+  id: string;
+  name?: string | null;
+  token_prefix: string;
+  expires_at: string;
+  last_used_at?: string | null;
+  revoked_at?: string | null;
+  created_at: string;
+  created_by: string;
+};
+
+export type ServiceAccount = {
+  id: string;
+  workspace_id: string;
+  principal_id: string;
+  subject: string;
+  name: string;
+  description?: string | null;
+  disabled_at?: string | null;
+  created_at: string;
+  updated_at: string;
+  created_by: string;
+  project_slugs?: string[];
+  keys?: ServiceAccountKey[];
+};
+
+export type CreateServiceAccountPayload = {
+  name: string;
+  description?: string;
+  expires_at: string;
+  project_slugs?: string[];
+};
+
+export type CreateServiceAccountResponse = {
+  service_account: ServiceAccount;
+  key: string;
+};
+
+export type CreateServiceAccountKeyResponse = {
+  key_id: string;
+  key: string;
+  token_prefix: string;
+  expires_at: string;
+};
+
+export async function listServiceAccounts(): Promise<ServiceAccount[]> {
+  const data = await fetchJson<{ service_accounts: ServiceAccount[] }>(
+    `/v1/workspaces/${activeWorkspaceSlug}/service-accounts`
+  );
+  return data.service_accounts ?? [];
+}
+
+export async function createServiceAccount(payload: CreateServiceAccountPayload): Promise<CreateServiceAccountResponse> {
+  return fetchJson<CreateServiceAccountResponse>(`/v1/workspaces/${activeWorkspaceSlug}/service-accounts`, {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function createServiceAccountKey(
+  serviceAccountId: string,
+  payload: { name?: string; expires_at: string }
+): Promise<CreateServiceAccountKeyResponse> {
+  return fetchJson<CreateServiceAccountKeyResponse>(
+    `/v1/workspaces/${activeWorkspaceSlug}/service-accounts/${serviceAccountId}/keys`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }
+  );
+}
+
+export async function revokeServiceAccountKey(serviceAccountId: string, keyId: string): Promise<void> {
+  await fetchJson<void>(`/v1/workspaces/${activeWorkspaceSlug}/service-accounts/${serviceAccountId}/keys/${keyId}`, {
+    method: "DELETE"
+  });
+}
+
+export async function disableServiceAccount(serviceAccountId: string): Promise<void> {
+  await fetchJson<void>(`/v1/workspaces/${activeWorkspaceSlug}/service-accounts/${serviceAccountId}`, {
+    method: "DELETE"
+  });
+}
+
 export async function listWorkspaceMembers(): Promise<Member[]> {
   const data = await fetchJson<{ members: Member[] }>(`/v1/workspaces/${activeWorkspaceSlug}/members`);
   return data.members ?? [];
