@@ -28,6 +28,7 @@ docker run -p 3000:80 \
   -e UI_WORKSPACE_SLUG=default \
   -e UI_USE_MOCKS=false \
   -e UI_AGGREGATE_LIMIT=5 \
+  -e UI_VERSION=v1.2.3 \
   switchyard-ui:latest
 ```
 

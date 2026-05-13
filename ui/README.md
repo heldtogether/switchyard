@@ -8,6 +8,7 @@ cd ui
 npm install
 npm run dev
 ```
+The local sidebar version defaults to the nearest release tag plus the current short Git SHA, and appends `-dirty` when the worktree has uncommitted changes. Clean tagged commits show the release tag only. Set `VITE_VERSION` to override it.
 
 ## Configuration
 Create a `.env.local` file in `ui/` with:
@@ -16,6 +17,7 @@ VITE_API_BASE_URL=http://localhost:8080
 VITE_USE_MOCKS=false
 VITE_WORKSPACE_SLUG=default
 VITE_AGGREGATE_LIMIT=5
+VITE_VERSION=v0.8.0+sha.local
 ```
 
 - Set `VITE_USE_MOCKS=false` to hit real endpoints.

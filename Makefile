@@ -35,6 +35,7 @@ docker-build: ## Build Docker images
 	docker build -f build/worker.Dockerfile -t $(DOCKER_REGISTRY)/switchyard-worker:$(VERSION) .
 	docker build -f build/example-job/Dockerfile -t $(DOCKER_REGISTRY)/switchyard-example-job:$(VERSION) ./build/example-job
 	docker build -f build/ui.Dockerfile \
+		--build-arg VERSION=$(VERSION) \
 		-t $(DOCKER_REGISTRY)/switchyard-ui:$(VERSION) .
 
 docker-push: ## Push Docker images

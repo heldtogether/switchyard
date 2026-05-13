@@ -34,7 +34,7 @@ cd ui
 npm install
 npm run dev
 ```
-Then open `http://localhost:5173`.
+Then open `http://localhost:5173`. The sidebar version defaults to the nearest release tag plus the current short Git SHA, appending `-dirty` when the worktree has uncommitted changes. Clean tagged commits show the release tag only.
 
 ### UI (Docker)
 ```bash
@@ -45,6 +45,7 @@ docker run -p 3000:80 \
   -e UI_AUTH_LOGOUT_URL=http://localhost:8080/v1/auth/logout \
   -e UI_WORKSPACE_SLUG=default \
   -e UI_USE_MOCKS=false \
+  -e UI_VERSION=v1.2.3 \
   switchyard-ui:latest
 ```
 For deployment and ops, see `deployments/README.md` and `deployments/DEPLOYMENT.md`.

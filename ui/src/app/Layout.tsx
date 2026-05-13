@@ -7,6 +7,7 @@ import { createWorkspace, listWorkspaces, setWorkspaceSlug } from "../api";
 import { Modal } from "../components/Modal";
 import { slugify } from "../utils/slug";
 import { isReservedSlug } from "../utils/reservedSlugs";
+import { getAppVersion } from "../config/runtime";
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
@@ -63,6 +64,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   ];
 
   const { user, logoutUrl } = useAuth();
+  const appVersion = getAppVersion();
   const displayName = user?.name ?? user?.email ?? "User";
   const avatarInitials = displayName
     .split(/\s+/)
@@ -268,6 +270,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
               ))}
             </div>
           </nav>
+          {appVersion && (
+            <p className="mt-3 px-4 text-[11px] font-medium text-ink-400">{appVersion}</p>
+          )}
         </aside>
         <main className="flex-1 min-w-0 space-y-8">{children}</main>
       </div>
