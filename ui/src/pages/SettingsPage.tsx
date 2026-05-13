@@ -3,19 +3,45 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { PageHeader } from "../components/PageHeader";
 import { useParams } from "react-router-dom";
 import {
+  createServiceAccount,
+  createServiceAccountKey,
   createRegistrySecret,
   createProjectInvite,
   deleteRegistrySecret,
+  disableServiceAccount,
   // createWorkspaceInvite,
   listProjectMembers,
   listProjects,
   listRegistrySecrets,
+  listServiceAccounts,
   listWorkspaceMembers,
+  revokeServiceAccountKey,
   rotateRegistrySecret
 } from "../api";
 // import { ErrorBanner } from "../components/ErrorBanner";
 import { RelativeTime } from "../components/RelativeTime";
 import { useAuth } from "../auth/AuthProvider";
+import { Modal } from "../components/Modal";
+import type { ServiceAccount } from "../api";
+
+type OneTimeKeyState = {
+  title: string;
+  key: string;
+  prefix?: string;
+  expiresAt?: string;
+} | null;
+
+function toISOFromDateTimeLocal(value: string) {
+  if (!value) return "";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "" : date.toISOString();
+}
+
+function defaultExpiryInput(days: number) {
+  const date = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+  date.setSeconds(0, 0);
+  return date.toISOString().slice(0, 16);
+}
 
 export function SettingsPage() {
   const queryClient = useQueryClient();
@@ -42,6 +68,17 @@ export function SettingsPage() {
   const [rotatingSecretID, setRotatingSecretID] = useState<string | null>(null);
   const [rotatePassword, setRotatePassword] = useState("");
   const [rotateError, setRotateError] = useState<string | null>(null);
+  const [serviceAccountModalOpen, setServiceAccountModalOpen] = useState(false);
+  const [serviceAccountName, setServiceAccountName] = useState("");
+  const [serviceAccountDescription, setServiceAccountDescription] = useState("");
+  const [serviceAccountExpiry, setServiceAccountExpiry] = useState(defaultExpiryInput(365));
+  const [serviceAccountProjects, setServiceAccountProjects] = useState<string[]>([]);
+  const [serviceAccountError, setServiceAccountError] = useState<string | null>(null);
+  const [keyModalAccount, setKeyModalAccount] = useState<ServiceAccount | null>(null);
+  const [keyName, setKeyName] = useState("");
+  const [keyExpiry, setKeyExpiry] = useState(defaultExpiryInput(90));
+  const [keyError, setKeyError] = useState<string | null>(null);
+  const [oneTimeKey, setOneTimeKey] = useState<OneTimeKeyState>(null);
 
   const workspaceMembersQuery = useQuery({
     queryKey: ["workspace-members", workspace],
@@ -56,6 +93,12 @@ export function SettingsPage() {
   const registrySecretsQuery = useQuery({
     queryKey: ["registry-secrets", workspace],
     queryFn: listRegistrySecrets
+  });
+
+  const serviceAccountsQuery = useQuery({
+    queryKey: ["service-accounts", workspace],
+    queryFn: listServiceAccounts,
+    enabled: owner
   });
 
   const createRegistrySecretMutation = useMutation({
@@ -86,6 +129,60 @@ export function SettingsPage() {
     mutationFn: deleteRegistrySecret,
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["registry-secrets", workspace] });
+    }
+  });
+
+  const createServiceAccountMutation = useMutation({
+    mutationFn: createServiceAccount,
+    onSuccess: async (response) => {
+      setServiceAccountModalOpen(false);
+      setServiceAccountName("");
+      setServiceAccountDescription("");
+      setServiceAccountExpiry(defaultExpiryInput(365));
+      setServiceAccountProjects([]);
+      setServiceAccountError(null);
+      setOneTimeKey({
+        title: `${response.service_account.name} key`,
+        key: response.key,
+        prefix: response.service_account.keys?.[0]?.token_prefix,
+        expiresAt: response.service_account.keys?.[0]?.expires_at
+      });
+      await queryClient.invalidateQueries({ queryKey: ["service-accounts", workspace] });
+    },
+    onError: (error) => setServiceAccountError((error as Error).message)
+  });
+
+  const createServiceAccountKeyMutation = useMutation({
+    mutationFn: ({ accountID, name, expiresAt }: { accountID: string; name?: string; expiresAt: string }) =>
+      createServiceAccountKey(accountID, { name, expires_at: expiresAt }),
+    onSuccess: async (response) => {
+      setKeyModalAccount(null);
+      setKeyName("");
+      setKeyExpiry(defaultExpiryInput(90));
+      setKeyError(null);
+      setOneTimeKey({
+        title: "New service account key",
+        key: response.key,
+        prefix: response.token_prefix,
+        expiresAt: response.expires_at
+      });
+      await queryClient.invalidateQueries({ queryKey: ["service-accounts", workspace] });
+    },
+    onError: (error) => setKeyError((error as Error).message)
+  });
+
+  const revokeServiceAccountKeyMutation = useMutation({
+    mutationFn: ({ accountID, keyID }: { accountID: string; keyID: string }) =>
+      revokeServiceAccountKey(accountID, keyID),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["service-accounts", workspace] });
+    }
+  });
+
+  const disableServiceAccountMutation = useMutation({
+    mutationFn: disableServiceAccount,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["service-accounts", workspace] });
     }
   });
 
@@ -180,6 +277,68 @@ export function SettingsPage() {
     }
   }
 
+  function toggleServiceAccountProject(projectSlug: string) {
+    setServiceAccountProjects((current) =>
+      current.includes(projectSlug)
+        ? current.filter((slug) => slug !== projectSlug)
+        : [...current, projectSlug]
+    );
+  }
+
+  async function onCreateServiceAccount() {
+    const name = serviceAccountName.trim();
+    const expiresAt = toISOFromDateTimeLocal(serviceAccountExpiry);
+    if (!name) {
+      setServiceAccountError("Name is required.");
+      return;
+    }
+    if (!expiresAt) {
+      setServiceAccountError("Expiry is required.");
+      return;
+    }
+    setServiceAccountError(null);
+    await createServiceAccountMutation.mutateAsync({
+      name,
+      description: serviceAccountDescription.trim() || undefined,
+      expires_at: expiresAt,
+      project_slugs: serviceAccountProjects
+    });
+  }
+
+  async function onCreateServiceAccountKey() {
+    if (!keyModalAccount) return;
+    const expiresAt = toISOFromDateTimeLocal(keyExpiry);
+    if (!expiresAt) {
+      setKeyError("Expiry is required.");
+      return;
+    }
+    setKeyError(null);
+    await createServiceAccountKeyMutation.mutateAsync({
+      accountID: keyModalAccount.id,
+      name: keyName.trim() || undefined,
+      expiresAt
+    });
+  }
+
+  async function copyOneTimeKey() {
+    if (!oneTimeKey) return;
+    try {
+      await navigator.clipboard.writeText(oneTimeKey.key);
+    } catch {
+      // no-op
+    }
+  }
+
+  async function onRevokeServiceAccountKey(accountID: string, keyID: string) {
+    if (!window.confirm("Revoke this service account key?")) return;
+    await revokeServiceAccountKeyMutation.mutateAsync({ accountID, keyID });
+  }
+
+  async function onDisableServiceAccount(account: ServiceAccount) {
+    if (!window.confirm(`Disable service account "${account.name}"?`)) return;
+    await disableServiceAccountMutation.mutateAsync(account.id);
+  }
+
   async function onCreateRegistrySecret() {
     const host = secretHost.trim();
     const username = secretUsername.trim();
@@ -262,6 +421,158 @@ export function SettingsPage() {
                       <tr>
                         <td className="px-4 py-4 text-ink-500" colSpan={4}>
                           No workspace members found.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div>
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold text-ink-900">Service Accounts</div>
+                  <p className="mt-1 text-xs text-ink-500">
+                    Machine credentials for CI/CD jobs. Keys are only shown once.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setServiceAccountModalOpen(true);
+                    setServiceAccountError(null);
+                  }}
+                  className="rounded-full bg-ink-900 px-4 py-2 text-sm font-semibold text-white"
+                >
+                  New Service Account
+                </button>
+              </div>
+
+              {serviceAccountsQuery.error && (
+                <p className="mb-3 text-sm text-red-600">{(serviceAccountsQuery.error as Error).message}</p>
+              )}
+
+              <div className="overflow-x-auto rounded-lg border border-ink-100">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-ink-50 text-left text-xs uppercase tracking-[0.15em] text-ink-500">
+                    <tr>
+                      <th className="px-4 py-3">Account</th>
+                      <th className="px-4 py-3">Scope</th>
+                      <th className="px-4 py-3">Status</th>
+                      <th className="px-4 py-3">Keys</th>
+                      <th className="px-4 py-3">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(serviceAccountsQuery.data ?? []).map((account) => {
+                      const active = !account.disabled_at;
+                      const keys = account.keys ?? [];
+                      return (
+                        <tr key={account.id} className="border-t border-ink-100 align-top">
+                          <td className="px-4 py-3">
+                            <div className="font-medium text-ink-900">{account.name}</div>
+                            {account.description && (
+                              <div className="text-xs text-ink-500">{account.description}</div>
+                            )}
+                            <div className="mt-1 font-mono text-xs text-ink-400">{account.subject}</div>
+                            <div className="mt-1 text-xs text-ink-500">
+                              Created by {account.created_by} <RelativeTime value={account.created_at} />
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            {(account.project_slugs?.length ?? 0) === 0 ? (
+                              <span className="text-xs text-ink-500">All workspace projects</span>
+                            ) : (
+                              <div className="flex flex-wrap gap-1">
+                                {(account.project_slugs ?? []).map((slug) => (
+                                  <span key={`${account.id}-${slug}`} className="rounded-full bg-ink-100 px-2 py-0.5 text-xs text-ink-600">
+                                    {slug}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={active ? "text-emerald-600" : "text-ink-500"}>
+                              {active ? "Active" : "Disabled"}
+                            </span>
+                            {account.disabled_at && (
+                              <div className="mt-1 text-xs text-ink-500">
+                                <RelativeTime value={account.disabled_at} />
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-4 py-3">
+                            {keys.length === 0 ? (
+                              <span className="text-xs text-ink-400">No keys</span>
+                            ) : (
+                              <div className="space-y-3">
+                                {keys.map((key) => {
+                                  return (
+                                    <div key={key.id} className="space-y-1">
+                                      <div className="font-mono text-xs text-ink-900">{key.token_prefix}...</div>
+                                      <div className="text-xs text-ink-500">
+                                        {key.name ?? "Unnamed key"} | expires <RelativeTime value={key.expires_at} />
+                                      </div>
+                                      <div className="text-xs text-ink-500">
+                                        Last used {key.last_used_at ? <RelativeTime value={key.last_used_at} /> : "never"}
+                                      </div>
+                                      {key.revoked_at ? (
+                                        <div className="text-xs text-ink-400">
+                                          Revoked <RelativeTime value={key.revoked_at} />
+                                        </div>
+                                      ) : (
+                                        <button
+                                          type="button"
+                                          className="rounded-full border border-red-200 px-3 py-1 text-xs text-red-600"
+                                          onClick={() => onRevokeServiceAccountKey(account.id, key.id)}
+                                          disabled={!active || revokeServiceAccountKeyMutation.isPending}
+                                        >
+                                          Revoke Key
+                                        </button>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-4 py-3">
+                            {active ? (
+                              <div className="flex flex-wrap gap-2">
+                                <button
+                                  type="button"
+                                  className="rounded-full border border-ink-200 px-3 py-1 text-xs text-ink-700"
+                                  onClick={() => {
+                                    setKeyModalAccount(account);
+                                    setKeyName("");
+                                    setKeyExpiry(defaultExpiryInput(90));
+                                    setKeyError(null);
+                                  }}
+                                >
+                                  New Key
+                                </button>
+                                <button
+                                  type="button"
+                                  className="rounded-full border border-red-200 px-3 py-1 text-xs text-red-600"
+                                  onClick={() => onDisableServiceAccount(account)}
+                                  disabled={disableServiceAccountMutation.isPending}
+                                >
+                                  Disable
+                                </button>
+                              </div>
+                            ) : (
+                              <span className="text-xs text-ink-400">No actions</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {(serviceAccountsQuery.data?.length ?? 0) === 0 && (
+                      <tr>
+                        <td className="px-4 py-4 text-ink-500" colSpan={5}>
+                          No service accounts configured.
                         </td>
                       </tr>
                     )}
@@ -537,6 +848,176 @@ export function SettingsPage() {
           </div>
         </div>
       </div>
+
+      <Modal
+        open={serviceAccountModalOpen}
+        title="New Service Account"
+        description="Create a machine credential for CI/CD job submission."
+        onClose={() => setServiceAccountModalOpen(false)}
+        footer={
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={() => setServiceAccountModalOpen(false)} className="text-sm text-ink-500">
+              Close
+            </button>
+            <button
+              type="button"
+              onClick={onCreateServiceAccount}
+              disabled={createServiceAccountMutation.isPending}
+              className="rounded-full bg-ink-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+            >
+              Create
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-4 text-sm text-ink-600">
+          {serviceAccountError && <p className="text-sm text-red-600">{serviceAccountError}</p>}
+          <div>
+            <label htmlFor="service-account-name" className="text-xs uppercase tracking-[0.2em] text-ink-400">Name</label>
+            <input
+              id="service-account-name"
+              className="mt-2 w-full rounded-lg border border-ink-200 px-3 py-2"
+              placeholder="github-actions"
+              value={serviceAccountName}
+              onChange={(event) => setServiceAccountName(event.target.value)}
+            />
+          </div>
+          <div>
+            <label htmlFor="service-account-description" className="text-xs uppercase tracking-[0.2em] text-ink-400">Description</label>
+            <textarea
+              id="service-account-description"
+              className="mt-2 w-full rounded-lg border border-ink-200 px-3 py-2"
+              placeholder="Optional description"
+              rows={3}
+              value={serviceAccountDescription}
+              onChange={(event) => setServiceAccountDescription(event.target.value)}
+            />
+          </div>
+          <div>
+            <label htmlFor="service-account-expiry" className="text-xs uppercase tracking-[0.2em] text-ink-400">Key Expiry</label>
+            <input
+              id="service-account-expiry"
+              className="mt-2 w-full rounded-lg border border-ink-200 px-3 py-2"
+              type="datetime-local"
+              value={serviceAccountExpiry}
+              onChange={(event) => setServiceAccountExpiry(event.target.value)}
+            />
+          </div>
+          <div>
+            <div className="text-xs uppercase tracking-[0.2em] text-ink-400">Project Scope</div>
+            <div className="mt-2 space-y-2 rounded-lg border border-ink-100 p-3">
+              {(projectsQuery.data ?? []).map((project) => (
+                <label key={project.slug} className="flex items-center gap-2 text-sm text-ink-700">
+                  <input
+                    type="checkbox"
+                    checked={serviceAccountProjects.includes(project.slug)}
+                    onChange={() => toggleServiceAccountProject(project.slug)}
+                  />
+                  <span>{project.name}</span>
+                  <span className="font-mono text-xs text-ink-400">{project.slug}</span>
+                </label>
+              ))}
+              {(projectsQuery.data?.length ?? 0) === 0 && (
+                <p className="text-xs text-ink-500">No projects are available.</p>
+              )}
+              <p className="text-xs text-ink-500">
+                Leave all unchecked to allow all workspace projects.
+              </p>
+            </div>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={!!keyModalAccount}
+        title="New Service Account Key"
+        description={keyModalAccount ? `Generate a replacement key for ${keyModalAccount.name}.` : undefined}
+        onClose={() => setKeyModalAccount(null)}
+        footer={
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={() => setKeyModalAccount(null)} className="text-sm text-ink-500">
+              Close
+            </button>
+            <button
+              type="button"
+              onClick={onCreateServiceAccountKey}
+              disabled={createServiceAccountKeyMutation.isPending}
+              className="rounded-full bg-ink-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+            >
+              Create Key
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-4 text-sm text-ink-600">
+          {keyError && <p className="text-sm text-red-600">{keyError}</p>}
+          <div>
+            <label htmlFor="service-account-key-name" className="text-xs uppercase tracking-[0.2em] text-ink-400">Key Name</label>
+            <input
+              id="service-account-key-name"
+              className="mt-2 w-full rounded-lg border border-ink-200 px-3 py-2"
+              placeholder="github-actions-rotation"
+              value={keyName}
+              onChange={(event) => setKeyName(event.target.value)}
+            />
+          </div>
+          <div>
+            <label htmlFor="service-account-key-expiry" className="text-xs uppercase tracking-[0.2em] text-ink-400">Expiry</label>
+            <input
+              id="service-account-key-expiry"
+              className="mt-2 w-full rounded-lg border border-ink-200 px-3 py-2"
+              type="datetime-local"
+              value={keyExpiry}
+              onChange={(event) => setKeyExpiry(event.target.value)}
+            />
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={!!oneTimeKey}
+        title={oneTimeKey?.title ?? "Service Account Key"}
+        description="Store this key now. Switchyard cannot show it again."
+        onClose={() => setOneTimeKey(null)}
+        footer={
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={() => setOneTimeKey(null)} className="text-sm text-ink-500">
+              Done
+            </button>
+            <button
+              type="button"
+              onClick={copyOneTimeKey}
+              className="rounded-full bg-ink-900 px-4 py-2 text-sm font-semibold text-white"
+            >
+              Copy Key
+            </button>
+          </div>
+        }
+      >
+        {oneTimeKey && (
+          <div className="space-y-3 text-sm text-ink-600">
+            {oneTimeKey.prefix && (
+              <div>
+                <div className="text-xs uppercase tracking-[0.2em] text-ink-400">Prefix</div>
+                <div className="mt-1 font-mono text-ink-900">{oneTimeKey.prefix}</div>
+              </div>
+            )}
+            {oneTimeKey.expiresAt && (
+              <div>
+                <div className="text-xs uppercase tracking-[0.2em] text-ink-400">Expires</div>
+                <div className="mt-1 text-ink-900">
+                  <RelativeTime value={oneTimeKey.expiresAt} />
+                </div>
+              </div>
+            )}
+            <textarea
+              className="h-28 w-full rounded-lg border border-ink-200 px-3 py-2 font-mono text-xs text-ink-900"
+              readOnly
+              value={oneTimeKey.key}
+            />
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }
