@@ -8,5 +8,6 @@ interface Window {
     WORKSPACE_SLUG?: string;
     USE_MOCKS?: string;
     AGGREGATE_LIMIT?: string;
+    VERSION?: string;
   };
 }

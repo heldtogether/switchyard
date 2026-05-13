@@ -71,9 +71,18 @@ function renderLayout() {
 
 describe("Layout workspace creation", () => {
   beforeEach(() => {
+    window.__ENV = { VERSION: "v1.2.3" };
     listWorkspacesMock.mockClear();
     createWorkspaceMock.mockClear();
     setWorkspaceSlugMock.mockClear();
+  });
+
+  it("shows the configured app version in the sidebar", async () => {
+    renderLayout();
+
+    await waitFor(() => {
+      expect(screen.getByText("Version v1.2.3")).toBeInTheDocument();
+    });
   });
 
   it("creates workspace from switcher popover", async () => {
