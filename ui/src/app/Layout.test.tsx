@@ -81,7 +81,7 @@ describe("Layout workspace creation", () => {
     renderLayout();
 
     await waitFor(() => {
-      expect(screen.getByText("Version v1.2.3")).toBeInTheDocument();
+      expect(screen.getByText("v1.2.3")).toBeInTheDocument();
     });
   });
 
