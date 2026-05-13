@@ -23,6 +23,34 @@ type Principal struct {
 	UpdatedAt   time.Time `json:"updated_at"`
 }
 
+type ServiceAccount struct {
+	ID          uuid.UUID  `json:"id"`
+	WorkspaceID uuid.UUID  `json:"workspace_id"`
+	PrincipalID uuid.UUID  `json:"principal_id"`
+	Name        string     `json:"name"`
+	Description *string    `json:"description,omitempty"`
+	DisabledAt  *time.Time `json:"disabled_at,omitempty"`
+	DisabledBy  *string    `json:"disabled_by,omitempty"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
+	CreatedBy   string     `json:"created_by"`
+	Principal   *Principal `json:"principal,omitempty"`
+}
+
+type ServiceAccountKey struct {
+	ID               uuid.UUID  `json:"id"`
+	ServiceAccountID uuid.UUID  `json:"service_account_id"`
+	Name             *string    `json:"name,omitempty"`
+	TokenHash        string     `json:"-"`
+	TokenPrefix      string     `json:"token_prefix"`
+	ExpiresAt        time.Time  `json:"expires_at"`
+	LastUsedAt       *time.Time `json:"last_used_at,omitempty"`
+	RevokedAt        *time.Time `json:"revoked_at,omitempty"`
+	RevokedBy        *string    `json:"revoked_by,omitempty"`
+	CreatedAt        time.Time  `json:"created_at"`
+	CreatedBy        string     `json:"created_by"`
+}
+
 type WorkspaceMembership struct {
 	WorkspaceID uuid.UUID  `json:"workspace_id"`
 	PrincipalID uuid.UUID  `json:"principal_id"`

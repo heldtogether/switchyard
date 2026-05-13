@@ -41,6 +41,14 @@ func (a *API) resolveIdentity(r *http.Request) (*resolvedIdentity, error) {
 		}, nil
 	}
 
+	if p.AuthMethod == "service_account" {
+		dp, err := a.store.GetPrincipalBySubject(r.Context(), p.Subject)
+		if err != nil {
+			return nil, err
+		}
+		return &resolvedIdentity{principal: dp}, nil
+	}
+
 	dp := &domain.Principal{
 		Subject:     p.Subject,
 		Email:       ptrOrNil(strings.TrimSpace(p.Email)),

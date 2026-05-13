@@ -405,6 +405,56 @@ type MemberResponse struct {
 	AddedAt     time.Time `json:"added_at"`
 }
 
+type CreateServiceAccountRequest struct {
+	Name         string    `json:"name"`
+	Description  *string   `json:"description,omitempty"`
+	ExpiresAt    time.Time `json:"expires_at"`
+	ProjectSlugs []string  `json:"project_slugs,omitempty"`
+}
+
+type CreateServiceAccountKeyRequest struct {
+	Name      *string   `json:"name,omitempty"`
+	ExpiresAt time.Time `json:"expires_at"`
+}
+
+type ServiceAccountKeyResponse struct {
+	ID          uuid.UUID  `json:"id"`
+	Name        *string    `json:"name,omitempty"`
+	TokenPrefix string     `json:"token_prefix"`
+	ExpiresAt   time.Time  `json:"expires_at"`
+	LastUsedAt  *time.Time `json:"last_used_at,omitempty"`
+	RevokedAt   *time.Time `json:"revoked_at,omitempty"`
+	CreatedAt   time.Time  `json:"created_at"`
+	CreatedBy   string     `json:"created_by"`
+}
+
+type ServiceAccountResponse struct {
+	ID           uuid.UUID                   `json:"id"`
+	WorkspaceID  uuid.UUID                   `json:"workspace_id"`
+	PrincipalID  uuid.UUID                   `json:"principal_id"`
+	Subject      string                      `json:"subject"`
+	Name         string                      `json:"name"`
+	Description  *string                     `json:"description,omitempty"`
+	DisabledAt   *time.Time                  `json:"disabled_at,omitempty"`
+	CreatedAt    time.Time                   `json:"created_at"`
+	UpdatedAt    time.Time                   `json:"updated_at"`
+	CreatedBy    string                      `json:"created_by"`
+	ProjectSlugs []string                    `json:"project_slugs,omitempty"`
+	Keys         []ServiceAccountKeyResponse `json:"keys,omitempty"`
+}
+
+type CreateServiceAccountResponse struct {
+	ServiceAccount ServiceAccountResponse `json:"service_account"`
+	Key            string                 `json:"key"`
+}
+
+type CreateServiceAccountKeyResponse struct {
+	KeyID       uuid.UUID `json:"key_id"`
+	Key         string    `json:"key"`
+	TokenPrefix string    `json:"token_prefix"`
+	ExpiresAt   time.Time `json:"expires_at"`
+}
+
 // AuthCallbackTokenResponse is returned by GET /v1/auth/callback?format=json.
 type AuthCallbackTokenResponse struct {
 	AccessToken string    `json:"access_token"`

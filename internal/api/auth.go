@@ -32,6 +32,8 @@ type Principal struct {
 	AuthMethod string `json:"auth_method"`
 }
 
+type ServiceAccountKeyResolver func(ctx context.Context, token string) (Principal, bool)
+
 type oidcState struct {
 	Nonce     string
 	Next      string
@@ -77,6 +79,7 @@ type AuthManager struct {
 	stateTTL           time.Duration
 	stateMu            sync.Mutex
 	states             map[string]oidcState
+	serviceKeyResolver ServiceAccountKeyResolver
 }
 
 func NewAuthManager(cfg *config.Config, logger *slog.Logger) (*AuthManager, error) {
@@ -130,6 +133,10 @@ func (a *AuthManager) Enabled() bool {
 	return a.mode != "disabled"
 }
 
+func (a *AuthManager) SetServiceAccountKeyResolver(resolver ServiceAccountKeyResolver) {
+	a.serviceKeyResolver = resolver
+}
+
 func (a *AuthManager) IsPublicPath(path string) bool {
 	switch path {
 	case "/healthz", "/readyz", "/v1/auth/login", "/v1/auth/callback", "/v1/auth/logout":
@@ -156,12 +163,19 @@ func (a *AuthManager) Middleware(next http.Handler) http.Handler {
 			return
 		}
 
+		if principal, ok := a.principalFromServiceAccountKey(r); ok {
+			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), principalContextKey{}, principal)))
+			return
+		}
+
 		if principal, ok := a.principalFromAPIKey(r); ok {
 			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), principalContextKey{}, principal)))
 			return
 		}
 
-		a.logger.Warn("unauthorized request", "path", r.URL.Path, "remote", r.RemoteAddr)
+		if a.logger != nil {
+			a.logger.Warn("unauthorized request", "path", r.URL.Path, "remote", r.RemoteAddr)
+		}
 		writeJSON(w, http.StatusUnauthorized, ErrorResponse{
 			Error:   "unauthorized",
 			Message: "Authentication required",
@@ -186,20 +200,23 @@ func (a *AuthManager) principalFromBearerToken(r *http.Request) (Principal, bool
 	return principal, true
 }
 
+func (a *AuthManager) principalFromServiceAccountKey(r *http.Request) (Principal, bool) {
+	if a.serviceKeyResolver == nil {
+		return Principal{}, false
+	}
+	token := authCredentialFromRequest(r)
+	if token == "" || !strings.HasPrefix(token, "swy_sa_") {
+		return Principal{}, false
+	}
+	return a.serviceKeyResolver(r.Context(), token)
+}
+
 func (a *AuthManager) principalFromAPIKey(r *http.Request) (Principal, bool) {
 	if !a.apiKeyEnabled || a.apiKey == "" {
 		return Principal{}, false
 	}
 
-	provided := strings.TrimSpace(r.Header.Get("X-API-Key"))
-	if provided == "" {
-		authz := strings.TrimSpace(r.Header.Get("Authorization"))
-		if strings.HasPrefix(strings.ToLower(authz), "bearer ") {
-			provided = strings.TrimSpace(authz[7:])
-		} else {
-			provided = authz
-		}
-	}
+	provided := authCredentialFromRequest(r)
 	if provided == "" || provided != a.apiKey {
 		return Principal{}, false
 	}
@@ -210,6 +227,18 @@ func (a *AuthManager) principalFromAPIKey(r *http.Request) (Principal, bool) {
 		Provider:   "api_key",
 		AuthMethod: "api_key",
 	}, true
+}
+
+func authCredentialFromRequest(r *http.Request) string {
+	provided := strings.TrimSpace(r.Header.Get("X-API-Key"))
+	if provided != "" {
+		return provided
+	}
+	authz := strings.TrimSpace(r.Header.Get("Authorization"))
+	if strings.HasPrefix(strings.ToLower(authz), "bearer ") {
+		return strings.TrimSpace(authz[7:])
+	}
+	return authz
 }
 
 func (a *AuthManager) principalFromSession(r *http.Request) (Principal, bool) {
