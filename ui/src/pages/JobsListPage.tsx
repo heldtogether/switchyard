@@ -18,12 +18,12 @@ export function JobsListPage() {
 
   const projectsQuery = useQuery({
     queryKey: ["projects", workspace],
-    queryFn: listProjects
+    queryFn: () => listProjects(workspace)
   });
 
   const jobsQuery = useQuery({
     queryKey: ["jobs", workspace, "all"],
-    queryFn: listAllJobs,
+    queryFn: () => listAllJobs(workspace),
     enabled: !!projectsQuery.data
   });
 

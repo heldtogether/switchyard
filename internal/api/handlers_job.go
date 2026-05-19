@@ -80,13 +80,6 @@ func (a *API) HandleCreateJob(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	if _, ok := a.requireWorkspaceAccess(w, r, workspace, false); !ok {
-		return
-	}
-	if _, ok := a.requireWorkspaceAccess(w, r, workspace, false); !ok {
-		return
-	}
-
 	// Get project
 	project, err := a.store.GetProjectBySlug(r.Context(), workspace.ID, projectSlug)
 	if err != nil {
@@ -95,9 +88,6 @@ func (a *API) HandleCreateJob(w http.ResponseWriter, r *http.Request) {
 			Message: "Project not found",
 			Code:    http.StatusNotFound,
 		})
-		return
-	}
-	if _, ok := a.requireProjectAccess(w, r, workspace, project); !ok {
 		return
 	}
 	if _, ok := a.requireProjectAccess(w, r, workspace, project); !ok {
@@ -875,10 +865,6 @@ func (a *API) authorizeJobPathScope(w http.ResponseWriter, r *http.Request, work
 		})
 		return false
 	}
-	if _, ok := a.requireWorkspaceAccess(w, r, workspace, false); !ok {
-		return false
-	}
-
 	project, err := a.store.GetProjectBySlug(r.Context(), workspace.ID, projectSlug)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, ErrorResponse{

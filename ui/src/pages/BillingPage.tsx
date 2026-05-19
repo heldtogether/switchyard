@@ -25,16 +25,16 @@ export function BillingPage() {
 
   const mtdQuery = useQuery({
     queryKey: ["billing", workspace, "month-to-date"],
-    queryFn: () => getWorkspaceMonthToDateBilling()
+    queryFn: () => getWorkspaceMonthToDateBilling(workspace)
   });
 
   const runsQuery = useQuery({
     queryKey: ["billing", workspace, "recent-runs"],
     queryFn: async (): Promise<BilledRunRow[]> => {
-      const projects = await listProjects();
+      const projects = await listProjects(workspace);
       const runCollections = await Promise.all(
         projects.map(async (project) => {
-          const runs = await listRuns(project.slug);
+          const runs = await listRuns(project.slug, workspace);
           return runs.map((run) => ({ project, run }));
         })
       );
@@ -45,7 +45,7 @@ export function BillingPage() {
 
       const results = await Promise.allSettled(
         recent.map(async ({ project, run }) => {
-          const billing = await getRunBillingBreakdown(project.slug, run.slug);
+          const billing = await getRunBillingBreakdown(project.slug, run.slug, workspace);
           return {
             project_slug: project.slug,
             project_name: project.name,

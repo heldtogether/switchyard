@@ -54,14 +54,17 @@ func (a *API) HandleAuthMe(w http.ResponseWriter, r *http.Request) {
 			workspaceMemberships, _ := a.store.ListWorkspaceMembershipsForPrincipal(r.Context(), identity.principal.ID)
 			projectMemberships, _ := a.store.ListProjectMembershipsForPrincipal(r.Context(), identity.principal.ID)
 			workspaces := make([]map[string]any, 0, len(workspaceMemberships))
+			workspaceSeen := map[string]struct{}{}
 			for _, m := range workspaceMemberships {
 				if m.Workspace == nil {
 					continue
 				}
 				workspaces = append(workspaces, map[string]any{
-					"slug": m.Workspace.Slug,
-					"role": m.Role,
+					"slug":          m.Workspace.Slug,
+					"role":          m.Role,
+					"access_source": "workspace",
 				})
+				workspaceSeen[m.Workspace.Slug] = struct{}{}
 			}
 			projects := make([]map[string]any, 0, len(projectMemberships))
 			for _, m := range projectMemberships {
@@ -72,10 +75,19 @@ func (a *API) HandleAuthMe(w http.ResponseWriter, r *http.Request) {
 				if err != nil {
 					continue
 				}
+				if _, ok := workspaceSeen[workspace.Slug]; !ok {
+					workspaces = append(workspaces, map[string]any{
+						"slug":          workspace.Slug,
+						"role":          "project",
+						"access_source": "project",
+					})
+					workspaceSeen[workspace.Slug] = struct{}{}
+				}
 				projects = append(projects, map[string]any{
 					"workspace_slug": workspace.Slug,
 					"project_slug":   m.Project.Slug,
 					"role":           m.Role,
+					"access_source":  "project",
 				})
 			}
 			response["memberships"] = map[string]any{

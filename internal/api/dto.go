@@ -20,13 +20,14 @@ type CreateWorkspaceRequest struct {
 
 // WorkspaceResponse is the response for a workspace
 type WorkspaceResponse struct {
-	ID          uuid.UUID      `json:"id"`
-	Slug        string         `json:"slug"`
-	Name        string         `json:"name"`
-	Description *string        `json:"description,omitempty"`
-	CreatedAt   time.Time      `json:"created_at"`
-	UpdatedAt   time.Time      `json:"updated_at"`
-	Metadata    map[string]any `json:"metadata,omitempty"`
+	ID           uuid.UUID      `json:"id"`
+	Slug         string         `json:"slug"`
+	Name         string         `json:"name"`
+	Description  *string        `json:"description,omitempty"`
+	CreatedAt    time.Time      `json:"created_at"`
+	UpdatedAt    time.Time      `json:"updated_at"`
+	Metadata     map[string]any `json:"metadata,omitempty"`
+	AccessSource string         `json:"access_source,omitempty"`
 }
 
 // ========== Project DTOs ==========

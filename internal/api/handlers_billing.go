@@ -61,10 +61,6 @@ func (a *API) HandleRunBillingBreakdown(w http.ResponseWriter, r *http.Request) 
 		})
 		return
 	}
-	if _, ok := a.requireWorkspaceAccess(w, r, workspace, false); !ok {
-		return
-	}
-
 	project, err := a.store.GetProjectBySlug(r.Context(), workspace.ID, projectSlug)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, ErrorResponse{

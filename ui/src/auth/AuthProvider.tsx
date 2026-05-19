@@ -13,7 +13,7 @@ export type AuthUser = {
 
 export type WorkspaceMembership = {
   slug: string;
-  role: "owner" | "member";
+  role: "owner" | "member" | "project";
 };
 
 export type ProjectMembership = {
@@ -39,8 +39,10 @@ type AuthContextValue = {
   isAuthenticated: boolean;
   loginUrl: string;
   logoutUrl: string;
-  workspaceRole: (workspaceSlug: string) => "owner" | "member" | null;
+  workspaceRole: (workspaceSlug: string) => "owner" | "member" | "project" | null;
   isWorkspaceOwner: (workspaceSlug: string) => boolean;
+  projectRole: (workspaceSlug: string, projectSlug: string) => "owner" | "member" | null;
+  isProjectOwner: (workspaceSlug: string, projectSlug: string) => boolean;
 };
 
 const runtimeEnv = (window as any).__ENV ?? {};
@@ -81,6 +83,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       ? (userQuery.data?.memberships ?? { workspaces: [], projects: [] })
       : { workspaces: [], projects: [] };
     const isUnauthorized = userQuery.error instanceof ApiError && userQuery.error.status === 401;
+    const workspaceRole = (workspaceSlug: string) =>
+      memberships.workspaces.find((m) => m.slug === workspaceSlug)?.role ?? null;
+    const projectRole = (workspaceSlug: string, projectSlug: string) =>
+      memberships.projects.find((m) => m.workspace_slug === workspaceSlug && m.project_slug === projectSlug)?.role ??
+      null;
+    const isWorkspaceOwner = (workspaceSlug: string) =>
+      memberships.workspaces.some((m) => m.slug === workspaceSlug && m.role === "owner");
+
     return {
       user,
       memberships,
@@ -88,10 +98,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isAuthenticated: userQuery.isSuccess && !!user && !isUnauthorized,
       loginUrl: AUTH_LOGIN_URL ?? `${API_BASE_URL}/v1/auth/login`,
       logoutUrl: AUTH_LOGOUT_URL ?? `${API_BASE_URL}/v1/auth/logout`,
-      workspaceRole: (workspaceSlug: string) =>
-        memberships.workspaces.find((m) => m.slug === workspaceSlug)?.role ?? null,
-      isWorkspaceOwner: (workspaceSlug: string) =>
-        memberships.workspaces.some((m) => m.slug === workspaceSlug && m.role === "owner")
+      workspaceRole,
+      isWorkspaceOwner,
+      projectRole,
+      isProjectOwner: (workspaceSlug: string, projectSlug: string) =>
+        isWorkspaceOwner(workspaceSlug) || projectRole(workspaceSlug, projectSlug) === "owner"
     };
   }, [userQuery.data, userQuery.error, userQuery.isLoading, userQuery.isSuccess]);
 

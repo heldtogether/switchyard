@@ -21,39 +21,39 @@ export function JobDetailPage() {
   const [cancelError, setCancelError] = useState<string | null>(null);
 
   const jobQuery = useQuery({
-    queryKey: ["job", projectSlug, runSlug, jobId],
-    queryFn: () => getJob(projectSlug, runSlug, jobId)
+    queryKey: ["job", workspace, projectSlug, runSlug, jobId],
+    queryFn: () => getJob(projectSlug, runSlug, jobId, workspace)
   });
 
   const projectQuery = useQuery({
-    queryKey: ["project", projectSlug],
-    queryFn: () => getProject(projectSlug)
+    queryKey: ["project", workspace, projectSlug],
+    queryFn: () => getProject(projectSlug, workspace)
   });
 
   const runQuery = useQuery({
-    queryKey: ["run", projectSlug, runSlug],
-    queryFn: () => getRun(projectSlug, runSlug)
+    queryKey: ["run", workspace, projectSlug, runSlug],
+    queryFn: () => getRun(projectSlug, runSlug, workspace)
   });
 
   const logsQuery = useQuery({
-    queryKey: ["job-logs", projectSlug, runSlug, jobId],
-    queryFn: () => getJobLogs(projectSlug, runSlug, jobId),
+    queryKey: ["job-logs", workspace, projectSlug, runSlug, jobId],
+    queryFn: () => getJobLogs(projectSlug, runSlug, jobId, workspace),
     refetchInterval: 1500
   });
 
   const artefactsQuery = useQuery({
-    queryKey: ["job-artefacts", projectSlug, runSlug, jobId],
-    queryFn: () => listArtefacts(projectSlug, runSlug, jobId)
+    queryKey: ["job-artefacts", workspace, projectSlug, runSlug, jobId],
+    queryFn: () => listArtefacts(projectSlug, runSlug, jobId, workspace)
   });
 
   const cancelMutation = useMutation({
-    mutationFn: () => cancelJob(projectSlug, runSlug, jobId),
+    mutationFn: () => cancelJob(projectSlug, runSlug, jobId, workspace),
     onSuccess: async () => {
       setCancelError(null);
-      await queryClient.invalidateQueries({ queryKey: ["job", projectSlug, runSlug, jobId] });
-      await queryClient.invalidateQueries({ queryKey: ["jobs", projectSlug, runSlug] });
-      await queryClient.invalidateQueries({ queryKey: ["run", projectSlug, runSlug] });
-      await queryClient.invalidateQueries({ queryKey: ["runs", projectSlug] });
+      await queryClient.invalidateQueries({ queryKey: ["job", workspace, projectSlug, runSlug, jobId] });
+      await queryClient.invalidateQueries({ queryKey: ["jobs", workspace, projectSlug, runSlug] });
+      await queryClient.invalidateQueries({ queryKey: ["run", workspace, projectSlug, runSlug] });
+      await queryClient.invalidateQueries({ queryKey: ["runs", workspace, projectSlug] });
     },
     onError: (error) => {
       setCancelError((error as Error).message ?? "Failed to cancel job");

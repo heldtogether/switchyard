@@ -5,6 +5,8 @@ import { vi } from "vitest";
 import { ProjectsListPage } from "./ProjectsListPage";
 import { renderWithProviders } from "../test/render";
 
+const listProjectsMock = vi.fn(async () => []);
+const listRunsMock = vi.fn(async () => []);
 const createProjectMock = vi.fn(async () => ({
   id: "p1",
   slug: "my-cool-project",
@@ -15,9 +17,9 @@ const createProjectMock = vi.fn(async () => ({
 }));
 
 vi.mock("../api", () => ({
-  listProjects: vi.fn(async () => []),
-  listRuns: vi.fn(async () => []),
-  createProject: (payload: { name: string; slug: string; description?: string }) => createProjectMock(payload)
+  listProjects: (...args: any[]) => listProjectsMock(...args),
+  listRuns: (...args: any[]) => listRunsMock(...args),
+  createProject: (...args: any[]) => createProjectMock(...args)
 }));
 
 vi.mock("react-router-dom", async () => {
@@ -31,7 +33,29 @@ vi.mock("react-router-dom", async () => {
 
 describe("ProjectsListPage", () => {
   beforeEach(() => {
+    listProjectsMock.mockReset();
+    listProjectsMock.mockResolvedValue([]);
+    listRunsMock.mockReset();
+    listRunsMock.mockResolvedValue([]);
     createProjectMock.mockClear();
+  });
+
+  it("loads and renders projects for the route workspace", async () => {
+    listProjectsMock.mockResolvedValueOnce([
+      {
+        id: "p-existing",
+        slug: "existing",
+        name: "Existing Project",
+        description: "Already here",
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }
+    ]);
+    renderWithProviders(<ProjectsListPage />);
+
+    expect(await screen.findByText("Existing Project")).toBeInTheDocument();
+    expect(listProjectsMock).toHaveBeenCalledWith("default");
+    expect(listRunsMock).toHaveBeenCalledWith("existing", "default");
   });
 
   it("keeps slug synced with typed project name", async () => {
@@ -70,5 +94,30 @@ describe("ProjectsListPage", () => {
       expect(screen.getByText("Slug is reserved for system routes.")).toBeInTheDocument();
     });
     expect(createProjectMock).not.toHaveBeenCalled();
+  });
+
+  it("creates projects in the route workspace", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<ProjectsListPage />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /create project/i })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: /create project/i }));
+    await user.type(screen.getByPlaceholderText("Vision Core"), "My Cool Project");
+    await user.click(screen.getByRole("button", { name: "Create" }));
+
+    await waitFor(() => {
+      expect(createProjectMock).toHaveBeenCalled();
+    });
+    expect(createProjectMock).toHaveBeenCalledWith(
+      {
+        name: "My Cool Project",
+        slug: "my-cool-project",
+        description: undefined
+      },
+      "default"
+    );
   });
 });

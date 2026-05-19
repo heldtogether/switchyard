@@ -24,7 +24,7 @@ export function ProjectsListPage() {
   const [creating, setCreating] = useState(false);
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["projects", workspace],
-    queryFn: listProjects
+    queryFn: () => listProjects(workspace)
   });
 
   const { data: runsData } = useQuery({
@@ -32,7 +32,7 @@ export function ProjectsListPage() {
     queryFn: async () => {
       if (!data) return {} as Record<string, Awaited<ReturnType<typeof listRuns>>>;
       const entries = await Promise.all(
-        data.map(async (project) => [project.slug, await listRuns(project.slug)] as const)
+        data.map(async (project) => [project.slug, await listRuns(project.slug, workspace)] as const)
       );
       return Object.fromEntries(entries);
     },
@@ -65,11 +65,14 @@ export function ProjectsListPage() {
     setCreating(true);
     setCreateError(null);
     try {
-      await createProject({
-        name: name.trim(),
-        slug: slug.trim(),
-        description: description.trim() || undefined
-      });
+      await createProject(
+        {
+          name: name.trim(),
+          slug: slug.trim(),
+          description: description.trim() || undefined
+        },
+        workspace
+      );
       setOpen(false);
       setName("");
       setSlug("");

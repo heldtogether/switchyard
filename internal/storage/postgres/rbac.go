@@ -349,30 +349,10 @@ func (s *Store) AcceptProjectInvite(ctx context.Context, tokenHash string, princ
 		return nil, fmt.Errorf("invite email mismatch")
 	}
 
-	var workspaceID uuid.UUID
-	if err := tx.QueryRowContext(ctx, `SELECT workspace_id FROM projects WHERE id = $1`, invite.ProjectID).Scan(&workspaceID); err != nil {
+	var projectID uuid.UUID
+	if err := tx.QueryRowContext(ctx, `SELECT id FROM projects WHERE id = $1`, invite.ProjectID).Scan(&projectID); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, fmt.Errorf("project not found")
-		}
-		return nil, err
-	}
-
-	// Project access requires workspace access, so ensure a baseline workspace membership exists.
-	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO workspace_memberships (workspace_id, principal_id, role, created_by)
-		VALUES ($1, $2, $3, $4)
-		ON CONFLICT (workspace_id, principal_id) DO NOTHING
-	`, workspaceID, principalID, domain.MemberRoleMember, actor); err != nil {
-		return nil, err
-	}
-	var workspaceRole domain.MemberRole
-	if err := tx.QueryRowContext(ctx, `
-		SELECT role
-		FROM workspace_memberships
-		WHERE workspace_id = $1 AND principal_id = $2
-	`, workspaceID, principalID).Scan(&workspaceRole); err != nil {
-		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("workspace membership was not created")
 		}
 		return nil, err
 	}
