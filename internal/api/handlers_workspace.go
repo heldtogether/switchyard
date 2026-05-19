@@ -121,7 +121,7 @@ func (a *API) HandleGetWorkspace(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	if _, ok := a.requireWorkspaceAccess(w, r, workspace, false); !ok {
+	if !a.requireWorkspaceOrProjectAccess(w, r, workspace) {
 		return
 	}
 
@@ -179,10 +179,13 @@ func (a *API) HandleListWorkspaces(w http.ResponseWriter, r *http.Request) {
 			}
 			for _, ws := range workspaces {
 				if _, ok := allow[ws.Slug]; ok {
-					responses = append(responses, toWorkspaceResponse(ws))
+					resp := toWorkspaceResponse(ws)
+					resp.AccessSource = "workspace"
+					responses = append(responses, resp)
 				}
 			}
 		} else {
+			seen := map[uuid.UUID]struct{}{}
 			memberships, err := a.store.ListWorkspaceMembershipsForPrincipal(r.Context(), identity.principal.ID)
 			if err != nil {
 				a.logger.Error("failed to list workspace memberships", "error", err)
@@ -195,8 +198,38 @@ func (a *API) HandleListWorkspaces(w http.ResponseWriter, r *http.Request) {
 			}
 			for _, m := range memberships {
 				if m.Workspace != nil {
-					responses = append(responses, toWorkspaceResponse(m.Workspace))
+					resp := toWorkspaceResponse(m.Workspace)
+					resp.AccessSource = "workspace"
+					responses = append(responses, resp)
+					seen[m.WorkspaceID] = struct{}{}
 				}
+			}
+
+			projectMemberships, err := a.store.ListProjectMembershipsForPrincipal(r.Context(), identity.principal.ID)
+			if err != nil {
+				a.logger.Error("failed to list project memberships", "error", err)
+				writeJSON(w, http.StatusInternalServerError, ErrorResponse{
+					Error:   "internal_error",
+					Message: "Failed to list workspaces",
+					Code:    http.StatusInternalServerError,
+				})
+				return
+			}
+			for _, m := range projectMemberships {
+				if m.Project == nil {
+					continue
+				}
+				if _, ok := seen[m.Project.WorkspaceID]; ok {
+					continue
+				}
+				workspace, err := a.store.GetWorkspace(r.Context(), m.Project.WorkspaceID)
+				if err != nil {
+					continue
+				}
+				resp := toWorkspaceResponse(workspace)
+				resp.AccessSource = "project"
+				responses = append(responses, resp)
+				seen[workspace.ID] = struct{}{}
 			}
 		}
 

@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestStore_AcceptProjectInvite_EnsuresWorkspaceMembership(t *testing.T) {
+func TestStore_AcceptProjectInvite_CreatesProjectMembershipOnly(t *testing.T) {
 	store, cleanup := setupTestDB(t)
 	defer cleanup()
 
@@ -57,8 +57,7 @@ func TestStore_AcceptProjectInvite_EnsuresWorkspaceMembership(t *testing.T) {
 
 	workspaceRole, err := store.WorkspaceRoleForPrincipal(ctx, workspace.ID, principal.ID)
 	require.NoError(t, err)
-	require.NotNil(t, workspaceRole)
-	require.Equal(t, domain.MemberRoleMember, *workspaceRole)
+	require.Nil(t, workspaceRole)
 }
 
 func TestStore_AcceptProjectInvite_DoesNotDowngradeExistingWorkspaceRole(t *testing.T) {

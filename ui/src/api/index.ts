@@ -158,9 +158,9 @@ export async function listWorkspaces(): Promise<Workspace[]> {
   }
 }
 
-export async function listProjects(): Promise<Project[]> {
+export async function listProjects(workspaceSlug = activeWorkspaceSlug): Promise<Project[]> {
   try {
-    const res = await fetchJson<{ projects: any[] }>(`/v1/workspaces/${activeWorkspaceSlug}/projects?limit=50&offset=0`);
+    const res = await fetchJson<{ projects: any[] }>(`/v1/workspaces/${workspaceSlug}/projects?limit=50&offset=0`);
     return res.projects.map(mapProject);
   } catch (error) {
     if (shouldUseMocks(error)) return mockProjects;
@@ -168,9 +168,9 @@ export async function listProjects(): Promise<Project[]> {
   }
 }
 
-export async function getProject(slug: string): Promise<Project> {
+export async function getProject(slug: string, workspaceSlug = activeWorkspaceSlug): Promise<Project> {
   try {
-    const res = await fetchJson<any>(`/v1/workspaces/${activeWorkspaceSlug}/projects/${slug}`);
+    const res = await fetchJson<any>(`/v1/workspaces/${workspaceSlug}/projects/${slug}`);
     return mapProject(res);
   } catch (error) {
     if (shouldUseMocks(error)) {
@@ -182,10 +182,10 @@ export async function getProject(slug: string): Promise<Project> {
   }
 }
 
-export async function listRuns(projectSlug: string): Promise<Run[]> {
+export async function listRuns(projectSlug: string, workspaceSlug = activeWorkspaceSlug): Promise<Run[]> {
   try {
     const res = await fetchJson<{ runs: any[] }>(
-      `/v1/workspaces/${activeWorkspaceSlug}/projects/${projectSlug}/runs?limit=50&offset=0`
+      `/v1/workspaces/${workspaceSlug}/projects/${projectSlug}/runs?limit=50&offset=0`
     );
     return res.runs.map((run, index) => mapRun(run, index));
   } catch (error) {
@@ -197,10 +197,14 @@ export async function listRuns(projectSlug: string): Promise<Run[]> {
   }
 }
 
-export async function getRun(projectSlug: string, runSlug: string): Promise<Run> {
+export async function getRun(
+  projectSlug: string,
+  runSlug: string,
+  workspaceSlug = activeWorkspaceSlug
+): Promise<Run> {
   try {
     const res = await fetchJson<any>(
-      `/v1/workspaces/${activeWorkspaceSlug}/projects/${projectSlug}/runs/${runSlug}`
+      `/v1/workspaces/${workspaceSlug}/projects/${projectSlug}/runs/${runSlug}`
     );
     return mapRun(res);
   } catch (error) {
@@ -213,15 +217,17 @@ export async function getRun(projectSlug: string, runSlug: string): Promise<Run>
   }
 }
 
-export async function getWorkspaceMonthToDateBilling(): Promise<WorkspaceMonthToDateBilling> {
+export async function getWorkspaceMonthToDateBilling(
+  workspaceSlug = activeWorkspaceSlug
+): Promise<WorkspaceMonthToDateBilling> {
   try {
     return await fetchJson<WorkspaceMonthToDateBilling>(
-      `/v1/workspaces/${activeWorkspaceSlug}/billing/month-to-date`
+      `/v1/workspaces/${workspaceSlug}/billing/month-to-date`
     );
   } catch (error) {
     if (shouldUseMocks(error)) {
       return {
-        workspace_id: activeWorkspaceSlug,
+        workspace_id: workspaceSlug,
         month_key: new Date().toISOString().slice(0, 7),
         cpu_seconds: 0,
         memory_gb_seconds: 0,
@@ -235,17 +241,21 @@ export async function getWorkspaceMonthToDateBilling(): Promise<WorkspaceMonthTo
   }
 }
 
-export async function getRunBillingBreakdown(projectSlug: string, runSlug: string): Promise<RunBillingBreakdown> {
+export async function getRunBillingBreakdown(
+  projectSlug: string,
+  runSlug: string,
+  workspaceSlug = activeWorkspaceSlug
+): Promise<RunBillingBreakdown> {
   try {
     return await fetchJson<RunBillingBreakdown>(
-      `/v1/workspaces/${activeWorkspaceSlug}/projects/${projectSlug}/runs/${runSlug}/billing`
+      `/v1/workspaces/${workspaceSlug}/projects/${projectSlug}/runs/${runSlug}/billing`
     );
   } catch (error) {
     if (shouldUseMocks(error)) {
       const run = mockRuns.find((r) => r.slug === runSlug || r.id === runSlug);
       const jobs = mockJobs.filter((j) => j.run_id === (run?.id ?? runSlug));
       return {
-        workspace_id: activeWorkspaceSlug,
+        workspace_id: workspaceSlug,
         project_id: run?.project_id ?? "",
         run_id: run?.id ?? runSlug,
         cpu_seconds: 0,
@@ -277,10 +287,14 @@ export async function getRunBillingBreakdown(projectSlug: string, runSlug: strin
   }
 }
 
-export async function listJobs(projectSlug: string, runSlug: string): Promise<Job[]> {
+export async function listJobs(
+  projectSlug: string,
+  runSlug: string,
+  workspaceSlug = activeWorkspaceSlug
+): Promise<Job[]> {
   try {
     const res = await fetchJson<{ jobs: any[] }>(
-      `/v1/workspaces/${activeWorkspaceSlug}/projects/${projectSlug}/runs/${runSlug}/jobs?limit=100&offset=0`
+      `/v1/workspaces/${workspaceSlug}/projects/${projectSlug}/runs/${runSlug}/jobs?limit=100&offset=0`
     );
     return res.jobs.map((job) => mapJob(job, runSlug));
   } catch (error) {
@@ -292,10 +306,15 @@ export async function listJobs(projectSlug: string, runSlug: string): Promise<Jo
   }
 }
 
-export async function getJob(projectSlug: string, runSlug: string, jobId: string): Promise<Job> {
+export async function getJob(
+  projectSlug: string,
+  runSlug: string,
+  jobId: string,
+  workspaceSlug = activeWorkspaceSlug
+): Promise<Job> {
   try {
     const res = await fetchJson<any>(
-      `/v1/workspaces/${activeWorkspaceSlug}/projects/${projectSlug}/runs/${runSlug}/jobs/${jobId}`
+      `/v1/workspaces/${workspaceSlug}/projects/${projectSlug}/runs/${runSlug}/jobs/${jobId}`
     );
     return mapJob(res, runSlug);
   } catch (error) {
@@ -308,10 +327,15 @@ export async function getJob(projectSlug: string, runSlug: string, jobId: string
   }
 }
 
-export async function getJobLogs(projectSlug: string, runSlug: string, jobId: string): Promise<string> {
+export async function getJobLogs(
+  projectSlug: string,
+  runSlug: string,
+  jobId: string,
+  workspaceSlug = activeWorkspaceSlug
+): Promise<string> {
   try {
     return await fetchText(
-      `/v1/workspaces/${activeWorkspaceSlug}/projects/${projectSlug}/runs/${runSlug}/jobs/${jobId}/logs`
+      `/v1/workspaces/${workspaceSlug}/projects/${projectSlug}/runs/${runSlug}/jobs/${jobId}/logs`
     );
   } catch (error) {
     if (shouldUseMocks(error)) return mockLogs(jobId);
@@ -319,10 +343,15 @@ export async function getJobLogs(projectSlug: string, runSlug: string, jobId: st
   }
 }
 
-export async function listArtefacts(projectSlug: string, runSlug: string, jobId: string): Promise<Artefact[]> {
+export async function listArtefacts(
+  projectSlug: string,
+  runSlug: string,
+  jobId: string,
+  workspaceSlug = activeWorkspaceSlug
+): Promise<Artefact[]> {
   try {
     const res = await fetchJson<{ artefacts: any[] }>(
-      `/v1/workspaces/${activeWorkspaceSlug}/projects/${projectSlug}/runs/${runSlug}/jobs/${jobId}/artefacts`
+      `/v1/workspaces/${workspaceSlug}/projects/${projectSlug}/runs/${runSlug}/jobs/${jobId}/artefacts`
     );
     return res.artefacts.map((art) => ({
       id: `${jobId}-${art.path}`,
@@ -340,10 +369,13 @@ export async function listArtefacts(projectSlug: string, runSlug: string, jobId:
   }
 }
 
-export async function listCurrentPromotions(projectSlug: string): Promise<CurrentPromotion[]> {
+export async function listCurrentPromotions(
+  projectSlug: string,
+  workspaceSlug = activeWorkspaceSlug
+): Promise<CurrentPromotion[]> {
   try {
     const res = await fetchJson<{ promotions: any[] }>(
-      `/v1/workspaces/${activeWorkspaceSlug}/projects/${projectSlug}/promotions`
+      `/v1/workspaces/${workspaceSlug}/projects/${projectSlug}/promotions`
     );
     return (res.promotions ?? []).map(mapCurrentPromotion);
   } catch (error) {
@@ -355,10 +387,14 @@ export async function listCurrentPromotions(projectSlug: string): Promise<Curren
   }
 }
 
-export async function createPromotion(projectSlug: string, promotion: CreatePromotionRequest) {
+export async function createPromotion(
+  projectSlug: string,
+  promotion: CreatePromotionRequest,
+  workspaceSlug = activeWorkspaceSlug
+) {
   try {
     const res = await fetchJson<any>(
-      `/v1/workspaces/${activeWorkspaceSlug}/projects/${projectSlug}/promotions`,
+      `/v1/workspaces/${workspaceSlug}/projects/${projectSlug}/promotions`,
       {
         method: "POST",
         body: JSON.stringify(promotion)
@@ -369,7 +405,7 @@ export async function createPromotion(projectSlug: string, promotion: CreateProm
     if (shouldUseMocks(error)) {
       return {
         id: `promo-${Date.now()}`,
-        workspace_id: activeWorkspaceSlug,
+        workspace_id: workspaceSlug,
         project_id: projectSlug,
         channel: promotion.channel,
         run_id: promotion.run_id ?? "",
@@ -390,13 +426,17 @@ export async function createPromotion(projectSlug: string, promotion: CreateProm
   }
 }
 
-export async function listPromotionHistory(projectSlug: string, channel?: string): Promise<PromotionHistory> {
+export async function listPromotionHistory(
+  projectSlug: string,
+  channel?: string,
+  workspaceSlug = activeWorkspaceSlug
+): Promise<PromotionHistory> {
   try {
     const params = new URLSearchParams();
     if (channel) params.set("channel", channel);
     const suffix = params.toString() ? `?${params.toString()}` : "";
     const res = await fetchJson<PromotionHistory>(
-      `/v1/workspaces/${activeWorkspaceSlug}/projects/${projectSlug}/promotions/history${suffix}`
+      `/v1/workspaces/${workspaceSlug}/projects/${projectSlug}/promotions/history${suffix}`
     );
     return {
       events: (res.events ?? []).map(mapPromotionEvent),
@@ -406,7 +446,7 @@ export async function listPromotionHistory(projectSlug: string, channel?: string
     };
   } catch (error) {
     if (shouldUseMocks(error)) {
-      const current = await listCurrentPromotions(projectSlug);
+      const current = await listCurrentPromotions(projectSlug, workspaceSlug);
       const events = current.map((promo) => promo.event);
       return { events, total: events.length, limit: 50, offset: 0 };
     }
@@ -417,11 +457,12 @@ export async function listPromotionHistory(projectSlug: string, channel?: string
 export async function resolvePromotedArtefact(
   projectSlug: string,
   channel: string,
-  logicalKey: string
+  logicalKey: string,
+  workspaceSlug = activeWorkspaceSlug
 ): Promise<ResolvedPromotedArtefact> {
   try {
     return await fetchJson<ResolvedPromotedArtefact>(
-      `/v1/workspaces/${activeWorkspaceSlug}/projects/${projectSlug}/promotions/${channel}/artefacts/${encodeURIComponent(logicalKey)}`
+      `/v1/workspaces/${workspaceSlug}/projects/${projectSlug}/promotions/${channel}/artefacts/${encodeURIComponent(logicalKey)}`
     );
   } catch (error) {
     if (shouldUseMocks(error)) {
@@ -445,13 +486,13 @@ export async function resolvePromotedArtefact(
   }
 }
 
-export async function listAllRuns() {
-  const projects = await listProjects();
+export async function listAllRuns(workspaceSlug = activeWorkspaceSlug) {
+  const projects = await listProjects(workspaceSlug);
   const limited = projects.slice(0, AGGREGATE_LIMIT);
   const entries = await Promise.all(
     limited.map(async (project) => ({
       project,
-      runs: await listRuns(project.slug)
+      runs: await listRuns(project.slug, workspaceSlug)
     }))
   );
   return entries.flatMap(({ project, runs }) =>
@@ -459,16 +500,16 @@ export async function listAllRuns() {
   );
 }
 
-export async function listAllJobs() {
-  const projects = await listProjects();
+export async function listAllJobs(workspaceSlug = activeWorkspaceSlug) {
+  const projects = await listProjects(workspaceSlug);
   const limited = projects.slice(0, AGGREGATE_LIMIT);
   const entries = await Promise.all(
     limited.map(async (project) => {
-      const runs = await listRuns(project.slug);
+      const runs = await listRuns(project.slug, workspaceSlug);
       const runEntries = await Promise.all(
         runs.slice(0, AGGREGATE_LIMIT).map(async (run) => ({
           run,
-          jobs: await listJobs(project.slug, run.slug)
+          jobs: await listJobs(project.slug, run.slug, workspaceSlug)
         }))
       );
       return runEntries.flatMap(({ run, jobs }) =>
@@ -485,20 +526,20 @@ export async function listAllJobs() {
   return entries.flat();
 }
 
-export async function listAllArtefacts() {
-  const projects = await listProjects();
+export async function listAllArtefacts(workspaceSlug = activeWorkspaceSlug) {
+  const projects = await listProjects(workspaceSlug);
   const limited = projects.slice(0, AGGREGATE_LIMIT);
   const entries = await Promise.all(
     limited.map(async (project) => {
-      const runs = await listRuns(project.slug);
+      const runs = await listRuns(project.slug, workspaceSlug);
       const jobEntries = await Promise.all(
         runs.slice(0, AGGREGATE_LIMIT).map(async (run) => {
-          const jobs = await listJobs(project.slug, run.slug);
+          const jobs = await listJobs(project.slug, run.slug, workspaceSlug);
           const artefactEntries = await Promise.all(
             jobs.slice(0, AGGREGATE_LIMIT).map(async (job) => ({
               job,
               run,
-              artefacts: await listArtefacts(project.slug, run.slug, job.id)
+              artefacts: await listArtefacts(project.slug, run.slug, job.id, workspaceSlug)
             }))
           );
           return artefactEntries.flatMap(({ job, run, artefacts }) =>
@@ -693,9 +734,13 @@ export async function getAllocationCapacity(): Promise<{ max_gpu_per_node: numbe
   }
 }
 
-export async function createRun(projectSlug: string, payload: { slug: string; name: string; description?: string; metadata?: Record<string, any> }) {
+export async function createRun(
+  projectSlug: string,
+  payload: { slug: string; name: string; description?: string; metadata?: Record<string, any> },
+  workspaceSlug = activeWorkspaceSlug
+) {
   return await fetchJson<any>(
-    `/v1/workspaces/${activeWorkspaceSlug}/projects/${projectSlug}/runs`,
+    `/v1/workspaces/${workspaceSlug}/projects/${projectSlug}/runs`,
     {
       method: "POST",
       body: JSON.stringify(payload)
@@ -703,9 +748,9 @@ export async function createRun(projectSlug: string, payload: { slug: string; na
   );
 }
 
-export async function createProject(payload: { slug: string; name: string; description?: string }) {
+export async function createProject(payload: { slug: string; name: string; description?: string }, workspaceSlug = activeWorkspaceSlug) {
   return await fetchJson<any>(
-    `/v1/workspaces/${activeWorkspaceSlug}/projects`,
+    `/v1/workspaces/${workspaceSlug}/projects`,
     {
       method: "POST",
       body: JSON.stringify(payload)
@@ -720,9 +765,14 @@ export async function createWorkspace(payload: { slug: string; name: string; des
   });
 }
 
-export async function createJob(projectSlug: string, runSlug: string, payload: any) {
+export async function createJob(
+  projectSlug: string,
+  runSlug: string,
+  payload: any,
+  workspaceSlug = activeWorkspaceSlug
+) {
   return await fetchJson<any>(
-    `/v1/workspaces/${activeWorkspaceSlug}/projects/${projectSlug}/runs/${runSlug}/jobs`,
+    `/v1/workspaces/${workspaceSlug}/projects/${projectSlug}/runs/${runSlug}/jobs`,
     {
       method: "POST",
       body: JSON.stringify(payload)
@@ -730,9 +780,14 @@ export async function createJob(projectSlug: string, runSlug: string, payload: a
   );
 }
 
-export async function rerunRun(projectSlug: string, runSlug: string, payload: { mode: "all" | "failed_only" }) {
+export async function rerunRun(
+  projectSlug: string,
+  runSlug: string,
+  payload: { mode: "all" | "failed_only" },
+  workspaceSlug = activeWorkspaceSlug
+) {
   return fetchJson<{ run: any; jobs_created: number; source_run_id: string; mode: "all" | "failed_only" }>(
-    `/v1/workspaces/${activeWorkspaceSlug}/projects/${projectSlug}/runs/${runSlug}/rerun`,
+    `/v1/workspaces/${workspaceSlug}/projects/${projectSlug}/runs/${runSlug}/rerun`,
     {
       method: "POST",
       body: JSON.stringify(payload)
@@ -740,9 +795,14 @@ export async function rerunRun(projectSlug: string, runSlug: string, payload: { 
   );
 }
 
-export async function cancelJob(projectSlug: string, runSlug: string, jobId: string): Promise<Job> {
+export async function cancelJob(
+  projectSlug: string,
+  runSlug: string,
+  jobId: string,
+  workspaceSlug = activeWorkspaceSlug
+): Promise<Job> {
   const res = await fetchJson<any>(
-    `/v1/workspaces/${activeWorkspaceSlug}/projects/${projectSlug}/runs/${runSlug}/jobs/${jobId}/cancel`,
+    `/v1/workspaces/${workspaceSlug}/projects/${projectSlug}/runs/${runSlug}/jobs/${jobId}/cancel`,
     {
       method: "POST"
     }
@@ -750,9 +810,13 @@ export async function cancelJob(projectSlug: string, runSlug: string, jobId: str
   return mapJob(res, runSlug);
 }
 
-export async function cancelRun(projectSlug: string, runSlug: string): Promise<CancelRunResponse> {
+export async function cancelRun(
+  projectSlug: string,
+  runSlug: string,
+  workspaceSlug = activeWorkspaceSlug
+): Promise<CancelRunResponse> {
   return fetchJson<CancelRunResponse>(
-    `/v1/workspaces/${activeWorkspaceSlug}/projects/${projectSlug}/runs/${runSlug}/cancel`,
+    `/v1/workspaces/${workspaceSlug}/projects/${projectSlug}/runs/${runSlug}/cancel`,
     {
       method: "POST"
     }

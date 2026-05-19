@@ -159,18 +159,58 @@ func (a *API) authorizeProject(r *http.Request, workspace *domain.Workspace, pro
 		return domain.MemberRoleOwner, true, nil
 	}
 
-	if _, ok, err := a.authorizeWorkspace(r, workspace, false); err != nil || !ok {
+	workspaceRole, workspaceOK, err := a.authorizeWorkspace(r, workspace, false)
+	if err != nil {
 		return "", false, err
+	}
+	if workspaceOK && workspaceRole == domain.MemberRoleOwner {
+		return workspaceRole, true, nil
 	}
 
 	role, err := a.store.ProjectRoleForPrincipal(r.Context(), project.ID, identity.principal.ID)
 	if err != nil {
 		return "", false, err
 	}
-	if role == nil {
-		return "", false, nil
+	if role != nil {
+		return *role, true, nil
 	}
-	return *role, true, nil
+	if workspaceOK {
+		return workspaceRole, true, nil
+	}
+	return "", false, nil
+}
+
+func (a *API) authorizeWorkspaceOrProjectAccess(r *http.Request, workspace *domain.Workspace) (bool, error) {
+	if !a.rbacEnabled() {
+		return true, nil
+	}
+
+	identity, err := a.resolveIdentity(r)
+	if err != nil {
+		return false, err
+	}
+	if identity == nil {
+		return false, nil
+	}
+
+	if identity.isService {
+		return identity.serviceAccount != nil && slices.Contains(identity.serviceAccount.AllowedWorkspaces, workspace.Slug), nil
+	}
+
+	if _, ok, err := a.authorizeWorkspace(r, workspace, false); err != nil || ok {
+		return ok, err
+	}
+
+	memberships, err := a.store.ListProjectMembershipsForPrincipal(r.Context(), identity.principal.ID)
+	if err != nil {
+		return false, err
+	}
+	for _, m := range memberships {
+		if m.Project != nil && m.Project.WorkspaceID == workspace.ID {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (a *API) requireWorkspaceAccess(w http.ResponseWriter, r *http.Request, workspace *domain.Workspace, ownerRequired bool) (domain.MemberRole, bool) {
@@ -194,6 +234,27 @@ func (a *API) requireWorkspaceAccess(w http.ResponseWriter, r *http.Request, wor
 	return role, true
 }
 
+func (a *API) requireWorkspaceOrProjectAccess(w http.ResponseWriter, r *http.Request, workspace *domain.Workspace) bool {
+	ok, err := a.authorizeWorkspaceOrProjectAccess(r, workspace)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{
+			Error:   "internal_error",
+			Message: "Failed to authorize workspace access",
+			Code:    http.StatusInternalServerError,
+		})
+		return false
+	}
+	if !ok {
+		writeJSON(w, http.StatusForbidden, ErrorResponse{
+			Error:   "forbidden",
+			Message: "Forbidden",
+			Code:    http.StatusForbidden,
+		})
+		return false
+	}
+	return true
+}
+
 func (a *API) requireProjectAccess(w http.ResponseWriter, r *http.Request, workspace *domain.Workspace, project *domain.Project) (domain.MemberRole, bool) {
 	role, ok, err := a.authorizeProject(r, workspace, project)
 	if err != nil {
@@ -213,6 +274,22 @@ func (a *API) requireProjectAccess(w http.ResponseWriter, r *http.Request, works
 		return "", false
 	}
 	return role, true
+}
+
+func (a *API) requireProjectOwner(w http.ResponseWriter, r *http.Request, workspace *domain.Workspace, project *domain.Project) bool {
+	role, ok := a.requireProjectAccess(w, r, workspace, project)
+	if !ok {
+		return false
+	}
+	if role != domain.MemberRoleOwner {
+		writeJSON(w, http.StatusForbidden, ErrorResponse{
+			Error:   "forbidden",
+			Message: "Forbidden",
+			Code:    http.StatusForbidden,
+		})
+		return false
+	}
+	return true
 }
 
 func (a *API) currentPrincipalID(r *http.Request) (uuid.UUID, bool, error) {

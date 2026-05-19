@@ -114,14 +114,18 @@ export function NewRunModal({ open, projectSlug, onClose, onSuccess }: NewRunMod
 
     setSubmitting(true);
     try {
-      await createRun(projectSlug, {
-        slug: derivedSlug,
-        name: name.trim(),
-        description: description.trim() || undefined,
-        metadata: {
-          tags_user: tags.split(",").map((tag) => tag.trim()).filter(Boolean)
-        }
-      });
+      await createRun(
+        projectSlug,
+        {
+          slug: derivedSlug,
+          name: name.trim(),
+          description: description.trim() || undefined,
+          metadata: {
+            tags_user: tags.split(",").map((tag) => tag.trim()).filter(Boolean)
+          }
+        },
+        workspace
+      );
 
       const failures: { job: JobDraft; error: string }[] = [];
       for (const job of jobs) {
@@ -143,7 +147,7 @@ export function NewRunModal({ open, projectSlug, onClose, onSuccess }: NewRunMod
           payload.registry_secret_id = job.registrySecretId;
         }
         try {
-          await createJob(projectSlug, derivedSlug, payload);
+          await createJob(projectSlug, derivedSlug, payload, workspace);
         } catch (jobErr) {
           failures.push({ job, error: (jobErr as Error).message });
         }

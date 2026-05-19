@@ -269,10 +269,6 @@ func (a *API) authorizePromotionProjectScope(w http.ResponseWriter, r *http.Requ
 		writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "not_found", Message: "Workspace not found", Code: http.StatusNotFound})
 		return nil, nil, false
 	}
-	if _, ok := a.requireWorkspaceAccess(w, r, workspace, false); !ok {
-		return nil, nil, false
-	}
-
 	project, err := a.store.GetProjectBySlug(r.Context(), workspace.ID, projectSlug)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "not_found", Message: "Project not found", Code: http.StatusNotFound})

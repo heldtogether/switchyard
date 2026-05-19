@@ -110,6 +110,9 @@ func (a *API) HandleListWorkspaceMembers(w http.ResponseWriter, r *http.Request)
 		if m.Principal == nil {
 			continue
 		}
+		if isServiceAccountPrincipal(m.Principal) {
+			continue
+		}
 		resp = append(resp, MemberResponse{
 			Subject:     m.Principal.Subject,
 			Email:       m.Principal.Email,
@@ -121,6 +124,16 @@ func (a *API) HandleListWorkspaceMembers(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, map[string]any{"members": resp})
 }
 
+func isServiceAccountPrincipal(principal *domain.Principal) bool {
+	if principal == nil {
+		return false
+	}
+	if principal.Provider != nil && *principal.Provider == "service_account" {
+		return true
+	}
+	return strings.HasPrefix(principal.Subject, "service_account:")
+}
+
 func (a *API) HandleCreateProjectInvite(w http.ResponseWriter, r *http.Request) {
 	workspaceSlug := r.PathValue("workspace_slug")
 	projectSlug := r.PathValue("project_slug")
@@ -129,15 +142,12 @@ func (a *API) HandleCreateProjectInvite(w http.ResponseWriter, r *http.Request) 
 		writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "not_found", Message: "Workspace not found", Code: http.StatusNotFound})
 		return
 	}
-	if _, ok := a.requireWorkspaceAccess(w, r, workspace, true); !ok {
-		return
-	}
 	project, err := a.store.GetProjectBySlug(r.Context(), workspace.ID, projectSlug)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "not_found", Message: "Project not found", Code: http.StatusNotFound})
 		return
 	}
-	if _, ok := a.requireProjectAccess(w, r, workspace, project); !ok {
+	if !a.requireProjectOwner(w, r, workspace, project) {
 		return
 	}
 
@@ -213,9 +223,6 @@ func (a *API) HandleListProjectMembers(w http.ResponseWriter, r *http.Request) {
 	workspace, err := a.store.GetWorkspaceBySlug(r.Context(), workspaceSlug)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "not_found", Message: "Workspace not found", Code: http.StatusNotFound})
-		return
-	}
-	if _, ok := a.requireWorkspaceAccess(w, r, workspace, false); !ok {
 		return
 	}
 	project, err := a.store.GetProjectBySlug(r.Context(), workspace.ID, projectSlug)

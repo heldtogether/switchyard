@@ -127,7 +127,7 @@ describe("RunDetailPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Re-run failed jobs only" }));
 
     await waitFor(() => {
-      expect(rerunRunMock).toHaveBeenCalledWith("proj", "run-1", { mode: "failed_only" });
+      expect(rerunRunMock).toHaveBeenCalledWith("proj", "run-1", { mode: "failed_only" }, "default");
     });
     expect(navigateMock).toHaveBeenCalledWith("/default/proj/run-2");
   });

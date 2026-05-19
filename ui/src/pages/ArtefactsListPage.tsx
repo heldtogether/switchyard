@@ -15,12 +15,12 @@ export function ArtefactsListPage() {
 
   const projectsQuery = useQuery({
     queryKey: ["projects", workspace],
-    queryFn: listProjects
+    queryFn: () => listProjects(workspace)
   });
 
   const artefactsQuery = useQuery({
     queryKey: ["artefacts", workspace, "all"],
-    queryFn: listAllArtefacts,
+    queryFn: () => listAllArtefacts(workspace),
     enabled: !!projectsQuery.data
   });
 

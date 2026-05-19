@@ -19,18 +19,18 @@ export function ProjectRunsPage() {
   const [newRunOpen, setNewRunOpen] = useState(false);
 
   const projectQuery = useQuery({
-    queryKey: ["project", projectSlug],
-    queryFn: () => getProject(projectSlug)
+    queryKey: ["project", workspace, projectSlug],
+    queryFn: () => getProject(projectSlug, workspace)
   });
 
   const runsQuery = useQuery({
-    queryKey: ["runs", projectSlug],
-    queryFn: () => listRuns(projectSlug)
+    queryKey: ["runs", workspace, projectSlug],
+    queryFn: () => listRuns(projectSlug, workspace)
   });
 
   const promotionsQuery = useQuery({
-    queryKey: ["promotions", projectSlug],
-    queryFn: () => listCurrentPromotions(projectSlug)
+    queryKey: ["promotions", workspace, projectSlug],
+    queryFn: () => listCurrentPromotions(projectSlug, workspace)
   });
 
   const filteredRuns = useMemo(() => {

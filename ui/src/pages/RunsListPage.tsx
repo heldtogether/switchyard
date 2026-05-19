@@ -18,12 +18,12 @@ export function RunsListPage() {
 
   const projectsQuery = useQuery({
     queryKey: ["projects", workspace],
-    queryFn: listProjects
+    queryFn: () => listProjects(workspace)
   });
 
   const runsQuery = useQuery({
     queryKey: ["runs", workspace, "all"],
-    queryFn: listAllRuns,
+    queryFn: () => listAllRuns(workspace),
     enabled: !!projectsQuery.data
   });
 

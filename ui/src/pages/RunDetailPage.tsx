@@ -36,38 +36,38 @@ export function RunDetailPage() {
   const [cancelResult, setCancelResult] = useState<string | null>(null);
 
   const runQuery = useQuery({
-    queryKey: ["run", projectSlug, runSlug],
-    queryFn: () => getRun(projectSlug, runSlug)
+    queryKey: ["run", workspace, projectSlug, runSlug],
+    queryFn: () => getRun(projectSlug, runSlug, workspace)
   });
 
   const projectQuery = useQuery({
-    queryKey: ["project", projectSlug],
-    queryFn: () => getProject(projectSlug)
+    queryKey: ["project", workspace, projectSlug],
+    queryFn: () => getProject(projectSlug, workspace)
   });
 
   const jobsQuery = useQuery({
-    queryKey: ["jobs", projectSlug, runSlug],
-    queryFn: () => listJobs(projectSlug, runSlug)
+    queryKey: ["jobs", workspace, projectSlug, runSlug],
+    queryFn: () => listJobs(projectSlug, runSlug, workspace)
   });
   const runBillingQuery = useQuery({
-    queryKey: ["run-billing", projectSlug, runSlug],
-    queryFn: () => getRunBillingBreakdown(projectSlug, runSlug)
+    queryKey: ["run-billing", workspace, projectSlug, runSlug],
+    queryFn: () => getRunBillingBreakdown(projectSlug, runSlug, workspace)
   });
   const promotionsQuery = useQuery({
-    queryKey: ["promotions", projectSlug],
-    queryFn: () => listCurrentPromotions(projectSlug)
+    queryKey: ["promotions", workspace, projectSlug],
+    queryFn: () => listCurrentPromotions(projectSlug, workspace)
   });
 
   const cancelRunMutation = useMutation({
-    mutationFn: () => cancelRun(projectSlug, runSlug),
+    mutationFn: () => cancelRun(projectSlug, runSlug, workspace),
     onSuccess: async (res) => {
       setCancelError(null);
       setCancelResult(
         `Requested ${res.running_marked_cancelling} running cancellations, cancelled ${res.pending_cancelled} pending jobs.`
       );
-      await queryClient.invalidateQueries({ queryKey: ["run", projectSlug, runSlug] });
-      await queryClient.invalidateQueries({ queryKey: ["jobs", projectSlug, runSlug] });
-      await queryClient.invalidateQueries({ queryKey: ["runs", projectSlug] });
+      await queryClient.invalidateQueries({ queryKey: ["run", workspace, projectSlug, runSlug] });
+      await queryClient.invalidateQueries({ queryKey: ["jobs", workspace, projectSlug, runSlug] });
+      await queryClient.invalidateQueries({ queryKey: ["runs", workspace, projectSlug] });
     },
     onError: (error) => {
       setCancelError((error as Error).message ?? "Failed to cancel run");
@@ -79,7 +79,7 @@ export function RunDetailPage() {
     queryFn: async () => {
       if (!jobsQuery.data) return {};
       const entries = await Promise.all(
-        jobsQuery.data.map(async (job) => [job.id, await listArtefacts(projectSlug, runSlug, job.id)] as const)
+        jobsQuery.data.map(async (job) => [job.id, await listArtefacts(projectSlug, runSlug, job.id, workspace)] as const)
       );
       return Object.fromEntries(entries);
     },
@@ -122,7 +122,7 @@ export function RunDetailPage() {
     setRerunError(null);
     setRerunOpen(false);
     try {
-      const res = await rerunRun(projectSlug, runSlug, { mode });
+      const res = await rerunRun(projectSlug, runSlug, { mode }, workspace);
       const newRunSlug = res.run?.slug;
       if (!newRunSlug) throw new Error("Rerun created but missing run slug");
       navigate(`/${workspace}/${projectSlug}/${newRunSlug}`);
@@ -438,20 +438,24 @@ export function RunDetailPage() {
 
                 setPromoSubmitting(true);
                 try {
-                  await createPromotion(projectSlug, {
-                    channel: promoChannel as any,
-                    run_id: runQuery.data.id,
-                    note: promoNote.trim() || undefined,
-                    artefacts:
-                      promoMode === "artefacts"
-                        ? selected.map((art: any) => ({
-                            logical_key: (promoLogicalKeys[`${art.job_id}::${art.path}`] ?? "").trim().toLowerCase(),
-                            job_id: art.job_id,
-                            path: art.path
-                          }))
-                        : undefined
-                  });
-                  await queryClient.invalidateQueries({ queryKey: ["promotions", projectSlug] });
+                  await createPromotion(
+                    projectSlug,
+                    {
+                      channel: promoChannel as any,
+                      run_id: runQuery.data.id,
+                      note: promoNote.trim() || undefined,
+                      artefacts:
+                        promoMode === "artefacts"
+                          ? selected.map((art: any) => ({
+                              logical_key: (promoLogicalKeys[`${art.job_id}::${art.path}`] ?? "").trim().toLowerCase(),
+                              job_id: art.job_id,
+                              path: art.path
+                            }))
+                          : undefined
+                    },
+                    workspace
+                  );
+                  await queryClient.invalidateQueries({ queryKey: ["promotions", workspace, projectSlug] });
                   setPromoOpen(false);
                   setSelectedArtefacts([]);
                   setPromoLogicalKeys({});
